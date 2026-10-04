@@ -176,6 +176,9 @@ try {
             if ($serviceSmokeExit -ne 1063) {
                 throw "Der Updatepruefdienst konnte im gemeinsamen Laufzeitordner nicht geladen werden (SCM-Code $serviceSmokeExit statt 1063)."
             }
+            # 1063 is the expected SCM-only startup result. Do not leak that
+            # successful smoke-test code as the PowerShell script exit code.
+            $global:LASTEXITCODE = 0
         }
         if (Test-Path -LiteralPath $Destination) {
             Remove-Item -LiteralPath $Destination -Recurse -Force
@@ -193,6 +196,7 @@ try {
     Write-Host "Fertig: $Exe" -ForegroundColor Green
     if ($Run) { Start-Process -FilePath $Exe -WorkingDirectory $Destination }
     if ($Portable) { Write-Host 'Den gesamten Ordner out\portable kopieren, nicht nur die EXE.' }
+    $global:LASTEXITCODE = 0
 }
 catch {
     Write-Host ''
