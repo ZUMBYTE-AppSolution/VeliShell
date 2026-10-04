@@ -192,7 +192,7 @@ function Get-MsiProperty([string]$Path, [string]$Name) {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase([IO.Path]::GetFullPath($Path), 0)
         $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = '$safeName'")
-        $view.Execute()
+        [void]$view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) {
             throw "MSI property '$Name' is missing from '$Path'."
@@ -217,7 +217,7 @@ function Get-MsiServiceControlEvent([string]$Path, [string]$ControlId) {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase([IO.Path]::GetFullPath($Path), 0)
         $view = $database.OpenView("SELECT ``Event`` FROM ``ServiceControl`` WHERE ``ServiceControl`` = '$safeId'")
-        $view.Execute()
+        [void]$view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) {
             throw "ServiceControl row '$ControlId' is missing from '$Path'."
@@ -246,8 +246,8 @@ function Disable-LegacyServiceStart([string]$Path) {
         $database = $installer.OpenDatabase([IO.Path]::GetFullPath($Path), 1)
         $view = $database.OpenView(
             "UPDATE ``ServiceControl`` SET ``Event`` = $legacyServiceControlWithoutStart WHERE ``ServiceControl`` = '$legacyServiceControl'")
-        $view.Execute()
-        $database.Commit()
+        [void]$view.Execute()
+        [void]$database.Commit()
     }
     finally {
         Release-ComObject $view
