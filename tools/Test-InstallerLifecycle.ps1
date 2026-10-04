@@ -81,6 +81,7 @@ namespace VeliShell.InstallerLifecycle
     {
         private const uint ErrorSuccess = 0;
         private const uint ErrorMoreData = 234;
+        private const uint ErrorNoMoreItems = 259;
         private const uint ErrorUnknownProduct = 1605;
         private const uint MachineContext = 4;
 
@@ -93,12 +94,43 @@ namespace VeliShell.InstallerLifecycle
             StringBuilder value,
             ref uint valueLength);
 
-        [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiQueryProductStateW")]
-        private static extern int MsiQueryProductState(string productCode);
+        [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiEnumProductsExW")]
+        private static extern uint MsiEnumProductsEx(
+            string productCode,
+            string userSid,
+            uint context,
+            uint index,
+            StringBuilder installedProductCode,
+            out uint installedContext,
+            IntPtr sid,
+            IntPtr sidLength);
 
-        public static int GetProductState(string productCode)
+        public static bool IsMachineProductRegistered(string productCode)
         {
-            return MsiQueryProductState(productCode);
+            var installedProductCode = new StringBuilder(39);
+            uint installedContext;
+            uint result = MsiEnumProductsEx(
+                productCode,
+                null,
+                MachineContext,
+                0,
+                installedProductCode,
+                out installedContext,
+                IntPtr.Zero,
+                IntPtr.Zero);
+            if (result == ErrorUnknownProduct || result == ErrorNoMoreItems)
+            {
+                return false;
+            }
+            if (result != ErrorSuccess)
+            {
+                string detail = new Win32Exception((int)result).Message;
+                throw new InvalidOperationException(
+                    $"Windows Installer could not enumerate product '{productCode}' " +
+                    $"(error {result}: {detail}).");
+            }
+            return installedContext == MachineContext &&
+                string.Equals(installedProductCode.ToString(), productCode, StringComparison.OrdinalIgnoreCase);
         }
 
         public static string GetMachineProductProperty(string productCode, string property)
@@ -142,7 +174,6 @@ namespace VeliShell.InstallerLifecycle
 '@
 }
 
-$msiInstallStateUnknown = -1
 $msiInstallStateDefault = 5
 
 function Release-ComObject([object]$Value) {
@@ -270,12 +301,15 @@ function Get-MsiProductInfoValue([string]$ProductCode, [string]$Property, [switc
 }
 
 function Get-ProductRegistration([string]$ProductCode) {
-    # MsiQueryProductState is the documented product-presence check and avoids
-    # querying extended registration data for a product that is not installed.
-    $productState = [VeliShell.InstallerLifecycle.WindowsInstallerNative]::GetProductState($ProductCode)
-    if ($productState -eq $msiInstallStateUnknown) {
+    # Enumerate the exact per-machine context instead of relying on ARP registry
+    # views or the current-user result returned by MsiQueryProductState.
+    $isRegistered = [VeliShell.InstallerLifecycle.WindowsInstallerNative]::IsMachineProductRegistered(
+        $ProductCode)
+    if (-not $isRegistered) {
         return $null
     }
+
+    $productState = Get-MsiProductInfoValue $ProductCode 'State'
 
     return [pscustomobject]@{
         ProductCode = $ProductCode
