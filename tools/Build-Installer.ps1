@@ -30,7 +30,8 @@ $mainExecutable = Join-Path $PublishDirectory 'VeliShell.exe'
 if (-not (Test-Path -LiteralPath $mainExecutable -PathType Leaf)) {
     throw "The self-contained VeliShell payload is missing: $mainExecutable"
 }
-$serviceRelativePath = 'VeliShell.UpdateService.exe'
+$serviceDirectory = 'UpdateService'
+$serviceRelativePath = $serviceDirectory + '\VeliShell.UpdateService.exe'
 $serviceExecutable = Join-Path $PublishDirectory $serviceRelativePath
 if (-not (Test-Path -LiteralPath $serviceExecutable -PathType Leaf)) {
     throw "The optional update-service payload is missing: $serviceExecutable. Run tools\Build.ps1 -Portable first."
@@ -110,8 +111,9 @@ $files = [IO.Directory]::EnumerateFiles($PublishDirectory, '*', [IO.SearchOption
 $files = [string[]]@($files)
 [Array]::Sort($files, [StringComparer]::Ordinal)
 if ($files.Count -eq 0) { throw 'The publish directory does not contain installer payload files.' }
-$applicationFiles = [string[]]@($files | Where-Object { -not $_.StartsWith('VeliShell.UpdateService.', [StringComparison]::OrdinalIgnoreCase) })
-$serviceFiles = [string[]]@($files | Where-Object { $_.StartsWith('VeliShell.UpdateService.', [StringComparison]::OrdinalIgnoreCase) })
+$servicePrefix = $serviceDirectory + '\'
+$applicationFiles = [string[]]@($files | Where-Object { -not $_.StartsWith($servicePrefix, [StringComparison]::OrdinalIgnoreCase) })
+$serviceFiles = [string[]]@($files | Where-Object { $_.StartsWith($servicePrefix, [StringComparison]::OrdinalIgnoreCase) })
 if ($applicationFiles.Count -eq 0) { throw 'The publish directory does not contain an application payload.' }
 if (-not ($serviceFiles -contains $serviceRelativePath)) {
     throw "The optional update-service executable is not in the generated payload: $serviceRelativePath"

@@ -125,7 +125,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.3.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.3.1 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

@@ -21,19 +21,6 @@ function Invoke-Dotnet {
     if ($code -ne 0) { throw "dotnet ist mit Code $code fehlgeschlagen. Protokoll: $Log" }
 }
 
-function Get-VeliShellRelativePath([string]$BasePath, [string]$TargetPath) {
-    $baseFull = [IO.Path]::GetFullPath($BasePath).TrimEnd(
-        [IO.Path]::DirectorySeparatorChar,
-        [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    $targetFull = [IO.Path]::GetFullPath($TargetPath)
-    $baseUri = New-Object Uri($baseFull)
-    $targetUri = New-Object Uri($targetFull)
-    if ($baseUri.Scheme -ne $targetUri.Scheme) {
-        throw "The paths are on different volumes: '$baseFull' and '$targetFull'."
-    }
-    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString()).Replace('/', '\')
-}
-
 Push-Location $Root
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
@@ -95,7 +82,22 @@ try {
     }
     $Exe = Join-Path $Destination 'VeliShell.exe'
     $running = Get-Process -Name 'VeliShell' -ErrorAction SilentlyContinue
-    if ($running) { throw 'VeliShell laeuft noch. Bitte ueber sein Dock-Menue beenden und START.cmd erneut ausfuehren. Das Skript beendet keine Prozesse automatisch.' }
+    $destinationExeFull = [IO.Path]::GetFullPath($Exe)
+    $runningFromDestination = @(
+        $running | Where-Object {
+            try {
+                -not [string]::IsNullOrWhiteSpace($_.Path) -and
+                    [string]::Equals(
+                        [IO.Path]::GetFullPath($_.Path),
+                        $destinationExeFull,
+                        [StringComparison]::OrdinalIgnoreCase)
+            }
+            catch { $true }
+        }
+    )
+    if ($runningFromDestination.Count -gt 0) {
+        throw 'Diese VeliShell-Ausgabe laeuft noch. Bitte ueber ihr Dock-Menue beenden und START.cmd erneut ausfuehren. Das Skript beendet keine Prozesse automatisch.'
+    }
     $contained = if ($Portable) { 'true' } else { 'false' }
     try {
         Invoke-Dotnet -Arguments @('publish', 'src/VeliShell.Desktop/VeliShell.Desktop.csproj', '-c', 'Release', '-r', $rid, '--self-contained', $contained, '-o', $Staging, '-p:UseAppHost=true') -Log (Join-Path $Out 'build.log')
@@ -140,41 +142,46 @@ try {
                 '-p:DebugType=None',
                 '-p:DebugSymbols=false'
             ) -Log (Join-Path $Out 'service-build.log')
-            $servicePayload = @(
+            # Keep the service's self-contained runtime isolated from the WPF
+            # application's runtime. Both publishes contain files with the same
+            # names but different assembly identities (notably WindowsBase.dll).
+            # Combining them makes the service payload formally inconsistent and
+            # can prevent it from connecting to the Service Control Manager.
+            $serviceDestination = Join-Path $Staging 'UpdateService'
+            New-Item -ItemType Directory -Path $serviceDestination -Force | Out-Null
+            $serviceFiles = @(
+                Get-ChildItem -LiteralPath $ServiceStaging -File |
+                    Where-Object {
+                        $_.Extension -ne '.pdb' -and
+                        $_.Name -notin @('LICENSE', 'THIRD-PARTY-NOTICES.md')
+                    }
+            )
+            foreach ($serviceFile in $serviceFiles) {
+                Copy-Item -LiteralPath $serviceFile.FullName -Destination (Join-Path $serviceDestination $serviceFile.Name)
+            }
+            foreach ($requiredServiceFile in @(
                 'VeliShell.UpdateService.exe',
                 'VeliShell.UpdateService.dll',
                 'VeliShell.UpdateService.deps.json',
-                'VeliShell.UpdateService.runtimeconfig.json'
-            )
-            $sharedRelativePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($sharedFile in (Get-ChildItem -LiteralPath $Staging -File -Recurse)) {
-                $sharedRelativePath = Get-VeliShellRelativePath $Staging $sharedFile.FullName
-                [void]$sharedRelativePaths.Add($sharedRelativePath)
-            }
-            $missingSharedDependencies = @(
-                Get-ChildItem -LiteralPath $ServiceStaging -File -Recurse |
-                    Where-Object {
-                        $serviceRelativePath = Get-VeliShellRelativePath $ServiceStaging $_.FullName
-                        $_.Extension -ne '.pdb' -and
-                        $serviceRelativePath -notin $servicePayload -and
-                        -not $sharedRelativePaths.Contains($serviceRelativePath)
-                    }
-            )
-            if ($missingSharedDependencies.Count -gt 0) {
-                $missingNames = ($missingSharedDependencies | ForEach-Object Name | Sort-Object -Unique) -join ', '
-                throw "Der Updatepruefdienst benoetigt Dateien, die im gemeinsamen Laufzeitordner fehlen: $missingNames"
-            }
-            foreach ($serviceFile in $servicePayload) {
-                $stagedServiceFile = Join-Path $ServiceStaging $serviceFile
-                if (-not (Test-Path -LiteralPath $stagedServiceFile -PathType Leaf)) {
-                    throw "Der optionale Updatepruefdienst wurde nicht vollstaendig erstellt: $stagedServiceFile"
+                'VeliShell.UpdateService.runtimeconfig.json',
+                'VeliShell.Core.dll',
+                'System.Private.CoreLib.dll',
+                'WindowsBase.dll'
+            )) {
+                $publishedServiceFile = Join-Path $serviceDestination $requiredServiceFile
+                if (-not (Test-Path -LiteralPath $publishedServiceFile -PathType Leaf)) {
+                    throw "Der isolierte Updatepruefdienst ist unvollstaendig: $publishedServiceFile"
                 }
-                Copy-Item -LiteralPath $stagedServiceFile -Destination (Join-Path $Staging $serviceFile)
+                $sourceHash = (Get-FileHash -LiteralPath (Join-Path $ServiceStaging $requiredServiceFile) -Algorithm SHA256).Hash
+                $publishedHash = (Get-FileHash -LiteralPath $publishedServiceFile -Algorithm SHA256).Hash
+                if ($sourceHash -ne $publishedHash) {
+                    throw "Der isolierte Updatepruefdienst wurde beim Kopieren veraendert: $requiredServiceFile"
+                }
             }
-            & (Join-Path $Staging 'VeliShell.UpdateService.exe')
+            & (Join-Path $serviceDestination 'VeliShell.UpdateService.exe')
             $serviceSmokeExit = $LASTEXITCODE
             if ($serviceSmokeExit -ne 1063) {
-                throw "Der Updatepruefdienst konnte im gemeinsamen Laufzeitordner nicht geladen werden (SCM-Code $serviceSmokeExit statt 1063)."
+                throw "Der isolierte Updatepruefdienst konnte nicht geladen werden (SCM-Code $serviceSmokeExit statt 1063)."
             }
             # 1063 is the expected SCM-only startup result. Do not leak that
             # successful smoke-test code as the PowerShell script exit code.

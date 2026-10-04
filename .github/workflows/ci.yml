@@ -53,6 +53,9 @@ jobs:
       - name: Build per-machine MSI with optional service feature
         run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.value }}' -PublishDirectory ./out/portable
 
+      - name: Install, start and remove optional Windows service
+        run: ./tools/Test-InstalledUpdateService.ps1 -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi'
+
       - name: Create versioned release candidates
         run: ./tools/New-ReleaseArtifacts.ps1 -Version '${{ steps.version.outputs.value }}'
 
@@ -69,6 +72,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: VeliShell-Windows-build-logs
-          path: out/*.log
+          path: |
+            out/*.log
+            out/*.uninstall.log
           if-no-files-found: ignore
           retention-days: 7

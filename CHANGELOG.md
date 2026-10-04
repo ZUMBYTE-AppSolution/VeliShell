@@ -10,6 +10,13 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 - Signierte Windows-Pakete, sobald ein dauerhaftes Zumbyte.de-Codesigning-Zertifikat bereitsteht.
 
+## [0.3.1] - 2026-10-04
+
+### Behoben
+
+- Der optionale Hintergrunddienst wird nicht mehr mit der WPF-Laufzeit des Docks vermischt. Sein eigener vollständiger .NET-Laufzeitordner verhindert widersprüchliche Assemblies wie die zwei unterschiedlichen `WindowsBase.dll`-Varianten im selben Verzeichnis.
+- Die Windows-CI installiert den MSI nun mit ausgewähltem Dienst, prüft Dienstkonto, isolierten Programmpfad, laufenden Zustand und Statusdatei und entfernt die Testinstallation danach wieder. Ein bloßer Start der EXE außerhalb der Windows-Dienstverwaltung kann diesen Fehler damit nicht mehr übersehen.
+
 ## [0.3.0] - 2026-10-04
 
 ### Neu
@@ -39,5 +46,6 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.0

@@ -460,7 +460,7 @@ internal static class MacOsIconGalleryService
             {
                 if (!uriAllowed(current)) throw new InvalidDataException("Unsafe remote URL.");
                 using var request = new HttpRequestMessage(HttpMethod.Get, current);
-                request.Headers.TryAddWithoutValidation("User-Agent", "VeliShell/0.3.0");
+                request.Headers.TryAddWithoutValidation("User-Agent", "VeliShell/0.3.1");
                 using var response = await client.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
