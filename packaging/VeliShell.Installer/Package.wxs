@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+      Name="VeliShell"
+      Manufacturer="Zumbyte.de"
+      Version="$(ProductVersion)"
+      ProductCode="$(ProductCode)"
+      Language="1031"
+      Scope="perMachine"
+      UpgradeCode="B5C35798-4912-4765-97FC-279D22D1127B"
+      Compressed="yes">
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von VeliShell ist bereits installiert." />
+
+    <Property Id="ARPCONTACT" Value="Zumbyte.de Support" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ZUMBYTE-AppSolution/VeliShell/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://zumbyte.de/" />
+    <Property Id="ARPPRODUCTICON" Value="VeliShell.ico" />
+    <Property Id="INSTALLLEVEL" Value="1" />
+    <Icon
+        Id="VeliShell.ico"
+        SourceFile="$(sys.SOURCEFILEDIR)..\..\src\VeliShell.Desktop\Assets\VeliShellApp.ico" />
+
+    <util:QueryWindowsWellKnownSIDs />
+    <ui:WixUI Id="WixUI_FeatureTree" InstallDirectory="INSTALLFOLDER" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)Assets\VeliShellInstallerDialog.png" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)Assets\VeliShellInstallerBanner.png" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="VeliShellCompanyFolder" Name="Zumbyte">
+        <Directory Id="INSTALLFOLDER" Name="VeliShell" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="VeliShellProgramMenuFolder" Name="VeliShell">
+        <Component Id="VeliShellStartMenuShortcut" Guid="D63FA7C7-66E0-4CC7-89FB-0924E7E2BF57">
+          <Shortcut
+              Id="VeliShellStartMenuShortcutLink"
+              Name="VeliShell"
+              Description="VeliShell Dock und Windows-Styling"
+              Target="[INSTALLFOLDER]VeliShell.exe"
+              WorkingDirectory="INSTALLFOLDER"
+              Advertise="no" />
+          <RemoveFolder Id="RemoveVeliShellProgramMenuFolder" On="uninstall" />
+          <RegistryValue
+              Root="HKCU"
+              Key="Software\Zumbyte\VeliShell"
+              Name="Installed"
+              Type="integer"
+              Value="1"
+              KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="VeliShellProgramDataFolder" Name="VeliShell">
+        <Component Id="VeliShellUpdateStatusData" Guid="6EA652F5-AE42-4DA6-93AA-189EB096350C">
+          <CreateFolder>
+            <util:PermissionEx
+                User="[WIX_ACCOUNT_LOCALSERVICE]"
+                GenericRead="yes"
+                GenericWrite="yes"
+                DeleteChild="yes"
+                Inheritable="yes" />
+          </CreateFolder>
+          <RemoveFile Id="RemoveVeliShellUpdateStatus" Name="update-status.json" On="uninstall" />
+          <RemoveFile Id="RemoveVeliShellUpdateStatusTemporary" Name=".update-status.json.*.tmp" On="uninstall" />
+          <RemoveFolder Id="RemoveVeliShellProgramDataFolder" On="uninstall" />
+          <RegistryValue
+              Root="HKLM"
+              Key="Software\Zumbyte\VeliShell"
+              Name="UpdateServiceData"
+              Type="string"
+              Value="[VeliShellProgramDataFolder]"
+              KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature
+        Id="VeliShellComplete"
+        Title="VeliShell"
+        Description="Das macOS-inspirierte Dock und die Windows-Styling-Funktionen."
+        Display="expand"
+        Level="1"
+        AllowAbsent="no"
+        AllowAdvertise="no">
+      <ComponentGroupRef Id="VeliShellApplicationPayload" />
+      <ComponentRef Id="VeliShellStartMenuShortcut" />
+      <Feature
+          Id="UpdateServiceFeature"
+          Title="Hintergrund-Updateprüfung (optional)"
+          Description="Startet automatisch mit Windows unter LocalService und prüft alle 12 Stunden ausschließlich GitHub-Release-Metadaten. Der Dienst zeigt keine Oberfläche, lädt nichts herunter und installiert nichts."
+          Level="2"
+          AllowAbsent="yes"
+          AllowAdvertise="no"
+          InstallDefault="local">
+        <ComponentGroupRef Id="VeliShellUpdateServicePayload" />
+        <ComponentRef Id="VeliShellUpdateStatusData" />
+      </Feature>
+    </Feature>
+  </Package>
+</Wix>

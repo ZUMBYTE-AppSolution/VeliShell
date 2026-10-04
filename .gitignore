@@ -1,0 +1,24 @@
+**/bin/
+**/obj/
+.vs/
+out/
+work/
+backups/
+outputs/
+apple-icon-template-research/
+*.user
+*.suo
+
+# Local agent context and internal development evidence are never public repository content.
+**/AGENTS.md
+BUILD-INFO.txt
+docs/ROADMAP.md
+docs/VERIFICATION.md
+docs/TEST-CHECKLIST.md
+docs/DESIGN-CONTRACT.md
+docs/SOURCES.md
+docs/static-checks.json
+docs/RELEASING.md
+LIES-MICH-ZUERST.txt
+WINDOWS-BUILD-LESEN.md
+packaging/LIES-MICH.txt

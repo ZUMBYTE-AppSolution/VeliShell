@@ -1,0 +1,22 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Cultures>de-DE</Cultures>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">$(Version)</ProductVersion>
+    <OutputName>VeliShell-$(ProductVersion)-win-x64</OutputName>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\out\installer\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\out\installer-obj\</IntermediateOutputPath>
+    <PublishDirectory Condition="'$(PublishDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\out\portable\</PublishDirectory>
+    <GeneratedPayloadFile Condition="'$(GeneratedPayloadFile)' == ''">$(MSBuildThisFileDirectory)..\..\out\installer-generated\Payload.wxs</GeneratedPayloadFile>
+    <DefineConstants>ProductVersion=$(ProductVersion);ProductCode=$(ProductCode)</DefineConstants>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <SuppressValidation>false</SuppressValidation>
+  </PropertyGroup>
+  <ItemGroup>
+    <BindPath Include="$(PublishDirectory)" BindName="publish" />
+    <Compile Include="$(GeneratedPayloadFile)" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="4.0.6" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.6" />
+  </ItemGroup>
+</Project>

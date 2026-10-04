@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/VeliShell.Core/VeliShell.Core.csproj" />
+  <Project Path="src/VeliShell.Desktop/VeliShell.Desktop.csproj" />
+  <Project Path="src/VeliShell.UpdateService/VeliShell.UpdateService.csproj" />
+  <Project Path="tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj" />
+  <Project Path="tests/VeliShell.Desktop.Updater.Tests/VeliShell.Desktop.Updater.Tests.csproj" />
+  <Project Path="tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj" />
+  <Project Path="tests/VeliShell.UpdateService.Tests/VeliShell.UpdateService.Tests.csproj" />
+</Solution>

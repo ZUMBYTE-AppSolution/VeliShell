@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>VeliShell.UpdateService.Tests</RootNamespace>
+    <AssemblyName>VeliShell.UpdateService.Tests</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VeliShell.Core/VeliShell.Core.csproj" />
+    <ProjectReference Include="../../src/VeliShell.UpdateService/VeliShell.UpdateService.csproj" />
+  </ItemGroup>
+</Project>

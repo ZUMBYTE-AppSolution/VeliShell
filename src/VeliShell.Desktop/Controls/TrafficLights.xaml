@@ -1,0 +1,33 @@
+<UserControl x:Class="VeliShell.Desktop.Controls.TrafficLights"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ shell:WindowChrome.IsHitTestVisibleInChrome="True">
+ <UserControl.Resources>
+  <Style x:Key="Light" TargetType="Button">
+   <Setter Property="Width" Value="22" /><Setter Property="Height" Value="24" />
+   <Setter Property="Padding" Value="0" /><Setter Property="BorderThickness" Value="0" />
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Grid Background="Transparent"><Ellipse Width="12" Height="12" Fill="{TemplateBinding Background}" Stroke="#28000000" StrokeThickness="0.7" />
+     <ContentPresenter x:Name="Glyph" Opacity="0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Glyph" Property="Opacity" Value="1" /></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Glyph" Property="Opacity" Value="1" /></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </UserControl.Resources>
+ <StackPanel Orientation="Horizontal">
+  <Button Style="{StaticResource Light}" Background="#FF5F57" Click="Close_Click" ToolTip="{services:Loc Window.Close}" AutomationProperties.Name="{services:Loc Window.Close}">
+   <Path Data="M 0,0 L 5,5 M 5,0 L 0,5" Stroke="#71231E" StrokeThickness="1" />
+  </Button>
+  <Button Style="{StaticResource Light}" Background="#FEBC2E" Click="Minimize_Click" ToolTip="{services:Loc Window.Minimize}" AutomationProperties.Name="{services:Loc Window.Minimize}">
+   <Path Data="M 0,0 L 6,0" Stroke="#805400" StrokeThickness="1" />
+  </Button>
+  <Button Style="{StaticResource Light}" Background="#28C840" Click="Maximize_Click" ToolTip="{services:Loc Window.Maximize}" AutomationProperties.Name="{services:Loc Window.MaximizeAutomation}">
+   <Path Data="M 0,2 L 0,0 L 2,0 M 3,5 L 5,5 L 5,3" Stroke="#0E6220" StrokeThickness="1" />
+  </Button>
+ </StackPanel>
+</UserControl>

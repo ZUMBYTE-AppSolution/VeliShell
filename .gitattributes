@@ -1,0 +1,25 @@
+* text=auto
+*.cs text eol=crlf
+*.xaml text eol=crlf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.png binary
+*.ico binary
+*.msi binary
+*.zip binary
+
+# Defense in depth for source archives created with git archive.
+AGENTS.md export-ignore
+docs/ROADMAP.md export-ignore
+docs/VERIFICATION.md export-ignore
+docs/TEST-CHECKLIST.md export-ignore
+docs/DESIGN-CONTRACT.md export-ignore
+docs/SOURCES.md export-ignore
+docs/static-checks.json export-ignore
+docs/RELEASING.md export-ignore
+work export-ignore
+out export-ignore
+packaging/LIES-MICH.txt export-ignore

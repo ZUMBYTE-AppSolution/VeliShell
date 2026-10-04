@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>VeliShell.IconBuilder</AssemblyName>
+    <RootNamespace>VeliShell.IconBuilder</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The app asset and live dock surfaces intentionally compile the exact
+         same contour implementation; duplicated look-alike curves can drift. -->
+    <Compile Include="..\..\src\VeliShell.Desktop\Controls\AppIconMask.cs"
+             Link="Shared\AppIconMask.cs" />
+    <EmbeddedResource Include="Assets\VeliShellAppSource.png"
+                      LogicalName="VeliShell.IconBuilder.Assets.VeliShellAppSource.png" />
+    <EmbeddedResource Include="Assets\VeliShellMarkSource.png"
+                      LogicalName="VeliShell.IconBuilder.Assets.VeliShellMarkSource.png" />
+  </ItemGroup>
+</Project>

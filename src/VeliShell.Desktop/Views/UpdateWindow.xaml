@@ -1,0 +1,83 @@
+<controls:VeliShellWindow x:Class="VeliShell.Desktop.Views.UpdateWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
+ xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ Title="{services:Loc Update.WindowTitle}" Width="680" Height="610" MinWidth="580" MinHeight="500"
+ WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+ <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="12"
+         BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
+  <Grid ClipToBounds="True">
+   <Grid.RowDefinitions>
+    <RowDefinition Height="50" />
+    <RowDefinition Height="*" />
+    <RowDefinition Height="Auto" />
+   </Grid.RowDefinitions>
+
+   <Ellipse Grid.RowSpan="3" Width="420" Height="420" HorizontalAlignment="Right" VerticalAlignment="Top"
+            Margin="0,-260,-210,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.1" IsHitTestVisible="False">
+    <Ellipse.Effect><BlurEffect Radius="42" /></Ellipse.Effect>
+   </Ellipse>
+   <controls:TrafficLights HorizontalAlignment="Left" VerticalAlignment="Center" Margin="13,0,0,0" />
+   <TextBlock Grid.Row="0" Text="{services:Loc Update.WindowTitle}" FontSize="14" FontWeight="SemiBold"
+              HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+   <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                 Padding="30,14,30,22">
+    <StackPanel>
+     <Grid Margin="0,0,0,20">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="66" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+      <Image x:Name="ProductIcon" Width="54" Height="54" HorizontalAlignment="Left" VerticalAlignment="Top">
+       <Image.Effect><DropShadowEffect Color="{DynamicResource AccentGlowColor}" BlurRadius="18" ShadowDepth="0" Opacity="0.52" /></Image.Effect>
+      </Image>
+      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+       <TextBlock Text="{services:Loc Update.AvailableTitle}" FontSize="23" FontWeight="SemiBold" />
+       <TextBlock x:Name="VersionLine" Style="{StaticResource SecondaryText}" Margin="0,5,0,0" />
+      </StackPanel>
+     </Grid>
+
+     <TextBlock Text="{services:Loc Update.NotesTitle}" Style="{StaticResource SectionLabel}" />
+     <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+      <Grid>
+       <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+       <TextBox x:Name="ReleaseNotes" MinHeight="210" MaxHeight="300" IsReadOnly="True"
+                AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                BorderThickness="0" Background="Transparent" Padding="0" />
+       <TextBlock Grid.Row="1" Text="{services:Loc Update.NotesSafety}" Style="{StaticResource SecondaryText}"
+                  TextWrapping="Wrap" Margin="0,14,0,0" />
+      </Grid>
+     </Border>
+
+     <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,2,0,12">
+      <ProgressBar x:Name="DownloadProgress" Height="5" Minimum="0" Maximum="100" />
+      <TextBlock x:Name="ProgressText" Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
+     </StackPanel>
+
+     <Border x:Name="VerificationPanel" Style="{StaticResource Card}" Visibility="Collapsed" Margin="0,0,0,12">
+      <StackPanel>
+       <TextBlock Text="{services:Loc Update.ReadyTitle}" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,8" />
+       <TextBlock x:Name="VerificationText" TextWrapping="Wrap" />
+       <StackPanel x:Name="UnsignedPanel" Visibility="Collapsed" Margin="0,12,0,0">
+        <TextBlock Text="{services:Loc Update.UnsignedWarning}" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
+        <CheckBox x:Name="UnsignedAcknowledgement" Content="{services:Loc Update.UnsignedAcknowledge}"
+                  Margin="0,12,0,0" Checked="UnsignedAcknowledgement_Changed"
+                  Unchecked="UnsignedAcknowledgement_Changed" />
+       </StackPanel>
+      </StackPanel>
+     </Border>
+    </StackPanel>
+   </ScrollViewer>
+
+   <Border Grid.Row="2" BorderBrush="{DynamicResource CardStroke}" BorderThickness="0,1,0,0" Padding="20,14">
+    <Grid>
+     <Button Content="{services:Loc Update.ReleasePage}" HorizontalAlignment="Left" Click="ReleasePage_Click" />
+     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="LaterButton" Content="{services:Loc Update.Later}" Click="Later_Click" Margin="0,0,9,0" />
+      <Button x:Name="PrimaryButton" Content="{services:Loc Update.Download}" Style="{StaticResource PrimaryButton}"
+              Click="Primary_Click" MinWidth="150" />
+     </StackPanel>
+    </Grid>
+   </Border>
+  </Grid>
+ </Border>
+</controls:VeliShellWindow>

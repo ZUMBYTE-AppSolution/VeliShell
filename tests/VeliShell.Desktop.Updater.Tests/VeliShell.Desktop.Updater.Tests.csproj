@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>VeliShell.Desktop.Updater.Tests</RootNamespace>
+    <AssemblyName>VeliShell.Desktop.Updater.Tests</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VeliShell.Core/VeliShell.Core.csproj" />
+    <ProjectReference Include="../../src/VeliShell.Desktop/VeliShell.Desktop.csproj" />
+  </ItemGroup>
+</Project>

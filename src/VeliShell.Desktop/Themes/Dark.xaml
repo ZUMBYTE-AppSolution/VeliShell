@@ -1,0 +1,83 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="WindowSurface" Color="#0C1224" />
+  <SolidColorBrush x:Key="SidebarSurface" Color="#111A35" />
+  <SolidColorBrush x:Key="CardSurface" Color="#151E39" />
+  <SolidColorBrush x:Key="CardStroke" Color="#33466F" />
+  <SolidColorBrush x:Key="TextPrimary" Color="#F5F8FF" />
+  <SolidColorBrush x:Key="TextSecondary" Color="#AAB8D7" />
+  <SolidColorBrush x:Key="Divider" Color="#304064" />
+  <SolidColorBrush x:Key="Accent" Color="#5D78FF" />
+  <SolidColorBrush x:Key="AccentText" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="ControlSurface" Color="#1B2747" />
+  <SolidColorBrush x:Key="HoverSurface" Color="#26375E" />
+  <SolidColorBrush x:Key="AccentSoft" Color="#263D73" />
+  <SolidColorBrush x:Key="AccentStroke" Color="#8198FF" />
+  <SolidColorBrush x:Key="ControlStrokeHover" Color="#6685C5" />
+  <SolidColorBrush x:Key="ControlThumb" Color="#F8FAFF" />
+  <SolidColorBrush x:Key="ControlThumbStroke" Color="#6780AF" />
+  <LinearGradientBrush x:Key="WindowBackdropGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#101B37" Offset="0" />
+    <GradientStop Color="#0B1228" Offset="0.54" />
+    <GradientStop Color="#1B1035" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="SidebarGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#142343" Offset="0" />
+    <GradientStop Color="#101A36" Offset="0.58" />
+    <GradientStop Color="#24143E" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="CardSurfaceGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#1C294B" Offset="0" />
+    <GradientStop Color="#141D36" Offset="0.6" />
+    <GradientStop Color="#24183E" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="ControlSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#26365A" Offset="0" />
+    <GradientStop Color="#17223F" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="ControlHoverGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#274D6D" Offset="0" />
+    <GradientStop Color="#263A72" Offset="0.55" />
+    <GradientStop Color="#4B286D" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#08658E" Offset="0" />
+    <GradientStop Color="#4050C4" Offset="0.5" />
+    <GradientStop Color="#6D35A5" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="AccentGradientHover" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#0872A0" Offset="0" />
+    <GradientStop Color="#5262CF" Offset="0.48" />
+    <GradientStop Color="#7A43AE" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="AmbientGlowGradient" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#14C7FF" Offset="0" />
+    <GradientStop Color="#5C73FF" Offset="0.52" />
+    <GradientStop Color="#C35FFF" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="NavHoverGradient" StartPoint="0,0" EndPoint="1,0">
+    <GradientStop Color="#224B68" Offset="0" />
+    <GradientStop Color="#263B72" Offset="0.55" />
+    <GradientStop Color="#4B286B" Offset="1" />
+  </LinearGradientBrush>
+  <Color x:Key="AccentGlowColor">#AA5B79FF</Color>
+  <Color x:Key="SubtleShadowColor">#B8000000</Color>
+  <SolidColorBrush x:Key="DockSurface" Color="#E535353D" />
+  <SolidColorBrush x:Key="DockStroke" Color="#78A8A8B1" />
+  <LinearGradientBrush x:Key="DockSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#ED4A4A54" Offset="0" />
+    <GradientStop Color="#E735353D" Offset="0.48" />
+    <GradientStop Color="#E622232A" Offset="1" />
+  </LinearGradientBrush>
+  <RadialGradientBrush x:Key="DockMilkOverlay" Center="0.42,0.04" GradientOrigin="0.42,-0.2" RadiusX="0.8" RadiusY="0.98">
+    <GradientStop Color="#34FFFFFF" Offset="0" />
+    <GradientStop Color="#16FFFFFF" Offset="0.6" />
+    <GradientStop Color="#06000000" Offset="1" />
+  </RadialGradientBrush>
+  <SolidColorBrush x:Key="DockInnerStroke" Color="#50FFFFFF" />
+  <SolidColorBrush x:Key="DockHighlight" Color="#88FFFFFF" />
+  <SolidColorBrush x:Key="DockHover" Color="#24FFFFFF" />
+  <SolidColorBrush x:Key="DockDropMarker" Color="#FF0A84FF" />
+  <SolidColorBrush x:Key="DockIndicator" Color="#ECECF1" />
+  <SolidColorBrush x:Key="MenuSurface" Color="#303036" />
+  <SolidColorBrush x:Key="SwitchOff" Color="#606068" />
+</ResourceDictionary>
