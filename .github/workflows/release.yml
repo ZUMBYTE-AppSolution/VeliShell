@@ -132,7 +132,7 @@ jobs:
           gh release create "v$version" @assets --verify-tag --latest --title "VeliShell $version" --notes-file out/release-notes.md
 
   publish-microsoft-store:
-    name: Submit signed MSI to Microsoft Store
+    name: Submit MSIX to Microsoft Store
     needs: release-windows-x64
     if: ${{ vars.MICROSOFT_STORE_PUBLISH_ENABLED == 'true' }}
     uses: ./.github/workflows/store-publish.yml

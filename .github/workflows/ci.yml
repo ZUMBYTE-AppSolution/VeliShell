@@ -50,6 +50,9 @@ jobs:
       - name: Test and publish self-contained Windows application
         run: ./tools/Build.ps1 -Portable
 
+      - name: Validate Microsoft Store MSIX package
+        run: ./tools/Build-StoreMsix.ps1 -Version '${{ steps.version.outputs.value }}' -DevelopmentIdentity -PublishDirectory ./out/portable -OutputPath './out/store/VeliShell-${{ steps.version.outputs.value }}-win-x64.msix'
+
       - name: Build per-machine MSI
         run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.value }}' -PublishDirectory ./out/portable
 

@@ -51,6 +51,7 @@ public partial class PreferencesWindow : VeliShellWindow
             item.IsSelected = string.Equals(item.Tag as string, s.Language.ToString(), StringComparison.Ordinal);
         foreach (var item in UpdateModeChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.Updates.ToString(), StringComparison.Ordinal);
+        UpdateModeChoice.IsEnabled = !PackageIdentityService.HasIdentity;
         foreach (var item in IconStyleChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.IconStyle.ToString(), StringComparison.Ordinal);
         SizeSlider.Value = s.IconSize;
@@ -69,18 +70,7 @@ public partial class PreferencesWindow : VeliShellWindow
         MenuBarTopmostSwitch.IsChecked = s.MenuBarAlwaysOnTop;
         MenuBarTopmostSwitch.IsEnabled = s.MenuBarEnabled;
         WindowsNotificationsSwitch.IsChecked = s.WindowsNotificationsEnabled;
-        try
-        {
-            var userLoginEnabled = StartupRegistrationService.IsUserLoginEnabled();
-            UserStartupSwitch.IsChecked = userLoginEnabled;
-            StartupStatus.Text = L(userLoginEnabled ? "Startup.StatusEnabled" : "Startup.StatusDisabled");
-        }
-        catch (Exception ex)
-        {
-            App.Log("Could not query startup registration", ex);
-            UserStartupSwitch.IsChecked = false;
-            StartupStatus.Text = L("Common.ServiceError") + " " + ex.Message;
-        }
+        _ = SyncStartupUiAsync();
         TaskbarStatus.Text = _app.Taskbars.LastStatus;
         DesktopIconsStatus.Text = _app.DesktopIcons.LastStatus;
         UpdateWindowsNotificationUi();
@@ -163,7 +153,8 @@ public partial class PreferencesWindow : VeliShellWindow
     {
         if (UpdateStatus is null || CheckUpdatesButton is null) return;
         UpdateStatus.Text = _app.GetUpdateStatusText();
-        CheckUpdatesButton.IsEnabled = _app.UpdateState != UpdateUiState.Checking;
+        CheckUpdatesButton.IsEnabled = !PackageIdentityService.HasIdentity &&
+                                       _app.UpdateState != UpdateUiState.Checking;
     }
     private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
     {
@@ -269,13 +260,14 @@ public partial class PreferencesWindow : VeliShellWindow
             _app.Preferences.WindowsNotificationsEnabled &&
             access.State == WindowsNotificationAccessState.Allowed;
     }
-    private void UserStartup_Click(object sender, RoutedEventArgs e)
+    private async void UserStartup_Click(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
         var enable = UserStartupSwitch.IsChecked == true;
+        UserStartupSwitch.IsEnabled = false;
         try
         {
-            StartupRegistrationService.SetUserLoginEnabled(enable);
+            await StartupRegistrationService.SetUserLoginEnabledAsync(enable);
             _app.UpdatePreferences(s => s.Startup = enable ? StartupMode.UserLogin : StartupMode.Disabled);
         }
         catch (Exception ex)
@@ -285,7 +277,32 @@ public partial class PreferencesWindow : VeliShellWindow
             MessageBox.Show(this, L("Common.ServiceError") + "\n\n" + ex.Message,
                 L("Common.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-        SyncUi();
+        finally
+        {
+            await SyncStartupUiAsync();
+        }
+    }
+
+    private async Task SyncStartupUiAsync()
+    {
+        if (UserStartupSwitch is null || StartupStatus is null) return;
+        UserStartupSwitch.IsEnabled = false;
+        try
+        {
+            var userLoginEnabled = await StartupRegistrationService.IsUserLoginEnabledAsync();
+            UserStartupSwitch.IsChecked = userLoginEnabled;
+            StartupStatus.Text = L(userLoginEnabled ? "Startup.StatusEnabled" : "Startup.StatusDisabled");
+        }
+        catch (Exception ex)
+        {
+            App.Log("Could not query startup registration", ex);
+            UserStartupSwitch.IsChecked = false;
+            StartupStatus.Text = L("Common.ServiceError") + " " + ex.Message;
+        }
+        finally
+        {
+            UserStartupSwitch.IsEnabled = true;
+        }
     }
     private async void HideTaskbar_Click(object sender, RoutedEventArgs e)
     {

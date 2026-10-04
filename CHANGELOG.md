@@ -6,10 +6,20 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
-### Geplant
+### Neu
 
-- Signierte Windows-Pakete, sobald ein dauerhaftes Zumbyte.de-Codesigning-Zertifikat bereitsteht.
-- Eine signierte Paketidentität für den von Windows geschützten Zugriff auf Mitteilungen anderer Apps.
+- Ein eigener reproduzierbarer MSIX-Build bereitet VeliShell für den Microsoft Store vor. Nach erfolgreicher Store-Zertifizierung signiert Microsoft das ausgelieferte Paket.
+- Das Store-Paket deklariert die geschützte Windows-Berechtigung für die Mitteilungszentrale und eine optionale, vom Benutzer kontrollierte Autostart-Aufgabe.
+- Die GitHub-Automatisierung baut und prüft das MSIX vor jeder Einreichung und kann spätere Versionen über die Microsoft Store Developer CLI übermitteln.
+
+### Geändert
+
+- In der Store-Version übernimmt Microsoft Store die Aktualisierung; die separate GitHub-Aktualisierung wird dort nicht parallel ausgeführt. MSI und Portable behalten die bisherige wählbare Aktualisierungssuche.
+- Die klassische Explorer-Registry-Verknüpfung „Im Dock anheften“ wird nur in MSI/Portable registriert. Für MSIX wäre dafür eine eigene paketierte Explorer-COM-Erweiterung erforderlich.
+
+### Bekannte Einschränkungen
+
+- Die erste Store-Einreichung muss im Partner Center angelegt werden. Automatische Paketaktualisierungen sind erst für eine bereits veröffentlichte und aktive Store-App verfügbar.
 
 ## [0.6.0] - 2026-10-04
 

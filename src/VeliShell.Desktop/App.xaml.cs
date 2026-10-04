@@ -119,7 +119,7 @@ public partial class App : Application
         if (hasPinCommand) AddShellPin(pendingPinPath);
         try
         {
-            if (Environment.ProcessPath is { } executablePath)
+            if (!PackageIdentityService.HasIdentity && Environment.ProcessPath is { } executablePath)
                 ShellVerbRegistrationService.EnsureRegisteredForCurrentUser(executablePath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
@@ -134,20 +134,27 @@ public partial class App : Application
             SaveNow();
             Log("The saved menu-bar preference was disabled because Windows did not accept its work-area reservation.");
         }
-        _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
-        _updateTimer.Tick += async (_, _) =>
+        if (PackageIdentityService.HasIdentity)
         {
-            if (Preferences.Updates != UpdateMode.Manual && _updateWindow is null)
-                await CheckForUpdatesAsync(userInitiated: false, Dock);
-        };
-        _updateTimer.Start();
+            SetUpdateState(UpdateUiState.StoreManaged);
+        }
+        else
+        {
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
+            _updateTimer.Tick += async (_, _) =>
+            {
+                if (Preferences.Updates != UpdateMode.Manual && _updateWindow is null)
+                    await CheckForUpdatesAsync(userInitiated: false, Dock);
+            };
+            _updateTimer.Start();
+        }
         if (!Preferences.FirstRunCompleted)
         {
             ShowPreferences();
             Preferences.FirstRunCompleted = true;
             SaveNow();
         }
-        if (Preferences.Updates != UpdateMode.Manual)
+        if (!PackageIdentityService.HasIdentity && Preferences.Updates != UpdateMode.Manual)
             _ = CheckForUpdatesAsync(userInitiated: false, Dock);
         Log($"VeliShell {GitHubReleaseUpdateService.InstalledVersion} started. Windows {Environment.OSVersion.Version}");
     }
@@ -244,12 +251,21 @@ public partial class App : Application
         UpdateUiState.NoRelease => L("Update.NoRelease"),
         UpdateUiState.Available when AvailableUpdateVersion is { } version =>
             LF("Update.AvailableStatus", version),
+        UpdateUiState.StoreManaged => L("Update.StoreManaged"),
         UpdateUiState.Failed => L("Update.CheckFailedStatus"),
         _ => L("Update.NotChecked")
     };
 
     internal async Task CheckForUpdatesAsync(bool userInitiated, Window? owner = null)
     {
+        if (PackageIdentityService.HasIdentity)
+        {
+            SetUpdateState(UpdateUiState.StoreManaged);
+            if (userInitiated)
+                MessageBox.Show(owner ?? Dock, L("Update.StoreManaged"), L("Update.WindowTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (!await _updateCheckGate.WaitAsync(0)) return;
         SetUpdateState(UpdateUiState.Checking);
         try
@@ -696,5 +712,6 @@ internal enum UpdateUiState
     UpToDate,
     NoRelease,
     Available,
+    StoreManaged,
     Failed
 }

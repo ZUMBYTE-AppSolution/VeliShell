@@ -23,7 +23,6 @@ internal sealed record WindowsNotificationSnapshot(
 /// </summary>
 internal sealed class WindowsNotificationListenerBridge : IDisposable
 {
-    private const int ErrorInsufficientBuffer = 122;
     private const int MaximumNotifications = 40;
     private const uint MaximumLogoBytes = 2 * 1024 * 1024;
     private readonly UserNotificationListener _listener;
@@ -41,15 +40,7 @@ internal sealed class WindowsNotificationListenerBridge : IDisposable
         OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393) &&
         ApiInformation.IsTypePresent("Windows.UI.Notifications.Management.UserNotificationListener");
 
-    internal static bool HasPackageIdentity
-    {
-        get
-        {
-            uint length = 0;
-            var result = GetCurrentPackageFullName(ref length, null);
-            return result is 0 or ErrorInsufficientBuffer;
-        }
-    }
+    internal static bool HasPackageIdentity => PackageIdentityService.HasIdentity;
 
     internal static bool TryCreate(
         out WindowsNotificationListenerBridge? bridge,
@@ -221,8 +212,4 @@ internal sealed class WindowsNotificationListenerBridge : IDisposable
         _disposed = true;
     }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetCurrentPackageFullName(
-        ref uint packageFullNameLength,
-        char[]? packageFullName);
 }
