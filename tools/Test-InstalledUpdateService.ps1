@@ -82,8 +82,13 @@ try {
 
     $configuration = Get-CimInstance Win32_Service -Filter "Name='$serviceName'"
     if (-not $configuration) { throw 'The installed service configuration could not be read.' }
-    if ($configuration.StartName -notmatch 'LocalService|Lokaler Dienst') {
-        throw "The installed service account is unexpected: $($configuration.StartName)"
+    $localServiceSid = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-19')
+    $expectedServiceAccount = $localServiceSid.Translate([System.Security.Principal.NTAccount]).Value
+    if (-not [string]::Equals(
+        [string]$configuration.StartName,
+        $expectedServiceAccount,
+        [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The installed service account is unexpected: $($configuration.StartName) (expected $expectedServiceAccount)"
     }
     if ($configuration.PathName -notmatch '[\\/]UpdateService[\\/]VeliShell\.UpdateService\.exe') {
         throw "The service is not using its isolated runtime directory: $($configuration.PathName)"
