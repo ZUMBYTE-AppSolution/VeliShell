@@ -17,6 +17,5 @@
     <BindPath Include="$(PublishDirectory)" BindName="publish" />
     <Compile Include="$(GeneratedPayloadFile)" />
     <PackageReference Include="WixToolset.UI.wixext" Version="4.0.6" />
-    <PackageReference Include="WixToolset.Util.wixext" Version="4.0.6" />
   </ItemGroup>
 </Project>

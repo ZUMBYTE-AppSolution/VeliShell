@@ -29,7 +29,8 @@
      <Grid Margin="8,0,0,27">
       <Grid.ColumnDefinitions><ColumnDefinition Width="45" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
       <Image x:Name="BrandIcon" Width="37" Height="37" HorizontalAlignment="Left"
-             Source="/VeliShell;component/Assets/VeliShellMark.png" Stretch="Uniform">
+             Source="/VeliShell;component/Assets/VeliShellMark.png" Stretch="Uniform"
+             RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" UseLayoutRounding="True">
        <Image.Effect><DropShadowEffect Color="{DynamicResource AccentGlowColor}" BlurRadius="16" ShadowDepth="0" Opacity="0.56" /></Image.Effect>
       </Image>
       <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -141,19 +142,37 @@
        <CheckBox x:Name="RunningSwitch" Content="{services:Loc Apps.ShowRunning}" Style="{StaticResource ToggleSwitch}" Click="Running_Click" />
        <TextBlock Text="{services:Loc Apps.RunningDescription}" Style="{StaticResource SecondaryText}" Margin="0,5,44,0" />
       </StackPanel></Border>
+      <TextBlock Text="{services:Loc Apps.IconStyleSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <DockPanel Margin="0,0,0,8">
+        <TextBlock Text="{services:Loc Apps.IconStyleLabel}" VerticalAlignment="Center" />
+        <ComboBox x:Name="IconStyleChoice" Width="240" HorizontalAlignment="Right"
+                  SelectionChanged="IconStyleChoice_SelectionChanged">
+         <ComboBoxItem Tag="Mac" Content="{services:Loc Apps.IconStyleMac}" />
+         <ComboBoxItem Tag="Windows" Content="{services:Loc Apps.IconStyleWindows}" />
+        </ComboBox>
+       </DockPanel>
+       <TextBlock Text="{services:Loc Apps.IconStyleDescription}" Style="{StaticResource SecondaryText}" />
+      </StackPanel></Border>
+      <TextBlock Text="{services:Loc Apps.DockElementsSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}" Padding="10,6"><StackPanel>
+       <TextBlock Text="{services:Loc Apps.DockElementsDescription}" Style="{StaticResource SecondaryText}" Margin="8,7,8,8" />
+       <StackPanel x:Name="SystemIconList" />
+      </StackPanel></Border>
       <TextBlock Text="{services:Loc Apps.OnlineSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <TextBlock Text="{services:Loc Apps.OnlineDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
+       <TextBlock Text="{services:Loc Apps.ApiKeyLabel}" FontWeight="SemiBold" Margin="0,0,0,7" />
+       <PasswordBox x:Name="IconApiKeyInput" MaxLength="512" Margin="0,0,0,9"
+                    AutomationProperties.Name="{services:Loc Apps.ApiKeyLabel}" />
        <WrapPanel>
+        <Button Content="{services:Loc Apps.SaveKey}" Click="SaveIconKey_Click" Margin="0,0,8,8" />
+        <Button x:Name="RemoveIconKeyButton" Content="{services:Loc Apps.RemoveKey}" Click="RemoveIconKey_Click" Margin="0,0,8,8" />
         <Button x:Name="FindOnlineIconsButton" Content="{services:Loc Apps.FindIcons}" Style="{StaticResource PrimaryButton}" Click="FindOnlineIcons_Click" Margin="0,0,8,8" />
-        <Button Content="{services:Loc Apps.OpenSource}" Click="OpenIconGallery_Click" Margin="0,0,0,8" />
+        <Button Content="{services:Loc Apps.OpenSource}" Click="OpenIconSource_Click" Margin="0,0,0,8" />
        </WrapPanel>
-       <CheckBox x:Name="OnlineIconSwitch" Content="{services:Loc Apps.AutomaticIcons}" Style="{StaticResource ToggleSwitch}" Click="OnlineIcons_Click" />
        <TextBlock x:Name="OnlineIconStatus" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
        <TextBlock Text="{services:Loc Apps.OnlineLegal}" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
-       <Border Height="1" Background="{DynamicResource Divider}" Margin="0,12,0,10" />
-       <TextBlock x:Name="LegacyIconKeyStatus" Style="{StaticResource SecondaryText}" Margin="0,0,0,8" />
-       <Button x:Name="RemoveLegacyIconKeyButton" Content="{services:Loc Apps.RemoveLegacyKey}" HorizontalAlignment="Left" Click="RemoveIconKey_Click" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Apps.PinsSection}" Style="{StaticResource SectionLabel}" />
       <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -164,6 +183,17 @@
       <Border Style="{StaticResource Card}" Padding="10,6"><StackPanel x:Name="PinList" /></Border>
       <TextBlock Text="{services:Loc Apps.PinsHint}" Style="{StaticResource SecondaryText}" Margin="2,12,2,0" />
       <Button Content="{services:Loc Apps.ResetPins}" HorizontalAlignment="Left" Margin="0,16,0,0" Click="ResetPins_Click" />
+      <TextBlock Text="{services:Loc Apps.RunningIconsSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}" Padding="10,6"><StackPanel>
+       <Grid Margin="8,7,8,8">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+        <TextBlock Text="{services:Loc Apps.RunningIconsDescription}" Style="{StaticResource SecondaryText}"
+                   VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0" />
+        <Button Grid.Column="1" Content="{services:Loc Common.Refresh}" MinWidth="104"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Click="RefreshRunningIcons_Click" />
+       </Grid>
+       <StackPanel x:Name="RunningIconList" />
+      </StackPanel></Border>
      </StackPanel>
      <StackPanel x:Name="WindowsPage" Visibility="Collapsed">
       <TextBlock Text="{services:Loc Windows.Title}" FontSize="25" FontWeight="SemiBold" Margin="0,3,0,8" />
@@ -178,15 +208,18 @@
        <TextBlock x:Name="TaskbarStatus" Style="{StaticResource SecondaryText}" />
        <TextBlock Text="{services:Loc Windows.EmergencyHint}" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
       </StackPanel></Border>
+      <TextBlock Text="{services:Loc MenuBar.Section}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <CheckBox x:Name="MenuBarSwitch" Content="{services:Loc MenuBar.Enable}" Style="{StaticResource ToggleSwitch}" Click="MenuBar_Click" />
+       <CheckBox x:Name="MenuBarAutoHideSwitch" Content="{services:Loc MenuBar.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAutoHide_Click" />
+       <CheckBox x:Name="MenuBarTopmostSwitch" Content="{services:Loc MenuBar.Topmost}" Style="{StaticResource ToggleSwitch}" Click="MenuBarTopmost_Click" />
+       <TextBlock Text="{services:Loc MenuBar.Description}" Style="{StaticResource SecondaryText}" Margin="0,7,44,0" />
+      </StackPanel></Border>
       <TextBlock Text="{services:Loc Startup.Section}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <CheckBox x:Name="UserStartupSwitch" Content="{services:Loc Startup.UserLogin}" Style="{StaticResource ToggleSwitch}" Click="UserStartup_Click" />
        <TextBlock Text="{services:Loc Startup.UserLoginDescription}" Style="{StaticResource SecondaryText}" Margin="0,5,44,7" />
        <TextBlock x:Name="StartupStatus" Style="{StaticResource SecondaryText}" />
-       <Border Height="1" Background="{DynamicResource Divider}" Margin="0,14,0,12" />
-       <TextBlock Text="{services:Loc Startup.ServiceTitle}" FontWeight="SemiBold" Margin="0,0,0,7" />
-       <TextBlock Text="{services:Loc Startup.ServiceDescription}" Style="{StaticResource SecondaryText}" />
-       <TextBlock x:Name="ServiceStatus" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Windows.SettingsSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
@@ -195,8 +228,9 @@
       </StackPanel></Border>
      </StackPanel>
      <StackPanel x:Name="InfoPage" Visibility="Collapsed">
-      <Image x:Name="InfoIcon" Width="65" Height="65" HorizontalAlignment="Left" Margin="0,4,0,12"
-             Source="/VeliShell;component/Assets/VeliShellMark.png" Stretch="Uniform">
+       <Image x:Name="InfoIcon" Width="65" Height="65" HorizontalAlignment="Left" Margin="0,4,0,12"
+              Source="/VeliShell;component/Assets/VeliShellMark.png" Stretch="Uniform"
+              RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" UseLayoutRounding="True">
        <Image.Effect><DropShadowEffect Color="{DynamicResource AccentGlowColor}" BlurRadius="22" ShadowDepth="0" Opacity="0.64" /></Image.Effect>
       </Image>
       <TextBlock Text="{services:Loc Info.Title}" FontSize="25" FontWeight="SemiBold" />
@@ -239,7 +273,7 @@
        <TextBlock Text="{services:Loc Info.LicenseDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
        <WrapPanel>
         <Button Content="{services:Loc Info.LocalLicenses}" Click="OpenLocalLicenses_Click" Margin="0,0,8,8" />
-        <Button Content="{services:Loc Info.GalleryLicense}" Click="OpenIconGallery_Click" Margin="0,0,0,8" />
+        <Button Content="{services:Loc Info.IconSourceNotices}" Click="OpenIconSource_Click" Margin="0,0,0,8" />
        </WrapPanel>
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Info.DiagnosticsSection}" Style="{StaticResource SectionLabel}" />

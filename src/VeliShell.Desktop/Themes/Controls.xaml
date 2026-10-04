@@ -91,6 +91,25 @@
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="MenuBarButton" TargetType="Button">
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderThickness" Value="0" />
+  <Setter Property="Padding" Value="9,4" />
+  <Setter Property="Height" Value="28" />
+  <Setter Property="Cursor" Value="Hand" />
+  <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="6"
+           Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Body" Property="Background" Value="{DynamicResource DockHover}" /></Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.65" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style x:Key="AppearanceChoice" TargetType="RadioButton">
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="Cursor" Value="Hand" /><Setter Property="Margin" Value="3,0,7,0" />

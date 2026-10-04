@@ -1,35 +1,16 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 
 namespace VeliShell.Core;
 
-public sealed record MacOsIconGalleryEntry(
-    string Id,
-    string Name,
-    string Date,
-    string? DateDisplay,
-    string? Designer,
-    string? Developer,
-    string Source);
-
-public sealed record MacOsIconGalleryPlan(string ExactName, string ExactKey, bool RequireAppleDeveloper);
+public sealed record MacOsIconSearchPlan(string ExactName, string ExactKey, bool RequireAppleDeveloper);
 
 /// <summary>
-/// Pure catalog parsing and exact local matching. This type performs no network
-/// access, so app names never leave VeliShell while a match is selected.
+/// Builds conservative search terms for the explicit online icon picker.
+/// It performs no network access and never selects a remote result.
 /// </summary>
-public static class MacOsIconGalleryCatalog
+public static class MacOsIconSearchCatalog
 {
-    public const int MaximumEntries = 5_000;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = false,
-        MaxDepth = 8
-    };
-
     private static readonly HashSet<string> GenericNames = new(StringComparer.Ordinal)
     {
         "app", "application", "anwendung", "browser", "editor", "files", "dateien",
@@ -164,54 +145,15 @@ public static class MacOsIconGalleryCatalog
             ["inkscape"] = "Inkscape", ["audacity"] = "Audacity"
         };
 
-    public static IReadOnlyList<MacOsIconGalleryEntry> Parse(ReadOnlySpan<byte> json)
-    {
-        CatalogPayload?[]? payload;
-        try
-        {
-            payload = JsonSerializer.Deserialize<CatalogPayload?[]>(json, JsonOptions);
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("Der macOS Icon Gallery-Katalog ist kein gültiges JSON-Array.", exception);
-        }
-
-        if (payload is null || payload.Length == 0 || payload.Length > MaximumEntries)
-            throw new InvalidDataException("Der macOS Icon Gallery-Katalog hat eine unerwartete Größe.");
-
-        var entries = new List<MacOsIconGalleryEntry>(payload.Length);
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in payload)
-        {
-            if (item is null || !IsSafeId(item.Id) || !IsSafeText(item.Name, 180) ||
-                !IsIsoDate(item.Date) || !IsSafeText(item.Src, 1_024) ||
-                !IsOptionalSafeText(item.DateDisplay, 80) ||
-                !IsOptionalSafeText(item.Designer, 180) ||
-                !IsOptionalSafeText(item.Developer, 180) || !ids.Add(item.Id))
-                throw new InvalidDataException("Das Schema des macOS Icon Gallery-Katalogs hat sich geändert.");
-
-            entries.Add(new MacOsIconGalleryEntry(
-                item.Id,
-                item.Name.Trim(),
-                item.Date,
-                CleanOptional(item.DateDisplay),
-                CleanOptional(item.Designer),
-                CleanOptional(item.Developer),
-                item.Src.Trim()));
-        }
-
-        return entries;
-    }
-
-    public static MacOsIconGalleryPlan? CreatePlan(Pin pin) => CreatePlans(pin).FirstOrDefault();
+    public static MacOsIconSearchPlan? CreatePlan(Pin pin) => CreatePlans(pin).FirstOrDefault();
 
     /// <summary>
     /// Builds exact local match candidates in priority order. Windows system
     /// analogies remain a single Apple-only candidate. Third-party process
     /// aliases may fall back to the exact visible or executable name when the
-    /// Gallery does not contain the curated long-form name.
+    /// provider does not contain the curated long-form name.
     /// </summary>
-    public static IReadOnlyList<MacOsIconGalleryPlan> CreatePlans(Pin pin)
+    public static IReadOnlyList<MacOsIconSearchPlan> CreatePlans(Pin pin)
     {
         ArgumentNullException.ThrowIfNull(pin);
         var pinId = Normalize(pin.Id ?? "");
@@ -225,7 +167,7 @@ public static class MacOsIconGalleryCatalog
                          ?? TryMap(SystemAppMappings, targetName)
                          ?? TryMap(SystemAppMappings, displayName);
         if (!string.IsNullOrWhiteSpace(systemName))
-            return [new MacOsIconGalleryPlan(systemName, Normalize(systemName), RequireAppleDeveloper: true)];
+            return [new MacOsIconSearchPlan(systemName, Normalize(systemName), RequireAppleDeveloper: true)];
 
         var candidates = new[]
             {
@@ -239,27 +181,12 @@ public static class MacOsIconGalleryCatalog
             .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
             .Select(candidate => candidate!.Trim())
             .DistinctBy(Normalize, StringComparer.Ordinal)
-            .Select(candidate => new MacOsIconGalleryPlan(
+            .Select(candidate => new MacOsIconSearchPlan(
                 candidate,
                 Normalize(candidate),
                 RequireAppleDeveloper: false))
             .ToArray();
         return candidates;
-    }
-
-    public static MacOsIconGalleryEntry? FindLatestExact(
-        IEnumerable<MacOsIconGalleryEntry> entries,
-        MacOsIconGalleryPlan plan)
-    {
-        ArgumentNullException.ThrowIfNull(entries);
-        ArgumentNullException.ThrowIfNull(plan);
-        return entries
-            .Where(entry => string.Equals(Normalize(entry.Name), plan.ExactKey, StringComparison.Ordinal))
-            .Where(entry => !plan.RequireAppleDeveloper ||
-                            string.Equals(Normalize(entry.Developer ?? ""), "apple", StringComparison.Ordinal))
-            .OrderByDescending(entry => entry.Date, StringComparer.Ordinal)
-            .ThenByDescending(entry => entry.Id, StringComparer.Ordinal)
-            .FirstOrDefault();
     }
 
     public static string Normalize(string value)
@@ -339,31 +266,7 @@ public static class MacOsIconGalleryCatalog
         }
     }
 
-    private static bool IsSafeId(string? value) => value is { Length: >= 3 and <= 180 } &&
-        value.All(character => char.IsAsciiLetterOrDigit(character) || character == '-');
-
-    private static bool IsIsoDate(string? value) => value is { Length: 10 } &&
-        DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out _);
-
     private static bool IsSafeText(string? value, int maximumLength) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= maximumLength &&
         value.All(character => !char.IsControl(character));
-
-    private static bool IsOptionalSafeText(string? value, int maximumLength) =>
-        string.IsNullOrWhiteSpace(value) || IsSafeText(value, maximumLength);
-
-    private static string? CleanOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private sealed class CatalogPayload
-    {
-        public string Id { get; init; } = "";
-        public string Name { get; init; } = "";
-        public string Date { get; init; } = "";
-        public string? DateDisplay { get; init; }
-        public string? Designer { get; init; }
-        public string? Developer { get; init; }
-        public string Src { get; init; } = "";
-    }
 }

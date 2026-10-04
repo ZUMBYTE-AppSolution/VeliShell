@@ -10,6 +10,42 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 - Signierte Windows-Pakete, sobald ein dauerhaftes Zumbyte.de-Codesigning-Zertifikat bereitsteht.
 
+## [0.4.0] - 2026-10-04
+
+### Neu
+
+- Zwei frei wählbare Icon-Stile: ein einheitlicher VeliShell-/Mac-inspirierter Stil und die lokalen Windows-Originalsymbole – jeweils ohne künstlich erzeugten Akzenthintergrund.
+- Manuelle Icon-Suche über die dokumentierte macOSicons.com-API. Treffer werden mit Vorschau, Kategorie, Downloadzahl und Urheberangabe zur Auswahl gezeigt; nur das ausdrücklich gewählte Icon wird übernommen.
+- Eigene VeliShell-Papierkorb-Illustrationen für Leer- und Vollzustand, ohne proprietäre Apple-Systemgrafiken zu verteilen.
+- Erste optionale VeliShell-Menüleiste mit App-Menü, offenen Fenstern, Uhr sowie Schnellzugriffen für Netzwerk, Ton und Energie.
+- Individuelle Icon-Auswahl für angeheftete und laufende Apps, das feste VeliShell-Element sowie getrennt für den leeren und vollen Papierkorb; alle Anpassungen lassen sich einzeln zurücksetzen.
+- Beim Ausblenden der Windows-Taskleiste gibt VeliShell deren reservierten Arbeitsbereich frei, ordnet maximierte Fenster neu an und stellt den ursprünglichen Zustand beim Einblenden, Beenden oder nach einem unterbrochenen Lauf wieder her.
+- Die optionale Menüleiste reserviert ihren Platz am oberen Bildschirmrand und hält maximierte Fenster aus diesem Bereich heraus; beim Abschalten oder Beenden wird der ursprüngliche Arbeitsbereich wiederhergestellt.
+
+### Geändert
+
+- Der API-Schlüssel für macOSicons.com wird ausschließlich im Windows-Anmeldeinformationsspeicher abgelegt; App-Namen werden nur bei einer bewusst gestarteten Suche übertragen.
+- Das freistehende V-Signet wird in Einstellungen, Info und Menüleiste hochwertig skaliert, damit es auch bei Windows-Anzeigeskalierung scharf bleibt.
+- Dock-Hinweise zeigen nur noch den Programmnamen und niemals die interne Icon-Quelle.
+- Das Herausziehen eines Eintrags entfernt ihn nur aus dem Dock; VeliShell erzeugt dabei keine Desktop- oder Explorer-Verknüpfung mehr.
+- Automatisch aus der Icon-Hauptfarbe erzeugte Hintergründe wurden entfernt; im Dock wird nur noch das eigentliche, einheitlich skalierte und gerundete Icon dargestellt.
+- Der Installer verwendet wieder einen klaren Installationsablauf ohne optionale Dienst-Komponente.
+
+### Behoben
+
+- Drag-Ghost, Einfügeposition, Drop und Herausziehen verwenden exakt dieselbe sichtbare Dock-Grenze; der transparente Fensterbereich signalisiert keine Ablage mehr.
+- Der Notfall-Hotkey zum Wiederherstellen der Taskleiste gewinnt auch dann sicher, wenn gleichzeitig die Menüleiste umgeschaltet wird.
+- Beschädigte oder nicht unterstützte lokale Bilddateien werden als ungültiges Icon abgewiesen, ohne VeliShell zu beenden.
+
+### Entfernt
+
+- Der separate Windows-Update-Dienst samt Installer-Feature, ProgramData-Berechtigungen und Hintergrunddienst-Paket wurde vollständig entfernt. Benutzer-Autostart und Updateprüfung beim Start der normalen Desktop-App bleiben erhalten.
+
+### Sicherheit
+
+- Online-Icons werden ausschließlich über HTTPS geladen und vor der Übernahme auf öffentlichen Zielhost, Dateigröße, PNG-Struktur, Pixelmaße und Prüfsumme geprüft. Cache-Einträge werden begrenzt und nach spätestens 30 Tagen erneuert.
+- Apple-App-Store-Artwork sowie originale macOS-System- und Papierkorb-Icons werden aus Lizenzgründen nicht als frei weiterverteilbare Dock-Assets verwendet.
+
 ## [0.3.1] - 2026-10-04
 
 ### Behoben
@@ -46,6 +82,7 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.0

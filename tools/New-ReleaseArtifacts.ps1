@@ -37,6 +37,9 @@ if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
 if (-not (Test-Path -LiteralPath (Join-Path $PortableDirectory 'VeliShell.exe') -PathType Leaf)) {
     throw 'The portable VeliShell payload is missing.'
 }
+if (Test-Path -LiteralPath (Join-Path $PortableDirectory 'UpdateService')) {
+    throw 'The portable payload still contains the removed Windows service. Run tools\Build.ps1 -Portable before creating release artifacts.'
+}
 if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) { throw "Installer not found: $InstallerPath" }
 $requiredLegalFiles = @(
     'LICENSE',

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -12,9 +13,13 @@ internal static class Program
     private static readonly Assembly DesktopAssembly = typeof(VeliShell.Desktop.App).Assembly;
 
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        if (args.Contains("--live-workarea-reflow", StringComparer.OrdinalIgnoreCase))
+            return RunLiveWorkAreaReflowProbe(application);
+        if (args.Contains("--live-menubar-reservation", StringComparer.OrdinalIgnoreCase))
+            return RunLiveMenuBarReservationProbe(application);
         application.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
@@ -78,17 +83,24 @@ internal static class Program
 
             TestThumbnail(owner, source, anchor);
             TestGhostAndMask(owner, anchor);
+            TestDockPinDragOutPolicy();
             TestDockTileHoverMask();
             TestVeliShellAssetSurface();
+            TestDockIconCustomizationContract();
             TestTaskbarRecoveryPolicy();
+            TestMenuBarReservationPolicy();
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
             RenderIconSurfaceContactSheet(iconSurfacesPath);
             Console.WriteLine("PASS: DWM thumbnail registered, hidden and released cleanly across 12 cycles.");
             Console.WriteLine("PASS: Drag ghost snapped/followed/disposed at 32, 58 and 96 DIP.");
-            Console.WriteLine("PASS: Different source safe zones normalize to the same fixed 32, 58 and 96 DIP plates; source pixels cannot resize the dock icon and common 1.42x hover scale is preserved.");
-            Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed plate and uses the same p=4.37 contour.");
-            Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows and normal exit waits for confirmed recovery.");
+            Console.WriteLine("PASS: Dock drag-out carries no FileDrop/shortcut payload; feedback, drop and removal share the visible dock-plate boundary while internal reorder/external file-drop inputs remain available.");
+            Console.WriteLine("PASS: Different source safe zones normalize to the same fixed 32, 58 and 96 DIP icons without a generated backdrop; source pixels cannot resize the artwork and common 1.42x hover scale is preserved.");
+            Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed icon and uses the same p=4.37 contour without an accent plate.");
+            Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
+            Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
+            Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe and idempotent.");
+            Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             return 0;
         }
@@ -104,6 +116,304 @@ internal static class Program
             application.Shutdown();
         }
     }
+
+    /// <summary>
+    /// Explicit opt-in probe for a Windows behavior that cannot be proven by a
+    /// unit test: whether existing maximized windows receive a changed work
+    /// area. The original rectangle is restored in a finally block and never
+    /// written to the user profile. This is intentionally not part of normal CI.
+    /// </summary>
+    private static int RunLiveWorkAreaReflowProbe(Application application)
+    {
+        const uint spiSetWorkArea = 0x002F;
+        const uint spifSendChange = 0x0002;
+        var window = new Window
+        {
+            Title = "VeliShell work-area reflow probe",
+            Width = 640,
+            Height = 420,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
+        };
+        NativeRect original = default;
+        nint capturedMonitor = 0;
+        var capturedOriginal = false;
+        try
+        {
+            window.Show();
+            window.WindowState = WindowState.Maximized;
+            SettleUi();
+            var handle = new WindowInteropHelper(window).Handle;
+            var monitor = MonitorFromWindow(handle, 2);
+            capturedMonitor = monitor;
+            var info = new NativeMonitorInfo { Size = Marshal.SizeOf<NativeMonitorInfo>() };
+            Require(GetMonitorInfo(monitor, ref info), "Could not read the primary monitor for the live work-area probe.");
+            original = info.Work;
+            capturedOriginal = true;
+            var probe = original;
+            var shrink = Math.Min(120, Math.Max(40, (probe.Bottom - probe.Top) / 10));
+            probe.Bottom -= shrink;
+            Require(probe.Bottom - probe.Top >= 320, "The current work area is too small for a safe live probe.");
+
+            var baseline = WindowBounds(handle);
+            Require(SystemParametersInfo(spiSetWorkArea, 0, ref probe, 0),
+                $"SPI_SETWORKAREA without broadcast failed ({Marshal.GetLastWin32Error()}).");
+            SettleUi();
+            var withoutBroadcast = WindowBounds(handle);
+
+            Require(SystemParametersInfo(spiSetWorkArea, 0, ref original, spifSendChange),
+                $"First work-area restore failed ({Marshal.GetLastWin32Error()}).");
+            SettleUi();
+            var restoredOnce = WindowBounds(handle);
+
+            Require(SystemParametersInfo(spiSetWorkArea, 0, ref probe, spifSendChange),
+                $"SPI_SETWORKAREA with SPIF_SENDCHANGE failed ({Marshal.GetLastWin32Error()}).");
+            SettleUi();
+            var withBroadcast = WindowBounds(handle);
+            _ = ShowWindow(handle, 3); // SW_MAXIMIZE: recompute the existing maximized placement.
+            SettleUi();
+            var afterRemaximize = WindowBounds(handle);
+            var target = new NativeRect
+            {
+                Left = probe.Left + (baseline.Left - original.Left),
+                Top = probe.Top + (baseline.Top - original.Top),
+                Right = probe.Right + (baseline.Right - original.Right),
+                Bottom = probe.Bottom + (baseline.Bottom - original.Bottom)
+            };
+            Require(SetWindowPos(handle, 0, target.Left, target.Top,
+                    target.Right - target.Left, target.Bottom - target.Top, 0x0004 | 0x0010),
+                $"SetWindowPos reflow failed ({Marshal.GetLastWin32Error()}).");
+            SettleUi();
+            var afterPlacement = WindowBounds(handle);
+            Require(SystemParametersInfo(spiSetWorkArea, 0, ref original, spifSendChange),
+                $"Second work-area restore failed ({Marshal.GetLastWin32Error()}).");
+            Require(SetWindowPos(handle, 0, baseline.Left, baseline.Top,
+                    baseline.Right - baseline.Left, baseline.Bottom - baseline.Top, 0x0004 | 0x0010),
+                "Could not reset the probe window before SetWindowPlacement validation.");
+            var windowPlacement = new NativeWindowPlacement { Length = Marshal.SizeOf<NativeWindowPlacement>() };
+            Require(GetWindowPlacement(handle, ref windowPlacement), "GetWindowPlacement failed.");
+            Require(SystemParametersInfo(spiSetWorkArea, 0, ref probe, spifSendChange),
+                $"Third SPI_SETWORKAREA failed ({Marshal.GetLastWin32Error()}).");
+            Require(SetWindowPlacement(handle, ref windowPlacement),
+                $"SetWindowPlacement failed ({Marshal.GetLastWin32Error()}).");
+            SettleUi();
+            var afterWindowPlacement = WindowBounds(handle);
+
+            var flagsZeroReflowed = withoutBroadcast.Bottom <= baseline.Bottom - (shrink / 2);
+            var sendChangeReflowed = withBroadcast.Bottom <= restoredOnce.Bottom - (shrink / 2);
+            var remaximizeReflowed = afterRemaximize.Bottom <= restoredOnce.Bottom - (shrink / 2);
+            var placementReflowed = afterPlacement.Bottom <= restoredOnce.Bottom - (shrink / 2);
+            var windowPlacementReflowed = afterWindowPlacement.Bottom <= restoredOnce.Bottom - (shrink / 2);
+            Console.WriteLine(
+                $"LIVE: work={Format(original)} baseline={Format(baseline)} flags0={Format(withoutBroadcast)} " +
+                $"restored={Format(restoredOnce)} sendChange={Format(withBroadcast)} " +
+                $"remaximize={Format(afterRemaximize)} placement={Format(afterPlacement)} " +
+                $"windowPlacement={Format(afterWindowPlacement)}; " +
+                $"flags0Reflow={flagsZeroReflowed}; sendChangeReflow={sendChangeReflowed}; " +
+                $"remaximizeReflow={remaximizeReflowed}; placementReflow={placementReflowed}; " +
+                $"windowPlacementReflow={windowPlacementReflowed}");
+            Require(placementReflowed || windowPlacementReflowed,
+                "Neither verified window-placement fallback reflowed an existing maximized window.");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            if (capturedOriginal)
+            {
+                var restore = original;
+                if (!SystemParametersInfo(spiSetWorkArea, 0, ref restore, spifSendChange))
+                    Console.Error.WriteLine($"CRITICAL: final work-area restore failed ({Marshal.GetLastWin32Error()}).");
+                if (window.IsVisible) _ = ShowWindow(new WindowInteropHelper(window).Handle, 3);
+                SettleUi();
+                var verified = new NativeMonitorInfo { Size = Marshal.SizeOf<NativeMonitorInfo>() };
+                if (capturedMonitor == 0 || !GetMonitorInfo(capturedMonitor, ref verified) ||
+                    !SameRect(verified.Work, original))
+                    throw new InvalidOperationException("The live probe could not verify the final original work area.");
+                Console.WriteLine($"LIVE RESTORE VERIFIED: work={Format(verified.Work)}");
+            }
+            window.Close();
+            application.Shutdown();
+        }
+    }
+
+    private static int RunLiveMenuBarReservationProbe(Application application)
+    {
+        var window = new Window
+        {
+            Title = "VeliShell live menu-bar reservation probe",
+            Width = 640,
+            Height = 35,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            ShowActivated = false
+        };
+        var maximizedWindow = new Window
+        {
+            Title = "VeliShell maximized-window reservation probe",
+            Width = 800,
+            Height = 600,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ShowInTaskbar = false
+        };
+        object? service = null;
+        nint handle = 0;
+        var registered = false;
+        object? originalWork = null;
+        try
+        {
+            var nativeType = RequireType("VeliShell.Desktop.Native.NativeMethods");
+            var serviceType = RequireType("VeliShell.Desktop.Services.TaskbarVisibilityService");
+            var primary = RequireMethod(nativeType, "PrimaryMonitor");
+            var monitorInfoType = nativeType.GetNestedType("MonitorInfo", BindingFlags.NonPublic)
+                                  ?? throw new TypeLoadException("NativeMethods.MonitorInfo");
+            var rectType = nativeType.GetNestedType("Rect", BindingFlags.NonPublic)
+                           ?? throw new TypeLoadException("NativeMethods.Rect");
+            var workField = monitorInfoType.GetField("Work")!;
+            int Edge(object rect, string name) => (int)rectType.GetField(name)!.GetValue(rect)!;
+            bool Same(object left, object right) =>
+                Edge(left, "Left") == Edge(right, "Left") && Edge(left, "Top") == Edge(right, "Top") &&
+                Edge(left, "Right") == Edge(right, "Right") && Edge(left, "Bottom") == Edge(right, "Bottom");
+
+            originalWork = workField.GetValue(primary.Invoke(null, null)!)!;
+            maximizedWindow.Show();
+            maximizedWindow.WindowState = WindowState.Maximized;
+            window.Show();
+            SettleUi();
+            handle = new WindowInteropHelper(window).Handle;
+            service = Activator.CreateInstance(serviceType, nonPublic: true)
+                      ?? throw new InvalidOperationException("Could not create the work-area service.");
+            var register = RequireMethod(serviceType, "RegisterMenuBar");
+            var registerArguments = new object[] { handle, 0x8056u, 35, Activator.CreateInstance(rectType)! };
+            registered = (bool)register.Invoke(service, registerArguments)!;
+            Require(registered, "Windows rejected the live top-edge appbar registration.");
+            var reserved = registerArguments[3];
+            SettleUi();
+            var reservedWork = workField.GetValue(primary.Invoke(null, null)!)!;
+            Require(Edge(reservedWork, "Top") >= Edge(reserved, "Bottom"),
+                "A maximized-window work area can still overlap the registered menu bar.");
+            Require(Edge(reservedWork, "Left") == Edge(originalWork, "Left") &&
+                    Edge(reservedWork, "Right") == Edge(originalWork, "Right") &&
+                    Edge(reservedWork, "Bottom") == Edge(originalWork, "Bottom"),
+                "The menu-bar probe modified an unrelated work-area edge.");
+            var maximizedBounds = WindowBounds(new WindowInteropHelper(maximizedWindow).Handle);
+            const int nonClientFrameTolerance = 16;
+            Require(maximizedBounds.Top >= Edge(reservedWork, "Top") - nonClientFrameTolerance &&
+                    maximizedBounds.Bottom <= Edge(reservedWork, "Bottom") + nonClientFrameTolerance,
+                "An existing maximized window was not reflowed below the menu-bar reservation.");
+
+            RequireMethod(serviceType, "ReleaseMenuBar").Invoke(service, [handle]);
+            registered = false;
+            SettleUi();
+            var restored = workField.GetValue(primary.Invoke(null, null)!)!;
+            Require(Same(restored, originalWork),
+                "The live menu-bar probe did not restore the original work area.");
+            Console.WriteLine(
+                $"LIVE MENU BAR VERIFIED: originalTop={Edge(originalWork, "Top")}; " +
+                $"reservedBottom={Edge(reserved, "Bottom")}; workTop={Edge(reservedWork, "Top")}; " +
+                $"maximizedTop={maximizedBounds.Top}; restore=exact");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            if (registered && service is not null && handle != 0)
+            {
+                try { RequireMethod(service.GetType(), "ReleaseMenuBar").Invoke(service, [handle]); }
+                catch { }
+            }
+            if (service is IDisposable disposable) disposable.Dispose();
+            if (window.IsVisible) window.Close();
+            if (maximizedWindow.IsVisible) maximizedWindow.Close();
+            application.Shutdown();
+        }
+    }
+
+    private static void SettleUi()
+    {
+        DrainDispatcher();
+        Thread.Sleep(450);
+        DrainDispatcher();
+    }
+
+    private static NativeRect WindowBounds(nint handle)
+    {
+        Require(GetWindowRect(handle, out var bounds), "Could not read the probe window bounds.");
+        return bounds;
+    }
+
+    private static string Format(NativeRect rect) => $"{rect.Left},{rect.Top},{rect.Right},{rect.Bottom}";
+    private static bool SameRect(NativeRect left, NativeRect right) =>
+        left.Left == right.Left && left.Top == right.Top &&
+        left.Right == right.Right && left.Bottom == right.Bottom;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NativeMonitorInfo
+    {
+        public int Size;
+        public NativeRect Monitor;
+        public NativeRect Work;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Device;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeWindowPlacement
+    {
+        public int Length;
+        public int Flags;
+        public int ShowCommand;
+        public NativePoint MinPosition;
+        public NativePoint MaxPosition;
+        public NativeRect NormalPosition;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint handle, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(nint monitor, ref NativeMonitorInfo info);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint handle, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(nint handle, int command);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        nint handle, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowPlacement(nint handle, ref NativeWindowPlacement placement);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPlacement(nint handle, ref NativeWindowPlacement placement);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(uint action, uint parameter, ref NativeRect value, uint flags);
 
     private static void TestThumbnail(Window owner, Window source, FrameworkElement anchor)
     {
@@ -218,14 +528,12 @@ internal static class Program
                     surfaceType,
                     BindingFlags.Instance | BindingFlags.NonPublic,
                     binder: null,
-                    args: [sample.Source, size, null],
+                    args: [sample.Source, size],
                     culture: null)!;
                 surface.Measure(new Size(size, size));
                 surface.Arrange(new Rect(0, 0, size, size));
                 surface.UpdateLayout();
 
-                var accentBackground = (FrameworkElement)RequireProperty(surfaceType, "AccentBackground")
-                    .GetValue(surface)!;
                 var iconImage = (FrameworkElement)RequireProperty(surfaceType, "IconImage")
                     .GetValue(surface)!;
                 var plate = (FrameworkElement)RequireProperty(surfaceType, "PlateElement")
@@ -235,15 +543,17 @@ internal static class Program
 
                 RequireSameRect(normalizedBounds, sample.Bounds,
                     $"{sample.Label} normalized source bounds at {size} DIP");
-                Require(ReferenceEquals(VisualTreeHelper.GetParent(accentBackground), plate)
-                        && ReferenceEquals(VisualTreeHelper.GetParent(iconImage), plate),
-                    $"{sample.Label} at {size} DIP does not keep background and image in the common plate.");
+                Require(ReferenceEquals(VisualTreeHelper.GetParent(iconImage), plate),
+                    $"{sample.Label} at {size} DIP does not keep the artwork in the common masked surface.");
+                Require(surfaceType.GetProperty(
+                            "AccentBackground",
+                            BindingFlags.Instance | BindingFlags.NonPublic) is null &&
+                        plate is Panel { Children.Count: 1 },
+                    $"{sample.Label} at {size} DIP still contains a generated icon backdrop.");
                 RequireSameSize(surface.RenderSize, new Size(size, size),
                     $"{sample.Label} surface at {size} DIP");
                 RequireSameSize(plate.RenderSize, new Size(size, size),
                     $"{sample.Label} fixed plate at {size} DIP");
-                RequireSameSize(accentBackground.RenderSize, new Size(size, size),
-                    $"{sample.Label} accent background at {size} DIP");
 
                 Require(plate.ClipToBounds && plate.Clip is StreamGeometry && plate.Clip.IsFrozen,
                     $"{sample.Label} at {size} DIP does not use the shared frozen mask.");
@@ -254,11 +564,6 @@ internal static class Program
                     .TransformBounds(new Rect(new Point(), plate.RenderSize));
                 RequireSameRect(plateBounds, new Rect(0, 0, size, size),
                     $"{sample.Label} output plate at {size} DIP");
-
-                var backgroundBounds = accentBackground.TransformToAncestor(plate)
-                    .TransformBounds(new Rect(new Point(), accentBackground.RenderSize));
-                RequireSameRect(backgroundBounds, new Rect(0, 0, size, size),
-                    $"{sample.Label} accent bounds at {size} DIP");
 
                 var imageBounds = iconImage.TransformToAncestor(plate)
                     .TransformBounds(new Rect(new Point(), iconImage.RenderSize));
@@ -275,6 +580,7 @@ internal static class Program
             itemType.GetProperty("Key")!.SetValue(item, "qa");
             itemType.GetProperty("Name")!.SetValue(item, "QA");
             itemType.GetProperty("IconId")!.SetValue(item, "system");
+            itemType.GetProperty("Attribution")!.SetValue(item, "Provider attribution must not appear here");
             var tile = (FrameworkElement)Activator.CreateInstance(
                 tileType,
                 BindingFlags.Instance | BindingFlags.NonPublic,
@@ -284,6 +590,8 @@ internal static class Program
             tile.Measure(new Size(size + 22, size + 22));
             tile.Arrange(new Rect(0, 0, size + 22, size + 22));
             tile.UpdateLayout();
+            Require(Equals(((Control)tile).ToolTip, "QA"),
+                "Dock hover exposed icon-provider attribution instead of only the app name.");
             var tileSurface = (FrameworkElement)RequireField(tileType, "_iconSurface").GetValue(tile)!;
             Require(surfaceType.IsInstanceOfType(tileSurface),
                 $"Dock tile at {size} DIP does not use the shared AppIconSurface.");
@@ -293,6 +601,72 @@ internal static class Program
                     && Math.Abs(scale.ScaleY - 1.42) < 0.001,
                 $"Dock tile at {size} DIP did not scale the common app-icon surface as one unit.");
         }
+    }
+
+    private static void TestDockPinDragOutPolicy()
+    {
+        const string format = "VeliShell.DockPin.v1";
+        var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
+        var data = (IDataObject?)RequireMethod(dockType, "CreateDockPinDragData")
+            .Invoke(null, ["qa-pin"])
+            ?? throw new InvalidOperationException("Dock pin drag data was not created.");
+
+        Require(data.GetDataPresent(format, autoConvert: false),
+            "Dock pin drag data no longer contains the private reorder format.");
+        Require(string.Equals(data.GetData(format, autoConvert: false) as string, "qa-pin", StringComparison.Ordinal),
+            "Dock pin drag data no longer carries the exact pin identifier.");
+        Require(!data.GetDataPresent(DataFormats.FileDrop, autoConvert: false)
+                && !data.GetFormats(autoConvert: false).Contains(DataFormats.FileDrop, StringComparer.Ordinal)
+                && !data.GetFormats(autoConvert: true).Contains(DataFormats.FileDrop, StringComparer.Ordinal),
+            "Dock pin drag data exposes FileDrop and could create a file or shortcut in Explorer.");
+
+        var policy = RequireMethod(dockType, "ShouldRemovePinAfterDrag");
+        bool ShouldRemove(bool escapePressed, bool leftButtonReleased, bool cursorInsideDock) =>
+            (bool)policy.Invoke(null, [escapePressed, leftButtonReleased, cursorInsideDock])!;
+
+        Require(ShouldRemove(false, true, false),
+            "An uncancelled release outside the dock no longer removes the pin.");
+        Require(!ShouldRemove(false, true, true),
+            "An internal reorder would incorrectly remove the pin.");
+        Require(!ShouldRemove(true, true, false),
+            "Escape would incorrectly remove the pin.");
+        Require(!ShouldRemove(false, false, false),
+            "Moving outside without releasing would incorrectly remove the pin.");
+
+        var boundsPolicy = RequireMethod(dockType, "IsPointInsideDockBounds");
+        bool Inside(Point point) => (bool)boundsPolicy.Invoke(
+            null,
+            [point, new Point(100, 100), new Point(300, 180)])!;
+        Require(Inside(new Point(100, 100)) && Inside(new Point(300, 180)) &&
+                Inside(new Point(210, 145)),
+            "The visible dock-plate boundary no longer includes its edges and interior.");
+        Require(!Inside(new Point(210, 99)) && !Inside(new Point(99, 145)) &&
+                !Inside(new Point(301, 181)),
+            "The transparent dock-window area is still treated as part of the visible dock plate.");
+
+        var feedbackPolicy = RequireMethod(dockType, "DockDropEffect");
+        DragDropEffects Effect(bool inside, bool hasPin, bool hasFiles) =>
+            (DragDropEffects)feedbackPolicy.Invoke(null, [inside, hasPin, hasFiles])!;
+        Require(Effect(true, true, false) == DragDropEffects.Move &&
+                Effect(true, false, true) == DragDropEffects.Copy,
+            "Valid internal reorders or external file drops lost their dock feedback.");
+        Require(Effect(false, true, false) == DragDropEffects.None &&
+                Effect(false, false, true) == DragDropEffects.None &&
+                Effect(true, false, false) == DragDropEffects.None,
+            "A private pin or external file drop still advertises a drop outside the visible dock plate.");
+        var insidePlate = Inside(new Point(210, 145));
+        var transparentWindowArea = Inside(new Point(210, 99));
+        Require(!ShouldRemove(false, true, insidePlate) &&
+                ShouldRemove(false, true, transparentWindowArea),
+            "Drag removal and drop feedback no longer share the visible dock-plate boundary.");
+
+        var shellLinkType = RequireType("VeliShell.Desktop.Services.ShellLinkService");
+        Require(shellLinkType.GetMethod(
+                    "CreateDragArtifact",
+                    BindingFlags.Static | BindingFlags.NonPublic) is null,
+            "The retired drag-out shortcut creation path is still present.");
+        Require(RequireMethod(dockType, "TryReadDroppedPaths").IsStatic,
+            "External file drops into the dock are no longer available.");
     }
 
     private static void TestVeliShellAssetSurface()
@@ -318,14 +692,12 @@ internal static class Program
                 surfaceType,
                 BindingFlags.Instance | BindingFlags.NonPublic,
                 binder: null,
-                args: [source, size, null],
+                args: [source, size],
                 culture: null)!;
             surface.Measure(new Size(size, size));
             surface.Arrange(new Rect(0, 0, size, size));
             surface.UpdateLayout();
 
-            var accentBackground = (FrameworkElement)RequireProperty(surfaceType, "AccentBackground")
-                .GetValue(surface)!;
             var iconImage = (FrameworkElement)RequireProperty(surfaceType, "IconImage")
                 .GetValue(surface)!;
             var plate = (FrameworkElement)RequireProperty(surfaceType, "PlateElement")
@@ -344,8 +716,11 @@ internal static class Program
                 $"VeliShell app surface at {size} DIP");
             RequireSameSize(plate.RenderSize, new Size(size, size),
                 $"VeliShell app fixed plate at {size} DIP");
-            RequireSameSize(accentBackground.RenderSize, new Size(size, size),
-                $"VeliShell app accent background at {size} DIP");
+            Require(surfaceType.GetProperty(
+                        "AccentBackground",
+                        BindingFlags.Instance | BindingFlags.NonPublic) is null &&
+                    plate is Panel { Children.Count: 1 },
+                $"VeliShell app at {size} DIP still contains a generated icon backdrop.");
             Require(plate.ClipToBounds && plate.Clip is StreamGeometry && plate.Clip.IsFrozen,
                 $"VeliShell app plate at {size} DIP does not use the shared frozen p=4.37 mask.");
             RequireSameRect(
@@ -368,6 +743,90 @@ internal static class Program
             "Bundled VeliShell app icon alpha contour");
     }
 
+    private static void TestDockIconCustomizationContract()
+    {
+        var customIcons = RequireType("VeliShell.Desktop.Services.CustomIconService");
+        var import = customIcons.GetMethod("Import", BindingFlags.Static | BindingFlags.NonPublic);
+        Require(import is not null &&
+                customIcons.GetMethod("TryLoad", BindingFlags.Static | BindingFlags.NonPublic) is not null,
+            "The app-owned local icon import/load contract is missing.");
+
+        var malformedPath = Path.Combine(Path.GetTempPath(), $"velishell-invalid-icon-{Guid.NewGuid():N}.png");
+        try
+        {
+            File.WriteAllBytes(malformedPath, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00]);
+            try
+            {
+                import!.Invoke(null, [malformedPath]);
+                throw new InvalidOperationException("Malformed PNG unexpectedly imported as a dock icon.");
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is InvalidDataException)
+            {
+                // Expected: WIC FileFormatException/FormatException is contained
+                // and translated into the settings window's normal invalid-icon path.
+            }
+        }
+        finally
+        {
+            try { File.Delete(malformedPath); }
+            catch (IOException) { }
+        }
+
+        var preferences = RequireType("VeliShell.Desktop.Views.PreferencesWindow");
+        foreach (var field in new[] { "SystemIconList", "RunningIconList", "PinList" })
+            Require(RequireField(preferences, field) is not null,
+                $"Settings no longer exposes the {field} icon-management surface.");
+        foreach (var method in new[]
+                 {
+                     "ChooseLocalIconForPin", "ChooseLocalIconForDockElement", "ResetPinIcon",
+                     "ResetDockIcon", "ChooseOnlineIconForRunningAppAsync",
+                     "ChooseOnlineIconForDockElementAsync"
+                 })
+            Require(preferences.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                $"Settings icon action {method} is missing.");
+
+        var dock = RequireType("VeliShell.Desktop.Views.DockWindow");
+        Require(dock.GetMethod("GetConfigurableRunningApps", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "Running dock elements are not available to icon settings.");
+
+        var gallery = RequireType("VeliShell.Desktop.Services.MacOsIconGalleryService");
+        var memoryType = gallery.GetNestedType("MemoryImage", BindingFlags.NonPublic)
+                         ?? throw new TypeLoadException("MemoryImage");
+        var attributionType = RequireType("VeliShell.Desktop.Services.MacOsIconAttribution");
+        var attribution = Activator.CreateInstance(
+            attributionType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: ["macOSicons.com · QA", "https://macosicons.com/"],
+            culture: null)!;
+        var onlineBitmap = (BitmapSource)CreateAlphaPlateImage(0, 0, 255, 255);
+        var memory = Activator.CreateInstance(
+            memoryType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [onlineBitmap, DateTimeOffset.UtcNow.AddMinutes(5), attribution],
+            culture: null)!;
+        var cache = (gallery.GetField("MemoryCache", BindingFlags.Static | BindingFlags.NonPublic)
+                     ?? throw new MissingFieldException(gallery.FullName, "MemoryCache")).GetValue(null)!;
+        var cacheItem = cache.GetType().GetProperty("Item")
+                        ?? throw new MissingMemberException(cache.GetType().FullName, "Item");
+        var hash = new string('a', 64);
+        cacheItem.SetValue(cache, memory, [hash + ":" + hash]);
+        try
+        {
+            var reference = new VeliShell.Core.IconReference("macosicons", hash, "api-v1", hash);
+            var rendered = (ImageSource)RequireMethod(
+                    RequireType("VeliShell.Desktop.Services.IconService"), "For")
+                .Invoke(null, ["velishell", "", reference])!;
+            Require(ReferenceEquals(rendered, onlineBitmap),
+                "A valid online override for the fixed VeliShell dock element was ignored.");
+        }
+        finally
+        {
+            cache.GetType().GetMethod("Clear", Type.EmptyTypes)!.Invoke(cache, null);
+        }
+    }
+
     private static void TestTaskbarRecoveryPolicy()
     {
         var serviceType = RequireType("VeliShell.Desktop.Services.TaskbarVisibilityService");
@@ -381,7 +840,7 @@ internal static class Program
             trackedType,
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
             binder: null,
-            args: [(nint)handle, "Shell_TrayWnd", false],
+            args: [(nint)handle, "Shell_TrayWnd", @"\\.\DISPLAY1", false],
             culture: null)!;
         bool HasCandidates(object service) => (bool)hasCandidates.Invoke(service, null)!;
 
@@ -422,6 +881,218 @@ internal static class Program
             "A confirmed hide or an unconfirmed rollback did not retain the crash-recovery marker.");
         Require(!Persist(true, false, false) && !Persist(false, true, false) && Persist(false, false, true),
             "The persisted taskbar preference no longer mirrors unresolved hidden state.");
+
+        var nativeType = RequireType("VeliShell.Desktop.Native.NativeMethods");
+        var rectType = nativeType.GetNestedType("Rect", BindingFlags.NonPublic)
+                       ?? throw new TypeLoadException("NativeMethods.Rect");
+        object Rect(int left, int top, int right, int bottom)
+        {
+            var value = Activator.CreateInstance(rectType)!;
+            rectType.GetField("Left")!.SetValue(value, left);
+            rectType.GetField("Top")!.SetValue(value, top);
+            rectType.GetField("Right")!.SetValue(value, right);
+            rectType.GetField("Bottom")!.SetValue(value, bottom);
+            return value;
+        }
+        int Edge(object rect, string field) => (int)rectType.GetField(field)!.GetValue(rect)!;
+
+        var releaseEdge = RequireMethod(serviceType, "TryReleaseOnlyTaskbarEdge");
+        var releaseArguments = new object[]
+        {
+            Rect(0, 0, 1920, 1080),
+            Rect(0, 0, 1920, 1000), // a separate 40px appbar remains reserved
+            Rect(0, 1040, 1920, 1080),
+            Rect(0, 0, 0, 0)
+        };
+        Require((bool)releaseEdge.Invoke(null, releaseArguments)!,
+            "A valid bottom shell taskbar edge was rejected.");
+        Require(Edge(releaseArguments[3], "Bottom") == 1040,
+            "Releasing the 40px shell taskbar also removed a different appbar reservation.");
+
+        var ambiguousArguments = new object[]
+        {
+            Rect(0, 0, 1920, 1080), Rect(0, 0, 1920, 1040),
+            Rect(700, 990, 1220, 1030), Rect(0, 0, 0, 0)
+        };
+        Require(!(bool)releaseEdge.Invoke(null, ambiguousArguments)!,
+            "An ambiguous floating taskbar geometry was allowed to change the work area.");
+
+        var shouldRestore = RequireMethod(serviceType, "ShouldRestoreWorkArea");
+        var monitor = Rect(0, 0, 1920, 1080);
+        var original = Rect(0, 0, 1920, 1040);
+        var applied = Rect(0, 0, 1920, 1080);
+        bool RestoreDecision(object currentMonitor, object currentWork) =>
+            (bool)shouldRestore.Invoke(null, [monitor, original, applied, currentMonitor, currentWork])!;
+        Require(RestoreDecision(monitor, applied),
+            "An unchanged monitor with VeliShell's applied work area was not recoverable.");
+        Require(!RestoreDecision(Rect(0, 0, 2560, 1440), applied),
+            "A changed monitor topology could receive an obsolete work area.");
+        Require(!RestoreDecision(monitor, Rect(0, 20, 1920, 1080)),
+            "A newer third-party appbar work area could be overwritten during restore.");
+        Require(!RestoreDecision(monitor, original),
+            "An already restored work area was scheduled for another mutation.");
+
+        Require(serviceType.GetMethod("RecoverWorkAreasAfterOwnershipConfirmed",
+                    BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "Work-area crash recovery is not gated behind confirmed single-instance ownership.");
+
+        var recoveryFileType = serviceType.GetNestedType("WorkAreaRecoveryFile", BindingFlags.NonPublic)
+                               ?? throw new TypeLoadException("TaskbarVisibilityService.WorkAreaRecoveryFile");
+        var recoveryEntryType = serviceType.GetNestedType("TaskbarRecoveryEntry", BindingFlags.NonPublic)
+                                ?? throw new TypeLoadException("TaskbarVisibilityService.TaskbarRecoveryEntry");
+        Require(recoveryFileType.GetProperty("Taskbars") is not null &&
+                recoveryEntryType.GetProperty("ClassName") is not null &&
+                recoveryEntryType.GetProperty("DeviceName") is not null &&
+                recoveryEntryType.GetProperty("WasVisible") is not null,
+            "The durable crash journal does not retain pre-hide taskbar visibility and monitor identity.");
+        var tryAllMonitors = nativeType.GetMethod("TryAllMonitors", BindingFlags.Static | BindingFlags.NonPublic);
+        Require(tryAllMonitors is not null,
+            "Monitor capture can no longer report an incomplete enumeration as a hard failure.");
+        var monitorArguments = new object?[] { null };
+        Require((bool)tryAllMonitors!.Invoke(null, monitorArguments)! &&
+                monitorArguments[0] is System.Collections.ICollection { Count: > 0 },
+            "The complete native monitor snapshot could not be read on this Windows session.");
+        Require(nativeType.GetMethod("SendMessageTimeout", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                serviceType.GetMethod("FlushWorkAreaEffects", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "Work-area changes do not expose the bounded notification/reflow transaction.");
+        var retireSecondary = RequireMethod(serviceType, "ShouldRetireMissingSecondary");
+        bool Retire(string className, int matches, bool primaryStable, int misses) =>
+            (bool)retireSecondary.Invoke(null, [className, matches, primaryStable, misses])!;
+        Require(!Retire("Shell_SecondaryTrayWnd", 0, true, 4) &&
+                Retire("Shell_SecondaryTrayWnd", 0, true, 5) &&
+                !Retire("Shell_SecondaryTrayWnd", 0, false, 5) &&
+                !Retire("Shell_TrayWnd", 0, true, 5) &&
+                !Retire("Shell_SecondaryTrayWnd", 1, true, 5),
+            "Missing secondary-taskbar recovery is not bounded to a stable Explorer retry window.");
+
+        var service = Activator.CreateInstance(serviceType, nonPublic: true)
+                      ?? throw new InvalidOperationException("Could not create taskbar recovery service.");
+        var notificationField = RequireField(serviceType, "_workAreaNotificationPending");
+        notificationField.SetValue(service, true);
+        Invoke(serviceType, service, "RollBackWorkAreasWithoutPublishingCore");
+        Require(notificationField.GetValue(service) is false,
+            "A partial work-area SET rollback retained an uncommitted reflow/broadcast operation.");
+        ((IDisposable)service).Dispose();
+    }
+
+    private static void TestMenuBarReservationPolicy()
+    {
+        var serviceType = RequireType("VeliShell.Desktop.Services.TaskbarVisibilityService");
+        var nativeType = RequireType("VeliShell.Desktop.Native.NativeMethods");
+        var rectType = nativeType.GetNestedType("Rect", BindingFlags.NonPublic)
+                       ?? throw new TypeLoadException("NativeMethods.Rect");
+        object Rect(int left, int top, int right, int bottom)
+        {
+            var value = Activator.CreateInstance(rectType)!;
+            rectType.GetField("Left")!.SetValue(value, left);
+            rectType.GetField("Top")!.SetValue(value, top);
+            rectType.GetField("Right")!.SetValue(value, right);
+            rectType.GetField("Bottom")!.SetValue(value, bottom);
+            return value;
+        }
+        int Edge(object rect, string field) => (int)rectType.GetField(field)!.GetValue(rect)!;
+
+        var calculate = RequireMethod(serviceType, "TryCalculateTopAppBarBounds");
+        var arguments = new object[]
+        {
+            Rect(-1920, 0, 0, 1080),
+            Rect(-1880, 40, 0, 1080), // third-party left and top reservations
+            35,
+            Rect(0, 0, 0, 0)
+        };
+        Require((bool)calculate.Invoke(null, arguments)!,
+            "A valid menu-bar reservation on a negative-coordinate monitor was rejected.");
+        Require(Edge(arguments[3], "Left") == -1880 && Edge(arguments[3], "Top") == 40 &&
+                Edge(arguments[3], "Right") == 0 && Edge(arguments[3], "Bottom") == 75,
+            "The menu bar overwrote a foreign appbar reservation or ignored virtual-screen coordinates.");
+
+        var invalid = new object[]
+        {
+            Rect(0, 0, 1920, 1080), Rect(0, 0, 1920, 1080), 500, Rect(0, 0, 0, 0)
+        };
+        Require(!(bool)calculate.Invoke(null, invalid)!,
+            "An implausibly large menu bar was allowed to reserve the work area.");
+
+        Require(serviceType.GetMethod("RegisterMenuBar", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                serviceType.GetMethod("UpdateMenuBar", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                serviceType.GetMethod("ReleaseMenuBar", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The menu bar does not expose a complete reversible appbar lifecycle.");
+        Require(nativeType.GetMethod("SHAppBarMessage", BindingFlags.Static | BindingFlags.NonPublic) is not null,
+            "The menu bar no longer uses the Windows appbar work-area contract.");
+
+        var menuType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
+        Require(menuType.GetProperty("WorkAreaReserved", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The menu window cannot report whether Windows accepted its reservation.");
+        Require(typeof(VeliShell.Desktop.App).GetMethod(
+                    "SetMenuBarEnabledAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "Menu-bar changes are no longer coordinated with hidden-taskbar recovery.");
+
+        var appType = typeof(VeliShell.Desktop.App);
+        var shouldRehide = RequireMethod(appType, "ShouldRehideTaskbarAfterMenuBarChange");
+        bool Rehide(bool hideWasRequested, bool emergencyPending) =>
+            (bool)shouldRehide.Invoke(null, [hideWasRequested, emergencyPending])!;
+        Require(Rehide(true, false),
+            "A normal menu-bar change no longer reapplies the requested hidden-taskbar state.");
+        Require(!Rehide(true, true) && !Rehide(false, false) && !Rehide(false, true),
+            "A pending emergency restore can be overridden by menu-bar re-hide policy.");
+        var shouldUndoRehide = RequireMethod(appType, "ShouldUndoMenuBarRehide");
+        bool UndoRehide(bool rehideAttempted, bool emergencyPending) =>
+            (bool)shouldUndoRehide.Invoke(null, [rehideAttempted, emergencyPending])!;
+        Require(UndoRehide(true, true) && !UndoRehide(true, false) &&
+                !UndoRehide(false, true) && !UndoRehide(false, false),
+            "An emergency arriving during the asynchronous menu re-hide no longer forces rollback.");
+
+        // Deterministically model the critical ordering: the menu transition
+        // owns the layout gate, then the emergency hotkey marks itself pending
+        // before waiting for that gate. The menu transition must observe the
+        // pending request and must not perform even a transient re-hide.
+        using var layoutGate = new SemaphoreSlim(1, 1);
+        using var menuOwnsGate = new ManualResetEventSlim();
+        using var emergencyIsPending = new ManualResetEventSlim();
+        var pendingEmergencyCount = 0;
+        var rehideAttempts = 0;
+        var emergencyRestores = 0;
+        var menuTransition = Task.Run(() =>
+        {
+            layoutGate.Wait();
+            try
+            {
+                menuOwnsGate.Set();
+                emergencyIsPending.Wait();
+                if (Rehide(true, Volatile.Read(ref pendingEmergencyCount) > 0))
+                    Interlocked.Increment(ref rehideAttempts);
+            }
+            finally
+            {
+                layoutGate.Release();
+            }
+        });
+        var emergencyRestore = Task.Run(() =>
+        {
+            menuOwnsGate.Wait();
+            Interlocked.Increment(ref pendingEmergencyCount);
+            emergencyIsPending.Set();
+            layoutGate.Wait();
+            try
+            {
+                Interlocked.Increment(ref emergencyRestores);
+            }
+            finally
+            {
+                layoutGate.Release();
+                Interlocked.Decrement(ref pendingEmergencyCount);
+            }
+        });
+        Require(Task.WaitAll([menuTransition, emergencyRestore], TimeSpan.FromSeconds(5)),
+            "The menu/emergency layout interleaving deadlocked.");
+        Require(rehideAttempts == 0 && emergencyRestores == 1 && pendingEmergencyCount == 0,
+            "A queued emergency restore did not suppress the in-flight menu re-hide exactly once.");
+
+        RequireField(appType, "_shellLayoutGate");
+        RequireField(appType, "_emergencyRestoreRequests");
+        Require(appType.GetMethod(
+                    "RestoreTaskbarFromEmergencyHotkey", BindingFlags.Instance | BindingFlags.Public) is not null,
+            "The emergency restore entry point is no longer available for serialized recovery.");
     }
 
     private static Geometry? FindClip(DependencyObject? root)
@@ -497,7 +1168,7 @@ internal static class Program
                 surfaceType,
                 BindingFlags.Instance | BindingFlags.NonPublic,
                 binder: null,
-                args: [source, iconSide, null],
+                args: [source, iconSide],
                 culture: null)!;
             surface.Margin = new Thickness(6, 0, 6, 0);
             row.Children.Add(surface);

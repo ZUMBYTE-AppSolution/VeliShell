@@ -13,8 +13,6 @@ internal sealed class DockTile : Button
 {
     private readonly ScaleTransform _scale = new(1, 1);
     private readonly AppIconSurface _iconSurface;
-    private readonly Border _iconBackground;
-    private readonly Image _image;
     private readonly Ellipse _indicator;
     internal DockItem Item { get; set; }
     internal double IconSize { get; }
@@ -40,8 +38,6 @@ internal sealed class DockTile : Button
         {
             RenderTransformOrigin = new Point(0.5, 1), RenderTransform = _scale
         };
-        _iconBackground = _iconSurface.AccentBackground;
-        _image = _iconSurface.IconImage;
         grid.Children.Add(_iconSurface);
         _indicator = new Ellipse
         {
@@ -77,9 +73,10 @@ internal sealed class DockTile : Button
             active ? LocalizationService.Current.Get("Dock.Active") : item.IsUtility ? "" : LocalizationService.Current.Get("Dock.NoActiveWindow"));
     }
 
-    private static string TooltipFor(DockItem item) => string.IsNullOrWhiteSpace(item.Attribution)
-        ? item.Name
-        : item.Name + "\n" + item.Attribution;
+    // Dock hover mirrors macOS: the floating label identifies the app only.
+    // Provider/legal attribution remains available in Settings and the explicit
+    // context menu, but is never mixed into the hover label.
+    private static string TooltipFor(DockItem item) => item.Name;
 
     internal void SetScale(double value, bool animate)
     {

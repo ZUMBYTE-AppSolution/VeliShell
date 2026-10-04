@@ -11,6 +11,12 @@ apple-icon-template-research/
 
 # Local agent context and internal development evidence are never public repository content.
 **/AGENTS.md
+**/AGENT*.md
+**/ROADMAP*.md
+**/PLAN*.md
+**/DEVELOPER*.md
+**/DEV-NOTES*.md
+**/INTERNAL-NOTES*.md
 BUILD-INFO.txt
 docs/ROADMAP.md
 docs/VERIFICATION.md

@@ -4,16 +4,10 @@ using Microsoft.Win32;
 
 namespace VeliShell.Desktop.Services;
 
-public sealed record StartupRegistrationStatus(bool UserLoginEnabled, bool BackgroundServiceInstalled);
-
 public static class StartupRegistrationService
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "VeliShell";
-    public const string BackgroundServiceName = "VeliShell.UpdateService";
-
-    public static StartupRegistrationStatus GetStatus() =>
-        new(IsUserLoginEnabled(), IsBackgroundServiceInstalled());
 
     public static bool IsUserLoginEnabled()
     {
@@ -37,14 +31,6 @@ public static class StartupRegistrationService
 
         var executable = GetExecutablePath();
         key.SetValue(RunValueName, $"\"{executable}\" --autostart", RegistryValueKind.String);
-    }
-
-    public static bool IsBackgroundServiceInstalled()
-    {
-        if (!OperatingSystem.IsWindows()) return false;
-        using var key = Registry.LocalMachine.OpenSubKey(
-            $@"SYSTEM\CurrentControlSet\Services\{BackgroundServiceName}", writable: false);
-        return key is not null;
     }
 
     private static string GetExecutablePath()

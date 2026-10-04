@@ -1,0 +1,64 @@
+<Window x:Class="VeliShell.Desktop.Views.MenuBarWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ Title="{services:Loc MenuBar.Title}" WindowStyle="None" AllowsTransparency="True"
+ Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False"
+ Topmost="True" Height="35" Width="900" UseLayoutRounding="True"
+ MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave">
+ <Grid Background="Transparent">
+  <Border x:Name="MenuBody" Height="30" VerticalAlignment="Top"
+          Background="{DynamicResource DockSurfaceGradient}"
+          BorderBrush="{DynamicResource DockStroke}" BorderThickness="0,0,0,1">
+   <Border.RenderTransform><TranslateTransform x:Name="Slide" /></Border.RenderTransform>
+   <Grid Margin="8,0">
+    <Grid.ColumnDefinitions>
+     <ColumnDefinition Width="Auto" />
+     <ColumnDefinition Width="Auto" />
+     <ColumnDefinition Width="Auto" />
+     <ColumnDefinition Width="*" />
+     <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+    <StackPanel Orientation="Horizontal">
+     <Button x:Name="AppMenuButton" Style="{StaticResource MenuBarButton}" Click="AppMenu_Click"
+             ToolTip="{services:Loc MenuBar.AppMenu}" AutomationProperties.Name="{services:Loc MenuBar.AppMenu}">
+      <StackPanel Orientation="Horizontal">
+       <Image Width="18" Height="18" Margin="0,0,7,0"
+              Source="/VeliShell;component/Assets/VeliShellMark.png"
+              RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
+       <TextBlock Text="{services:Loc Product.Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      </StackPanel>
+     </Button>
+    </StackPanel>
+    <Button x:Name="ActiveAppButton" Grid.Column="1" Style="{StaticResource MenuBarButton}"
+            Click="ActiveApp_Click" MaxWidth="280" AutomationProperties.Name="{services:Loc MenuBar.ActiveApp}">
+     <TextBlock x:Name="ActiveAppLabel" Text="{services:Loc Product.Name}" FontWeight="SemiBold"
+                TextTrimming="CharacterEllipsis" />
+    </Button>
+    <Button Grid.Column="2" Style="{StaticResource MenuBarButton}" Click="WindowsMenu_Click"
+            Content="{services:Loc MenuBar.Windows}" AutomationProperties.Name="{services:Loc MenuBar.Windows}" />
+    <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+     <Button x:Name="NetworkButton" Style="{StaticResource MenuBarButton}" Click="Network_Click"
+             ToolTip="{services:Loc MenuBar.Network}" AutomationProperties.Name="{services:Loc MenuBar.Network}">
+      <TextBlock x:Name="NetworkGlyph" Text="●" FontSize="10" />
+     </Button>
+     <Button Style="{StaticResource MenuBarButton}" Click="Sound_Click"
+             ToolTip="{services:Loc MenuBar.Sound}" AutomationProperties.Name="{services:Loc MenuBar.Sound}">
+      <TextBlock Text="◖))" FontSize="11" />
+     </Button>
+     <Button x:Name="PowerButton" Style="{StaticResource MenuBarButton}" Click="Power_Click"
+             ToolTip="{services:Loc MenuBar.Power}" AutomationProperties.Name="{services:Loc MenuBar.Power}">
+      <TextBlock x:Name="PowerLabel" Text="" FontSize="11" />
+     </Button>
+     <Button Style="{StaticResource MenuBarButton}" Click="Clock_Click"
+             ToolTip="{services:Loc MenuBar.Clock}" AutomationProperties.Name="{services:Loc MenuBar.Clock}">
+      <TextBlock x:Name="ClockLabel" FontWeight="SemiBold" />
+     </Button>
+    </StackPanel>
+   </Grid>
+  </Border>
+  <Border x:Name="RevealHandle" Width="76" Height="5" VerticalAlignment="Top" HorizontalAlignment="Center"
+          CornerRadius="0,0,2.5,2.5" Background="{DynamicResource DockIndicator}"
+          Opacity="0.5" Visibility="Collapsed" IsHitTestVisible="False" />
+ </Grid>
+</Window>

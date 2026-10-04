@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using VeliShell.Core;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Services;
@@ -47,6 +49,8 @@ public partial class PreferencesWindow : VeliShellWindow
             item.IsSelected = string.Equals(item.Tag as string, s.Language.ToString(), StringComparison.Ordinal);
         foreach (var item in UpdateModeChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.Updates.ToString(), StringComparison.Ordinal);
+        foreach (var item in IconStyleChoice.Items.OfType<ComboBoxItem>())
+            item.IsSelected = string.Equals(item.Tag as string, s.IconStyle.ToString(), StringComparison.Ordinal);
         SizeSlider.Value = s.IconSize;
         SizeLabel.Text = $"{s.IconSize:0} DIP";
         ReducedMotionSwitch.IsChecked = s.ReducedMotion;
@@ -56,36 +60,41 @@ public partial class PreferencesWindow : VeliShellWindow
         AutoHideSwitch.IsChecked = s.AutoHide;
         TopmostSwitch.IsChecked = s.AlwaysOnTop;
         HideTaskbarSwitch.IsChecked = s.HideTaskbar;
+        MenuBarSwitch.IsChecked = s.MenuBarEnabled;
+        MenuBarAutoHideSwitch.IsChecked = s.MenuBarAutoHide;
+        MenuBarAutoHideSwitch.IsEnabled = s.MenuBarEnabled;
+        MenuBarTopmostSwitch.IsChecked = s.MenuBarAlwaysOnTop;
+        MenuBarTopmostSwitch.IsEnabled = s.MenuBarEnabled;
         try
         {
-            var startup = StartupRegistrationService.GetStatus();
-            UserStartupSwitch.IsChecked = startup.UserLoginEnabled;
-            StartupStatus.Text = L(startup.UserLoginEnabled ? "Startup.StatusEnabled" : "Startup.StatusDisabled");
-            ServiceStatus.Text = L(startup.BackgroundServiceInstalled ? "Startup.ServiceInstalled" : "Startup.ServiceUnavailable");
+            var userLoginEnabled = StartupRegistrationService.IsUserLoginEnabled();
+            UserStartupSwitch.IsChecked = userLoginEnabled;
+            StartupStatus.Text = L(userLoginEnabled ? "Startup.StatusEnabled" : "Startup.StatusDisabled");
         }
         catch (Exception ex)
         {
             App.Log("Could not query startup registration", ex);
             UserStartupSwitch.IsChecked = false;
             StartupStatus.Text = L("Common.ServiceError") + " " + ex.Message;
-            ServiceStatus.Text = L("Startup.ServiceUnavailable");
         }
         TaskbarStatus.Text = _app.Taskbars.LastStatus;
         var hasConsent = s.OnlineIconConsentVersion >= Settings.CurrentOnlineIconConsentVersion;
-        var hasLegacyIconKey = ApiKeyStore.HasMacOsIconsKey;
-        OnlineIconSwitch.IsChecked = s.OnlineIcons == OnlineIconMode.AutomaticExactMatches;
-        OnlineIconSwitch.IsEnabled = !_iconSearchBusy;
-        FindOnlineIconsButton.IsEnabled = !_iconSearchBusy;
-        OnlineIconStatus.Text = hasConsent
+        var hasIconKey = ApiKeyStore.HasMacOsIconsKey;
+        var macIconsActive = s.IconStyle == DockIconStyle.Mac;
+        FindOnlineIconsButton.IsEnabled = macIconsActive && hasIconKey && !_iconSearchBusy;
+        OnlineIconStatus.Text = !macIconsActive
+            ? L("Apps.OnlineRequiresMacStyle")
+            : !hasIconKey
+            ? L("Apps.ApiKeyMissing")
+            : hasConsent
             ? L("Apps.OnlineEnabled")
             : L("Apps.OnlineDisabled");
-        LegacyIconKeyStatus.Text = hasLegacyIconKey
-            ? L("Apps.LegacyKeyPresent")
-            : L("Apps.LegacyKeyAbsent");
-        RemoveLegacyIconKeyButton.IsEnabled = hasLegacyIconKey;
+        RemoveIconKeyButton.IsEnabled = hasIconKey;
         UpdateUpdateStatus();
         UpdateThemeStatus();
         RenderPins();
+        RenderSystemIcons();
+        RenderRunningIcons();
         _loading = false;
     }
 
@@ -113,6 +122,7 @@ public partial class PreferencesWindow : VeliShellWindow
             _ => L("Nav.Appearance")
         };
         PageScroll.ScrollToTop();
+        if (page == 2) RenderRunningIcons();
         if (page == 4) UpdateDiagnostics();
     }
     private void Navigation_Checked(object sender, RoutedEventArgs e)
@@ -141,6 +151,12 @@ public partial class PreferencesWindow : VeliShellWindow
             !Enum.TryParse<UpdateMode>(value, out var mode)) return;
         _app.UpdatePreferences(s => s.Updates = mode);
     }
+    private void IconStyleChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || IconStyleChoice.SelectedItem is not ComboBoxItem { Tag: string value } ||
+            !Enum.TryParse<DockIconStyle>(value, out var iconStyle)) return;
+        _app.UpdatePreferences(s => s.IconStyle = iconStyle);
+    }
     private void UpdateUpdateStatus()
     {
         if (UpdateStatus is null || CheckUpdatesButton is null) return;
@@ -162,6 +178,21 @@ public partial class PreferencesWindow : VeliShellWindow
     private void Running_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.ShowRunningApps = RunningSwitch.IsChecked == true);
     private void AutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AutoHide = AutoHideSwitch.IsChecked == true);
     private void Topmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AlwaysOnTop = TopmostSwitch.IsChecked == true);
+    private async void MenuBar_Click(object sender, RoutedEventArgs e)
+    {
+        MenuBarSwitch.IsEnabled = false;
+        try
+        {
+            await _app.SetMenuBarEnabledAsync(MenuBarSwitch.IsChecked == true);
+            MenuBarSwitch.IsChecked = _app.Preferences.MenuBarEnabled;
+        }
+        finally
+        {
+            MenuBarSwitch.IsEnabled = true;
+        }
+    }
+    private void MenuBarAutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAutoHide = MenuBarAutoHideSwitch.IsChecked == true);
+    private void MenuBarTopmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAlwaysOnTop = MenuBarTopmostSwitch.IsChecked == true);
     private void UserStartup_Click(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -191,6 +222,21 @@ public partial class PreferencesWindow : VeliShellWindow
         await _app.SetTaskbarHiddenAsync(false);
         SyncUi();
     }
+    private void SaveIconKey_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ApiKeyStore.SaveMacOsIconsKey(IconApiKeyInput.Password);
+            IconApiKeyInput.Clear();
+            SyncUi();
+        }
+        catch (Exception ex)
+        {
+            App.Log("Could not store the macOSicons API key", ex);
+            MessageBox.Show(this, L("Apps.SaveKeyFailed"),
+                L("Common.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
     private void RemoveIconKey_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -205,24 +251,14 @@ public partial class PreferencesWindow : VeliShellWindow
                 L("Common.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
-    private void OnlineIcons_Click(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        // Consent updates and re-syncs the settings window. Preserve the state
-        // the user actually clicked so the first opt-in also enables automatic
-        // matching instead of being reset to the on-demand default.
-        var enableAutomaticMatching = OnlineIconSwitch.IsChecked == true;
-        if (enableAutomaticMatching && !EnsureOnlineIconConsent())
-        {
-            OnlineIconSwitch.IsChecked = false;
-            return;
-        }
-        _app.UpdatePreferences(s => s.OnlineIcons = enableAutomaticMatching
-            ? OnlineIconMode.AutomaticExactMatches
-            : OnlineIconMode.OnDemand);
-    }
     private async void FindOnlineIcons_Click(object sender, RoutedEventArgs e)
     {
+        if (!ApiKeyStore.HasMacOsIconsKey)
+        {
+            OnlineIconStatus.Text = L("Apps.ApiKeyMissing");
+            IconApiKeyInput.Focus();
+            return;
+        }
         if (!EnsureOnlineIconConsent()) return;
         await FindOnlineIconsAsync(_app.Preferences.Pins);
     }
@@ -245,14 +281,30 @@ public partial class PreferencesWindow : VeliShellWindow
 
         _iconSearchBusy = true;
         FindOnlineIconsButton.IsEnabled = false;
-        OnlineIconSwitch.IsEnabled = false;
         OnlineIconStatus.Text = string.Format(LocalizationService.Current.ActiveCulture, L("Apps.Searching"), pins.Count);
         try
         {
-            var result = await _app.FindAndApplyOnlineIconsAsync(pins);
-            OnlineIconStatus.Text =
-                string.Format(LocalizationService.Current.ActiveCulture, L("Apps.SearchResult"), result.Applied, result.NoMatch, result.Failed) +
-                (result.Failed > 0 && !string.IsNullOrWhiteSpace(result.Message) ? " " + result.Message : "");
+            var applied = 0;
+            var noMatch = 0;
+            var failed = 0;
+            string? firstError = null;
+            foreach (var pin in pins)
+            {
+                var result = await ChooseOnlineIconForPinAsync(pin);
+                switch (result)
+                {
+                    case IconChoiceResult.Applied: applied++; break;
+                    case IconChoiceResult.NoMatch: noMatch++; break;
+                    case IconChoiceResult.Failed: failed++; firstError ??= OnlineIconStatus.Text; break;
+                    case IconChoiceResult.Canceled:
+                        noMatch += pins.Count - applied - noMatch - failed;
+                        break;
+                }
+                if (result == IconChoiceResult.Canceled) break;
+            }
+            OnlineIconStatus.Text = string.Format(LocalizationService.Current.ActiveCulture,
+                L("Apps.SearchResult"), applied, noMatch, failed) +
+                (failed > 0 && !string.IsNullOrWhiteSpace(firstError) ? " " + firstError : "");
             RenderPins();
         }
         catch (OperationCanceledException)
@@ -262,8 +314,73 @@ public partial class PreferencesWindow : VeliShellWindow
         finally
         {
             _iconSearchBusy = false;
-            FindOnlineIconsButton.IsEnabled = true;
-            OnlineIconSwitch.IsEnabled = true;
+            FindOnlineIconsButton.IsEnabled = _app.Preferences.IconStyle == DockIconStyle.Mac &&
+                                                   ApiKeyStore.HasMacOsIconsKey;
+        }
+    }
+
+    private async Task<IconChoiceResult> ChooseOnlineIconForPinAsync(
+        Pin pin,
+        Action<Settings, IconReference>? applyOverride = null)
+    {
+        if (!ApiKeyStore.HasMacOsIconsKey || !EnsureOnlineIconConsent()) return IconChoiceResult.Canceled;
+        if (_app.Preferences.IconStyle != DockIconStyle.Mac)
+        {
+            OnlineIconStatus.Text = L("Apps.OnlineRequiresMacStyle");
+            return IconChoiceResult.Failed;
+        }
+        var plan = MacOsIconSearchCatalog.CreatePlans(pin).FirstOrDefault();
+        if (plan is null) return IconChoiceResult.NoMatch;
+        return await ChooseOnlineIconAsync(
+            LocalizationService.Current.DisplayPinName(pin),
+            plan.ExactName,
+            applyOverride ?? ((settings, icon) =>
+            {
+                var index = settings.Pins.FindIndex(item =>
+                    string.Equals(item.Id, pin.Id, StringComparison.OrdinalIgnoreCase));
+                if (index >= 0) settings.Pins[index] = settings.Pins[index] with { Icon = icon };
+            }));
+    }
+
+    private async Task<IconChoiceResult> ChooseOnlineIconAsync(
+        string displayName,
+        string query,
+        Action<Settings, IconReference> apply)
+    {
+        try
+        {
+            OnlineIconStatus.Text = string.Format(LocalizationService.Current.ActiveCulture,
+                L("Apps.SearchingOne"), displayName);
+            var hits = await MacOsIconGalleryService.SearchAsync(query);
+            if (hits.Count == 0) return IconChoiceResult.NoMatch;
+            var picker = new IconPickerWindow(
+                displayName, query, hits) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedHit is null) return IconChoiceResult.Canceled;
+
+            OnlineIconStatus.Text = L("Apps.DownloadingSelection");
+            var download = await MacOsIconGalleryService.DownloadAsync(picker.SelectedHit);
+            if (download.Icon is null)
+            {
+                OnlineIconStatus.Text = download.Error ?? L("MacOsIcons.UnsafePng");
+                return IconChoiceResult.Failed;
+            }
+            _app.UpdatePreferences(settings => apply(settings, download.Icon));
+            return IconChoiceResult.Applied;
+        }
+        catch (MacOsIconGalleryServiceException ex)
+        {
+            OnlineIconStatus.Text = ex.Message;
+            return IconChoiceResult.Failed;
+        }
+        catch (OperationCanceledException)
+        {
+            return IconChoiceResult.Canceled;
+        }
+        catch (Exception ex)
+        {
+            App.Log("macOSicons.com picker failed", ex);
+            OnlineIconStatus.Text = L("MacOsIcons.Unavailable");
+            return IconChoiceResult.Failed;
         }
     }
     private bool EnsureOnlineIconConsent()
@@ -279,8 +396,10 @@ public partial class PreferencesWindow : VeliShellWindow
         });
         return true;
     }
-    private void OpenIconGallery_Click(object sender, RoutedEventArgs e) =>
-        LaunchService.Open("https://www.macosicongallery.com/");
+    private void OpenIconSource_Click(object sender, RoutedEventArgs e) =>
+        LaunchService.Open("https://macosicons.com/developers");
+
+    private enum IconChoiceResult { Applied, NoMatch, Failed, Canceled }
     private void OpenLocalLicenses_Click(object sender, RoutedEventArgs e)
     {
         var localDirectory = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-LICENSES");
@@ -313,43 +432,322 @@ public partial class PreferencesWindow : VeliShellWindow
         foreach (var pin in _app.Preferences.Pins.Where(p =>
                      LocalizationService.Current.DisplayPinName(p).Contains(query, StringComparison.CurrentCultureIgnoreCase)))
         {
-            var row = new Grid { Margin = new Thickness(2, 6, 2, 6) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(37) });
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new Image { Source = IconService.For(pin.Id, pin.Target, pin.Icon), Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Left });
-            var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0,0,8,0) };
-            var attribution = MacOsIconGalleryService.TryGetAttribution(pin.Icon);
             var displayName = LocalizationService.Current.DisplayPinName(pin);
-            labels.Children.Add(new TextBlock { Text = displayName, TextTrimming = TextTrimming.CharacterEllipsis,
-                ToolTip = attribution is null ? pin.Target : pin.Target + "\n" + attribution.Text });
-            if (attribution is not null)
-            {
-                var credit = new TextBlock { Text = attribution.Text, FontSize = 10.5, TextTrimming = TextTrimming.CharacterEllipsis };
-                credit.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
-                labels.Children.Add(credit);
-            }
-            Grid.SetColumn(labels, 1); row.Children.Add(labels);
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            void Add(string glyph, string label, Action action)
-            {
-                var b = new Button { Content = glyph, Width = 26, Height = 25, Padding = new Thickness(0), Margin = new Thickness(2,0,0,0), ToolTip = label };
-                AutomationProperties.SetName(b, label + ": " + displayName);
-                b.Click += (_, _) => action(); buttons.Children.Add(b);
-            }
-            Add("‹", L("Common.MoveLeft"), () => _app.Dock.MovePin(pin.Id, -1));
-            Add("›", L("Common.MoveRight"), () => _app.Dock.MovePin(pin.Id, 1));
-            if (pin.Icon is not null)
-                Add("↺", L("Common.RemoveOnlineIcon"), () => _app.UpdatePreferences(s =>
+            PinList.Children.Add(CreateIconRow(
+                displayName,
+                pin.Target,
+                pin.Id,
+                pin.Icon,
+                chooseLocal: () => ChooseLocalIconForPin(pin),
+                chooseOnline: _app.Preferences.IconStyle == DockIconStyle.Mac &&
+                              MacOsIconGalleryService.IsEligibleAppPin(pin)
+                    ? () => _ = ChooseOnlineIconFromRowAsync(pin)
+                    : null,
+                reset: pin.Icon is null ? null : () => ResetPinIcon(pin.Id),
+                addExtraButtons: buttons =>
                 {
-                    var index = s.Pins.FindIndex(p => p.Id == pin.Id);
-                    if (index >= 0) s.Pins[index] = s.Pins[index] with { Icon = null };
+                    AddCompactButton(buttons, "‹", L("Common.MoveLeft"), displayName,
+                        () => _app.Dock.MovePin(pin.Id, -1));
+                    AddCompactButton(buttons, "›", L("Common.MoveRight"), displayName,
+                        () => _app.Dock.MovePin(pin.Id, 1));
+                    AddCompactButton(buttons, "×", L("Common.Remove"), displayName,
+                        () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
                 }));
-            Add("×", L("Common.Remove"), () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
-            Grid.SetColumn(buttons, 2); row.Children.Add(buttons);
-            PinList.Children.Add(row);
         }
         if (PinList.Children.Count == 0) PinList.Children.Add(new TextBlock { Text = L("Common.None"), Margin = new Thickness(8,12,8,12) });
+    }
+
+    private void RenderSystemIcons()
+    {
+        if (SystemIconList is null) return;
+        SystemIconList.Children.Clear();
+        AddSystemIconRow("velishell", L("Apps.VeliShellDockIcon"), "velishell", "", "System Settings");
+        AddSystemIconRow("overflow", L("Apps.OverflowDockIcon"), "overflow", "", "Launchpad");
+        AddSystemIconRow("trash-empty", L("Apps.RecycleBinEmptyIcon"), "trash", "shell:RecycleBinFolder", "Empty Trash");
+        AddSystemIconRow("trash-full", L("Apps.RecycleBinFullIcon"), "trash-full", "shell:RecycleBinFolder", "Full Trash");
+    }
+
+    private void AddSystemIconRow(string settingsKey, string displayName, string iconId, string target, string? onlineQuery)
+    {
+        var icon = _app.Preferences.GetDockIconOverride(settingsKey);
+        SystemIconList.Children.Add(CreateIconRow(
+            displayName,
+            target,
+            iconId,
+            icon,
+            chooseLocal: () => ChooseLocalIconForDockElement(settingsKey),
+            chooseOnline: onlineQuery is not null && _app.Preferences.IconStyle == DockIconStyle.Mac
+                ? () => _ = ChooseOnlineIconForDockElementAsync(settingsKey, displayName, onlineQuery)
+                : null,
+            reset: icon is null ? null : () => ResetDockIcon(settingsKey)));
+    }
+
+    private void RenderRunningIcons()
+    {
+        if (RunningIconList is null) return;
+        RunningIconList.Children.Clear();
+        if (!_app.Preferences.ShowRunningApps)
+        {
+            RunningIconList.Children.Add(SecondaryMessage(L("Apps.RunningIconsDisabled")));
+            return;
+        }
+
+        var running = _app.Dock.GetConfigurableRunningApps();
+        foreach (var app in running)
+        {
+            var displayName = LocalizationService.Current.DisplayPinName(app);
+            var persistedIcon = _app.Preferences.GetDockIconOverride(app.Id);
+            RunningIconList.Children.Add(CreateIconRow(
+                displayName,
+                app.Target,
+                app.Id,
+                app.Icon,
+                chooseLocal: () => ChooseLocalIconForDockElement(app.Id),
+                chooseOnline: _app.Preferences.IconStyle == DockIconStyle.Mac &&
+                              MacOsIconGalleryService.IsEligibleAppPin(app)
+                    ? () => _ = ChooseOnlineIconForRunningAppAsync(app)
+                    : null,
+                reset: persistedIcon is null ? null : () => ResetDockIcon(app.Id)));
+        }
+        if (RunningIconList.Children.Count == 0)
+            RunningIconList.Children.Add(SecondaryMessage(L("Apps.NoRunningIcons")));
+    }
+
+    private Grid CreateIconRow(
+        string displayName,
+        string target,
+        string iconId,
+        IconReference? icon,
+        Action chooseLocal,
+        Action? chooseOnline,
+        Action? reset,
+        Action<WrapPanel>? addExtraButtons = null)
+    {
+        var row = new Grid { Margin = new Thickness(2, 7, 2, 7) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(39) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var preview = new Image
+        {
+            Source = IconService.For(iconId, target, icon),
+            Width = 30,
+            Height = 30,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            SnapsToDevicePixels = true,
+            UseLayoutRounding = true
+        };
+        RenderOptions.SetBitmapScalingMode(preview, BitmapScalingMode.HighQuality);
+        Grid.SetRowSpan(preview, 2);
+        row.Children.Add(preview);
+
+        var labels = new StackPanel { Margin = new Thickness(0, 0, 6, 0) };
+        labels.Children.Add(new TextBlock
+        {
+            Text = displayName,
+            FontWeight = FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = string.IsNullOrWhiteSpace(target) ? displayName : target
+        });
+        labels.Children.Add(SecondaryMessage(IconDescription(icon), new Thickness(0, 2, 0, 0)));
+        Grid.SetColumn(labels, 1);
+        row.Children.Add(labels);
+
+        var buttons = new WrapPanel
+        {
+            Margin = new Thickness(0, 7, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        AddTextButton(buttons, L(icon is null ? "Apps.ChooseLocalIcon" : "Apps.ReplaceLocalIcon"), displayName, chooseLocal);
+        if (chooseOnline is not null)
+            AddTextButton(buttons, L("Apps.ChooseOnlineIcon"), displayName, chooseOnline);
+        if (reset is not null)
+            AddTextButton(buttons, L("Apps.ResetIcon"), displayName, reset);
+        addExtraButtons?.Invoke(buttons);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumn(buttons, 1);
+        row.Children.Add(buttons);
+        return row;
+    }
+
+    private static TextBlock SecondaryMessage(string text, Thickness? margin = null)
+    {
+        var message = new TextBlock
+        {
+            Text = text,
+            FontSize = 10.5,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = margin ?? new Thickness(8, 12, 8, 12)
+        };
+        message.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+        return message;
+    }
+
+    private string IconDescription(IconReference? icon)
+    {
+        if (CustomIconService.IsCustom(icon)) return L("Apps.LocalIconActive");
+        return MacOsIconGalleryService.TryGetAttribution(icon)?.Text ?? L("Apps.DefaultIconActive");
+    }
+
+    private static void AddTextButton(Panel buttons, string label, string itemName, Action action)
+    {
+        var button = new Button
+        {
+            Content = label,
+            Padding = new Thickness(8, 3, 8, 3),
+            MinHeight = 26,
+            Margin = new Thickness(0, 0, 6, 5),
+            ToolTip = label
+        };
+        AutomationProperties.SetName(button, label + ": " + itemName);
+        button.Click += (_, _) => action();
+        buttons.Children.Add(button);
+    }
+
+    private static void AddCompactButton(Panel buttons, string glyph, string label, string itemName, Action action)
+    {
+        var button = new Button
+        {
+            Content = glyph,
+            Width = 27,
+            Height = 26,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 4, 5),
+            ToolTip = label
+        };
+        AutomationProperties.SetName(button, label + ": " + itemName);
+        button.Click += (_, _) => action();
+        buttons.Children.Add(button);
+    }
+
+    private void ChooseLocalIconForPin(Pin pin)
+    {
+        var icon = ChooseLocalIcon();
+        if (icon is null) return;
+        _app.UpdatePreferences(settings =>
+        {
+            var index = settings.Pins.FindIndex(candidate =>
+                string.Equals(candidate.Id, pin.Id, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) settings.Pins[index] = settings.Pins[index] with { Icon = icon };
+        });
+    }
+
+    private void ResetPinIcon(string pinId) => _app.UpdatePreferences(settings =>
+    {
+        var index = settings.Pins.FindIndex(candidate =>
+            string.Equals(candidate.Id, pinId, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0) settings.Pins[index] = settings.Pins[index] with { Icon = null };
+    });
+
+    private void ChooseLocalIconForDockElement(string settingsKey)
+    {
+        var icon = ChooseLocalIcon();
+        if (icon is null) return;
+        _app.UpdatePreferences(settings => settings.DockIconOverrides[settingsKey] = icon);
+    }
+
+    private IconReference? ChooseLocalIcon()
+    {
+        var picker = new OpenFileDialog
+        {
+            Title = L("Apps.LocalIconDialogTitle"),
+            Filter = L("Apps.LocalIconFilter"),
+            CheckFileExists = true,
+            Multiselect = false,
+            DereferenceLinks = true
+        };
+        if (picker.ShowDialog(this) != true) return null;
+        try
+        {
+            return CustomIconService.Import(picker.FileName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                          InvalidDataException or NotSupportedException or ArgumentException or
+                                          FormatException or InvalidOperationException or OverflowException or
+                                          System.Runtime.InteropServices.COMException)
+        {
+            App.Log("Could not import a custom dock icon", exception);
+            MessageBox.Show(this, L("Apps.LocalIconInvalid"), L("Common.ErrorTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+    }
+
+    private void ResetDockIcon(string settingsKey) =>
+        _app.UpdatePreferences(settings => settings.DockIconOverrides.Remove(settingsKey));
+
+    private void RefreshRunningIcons_Click(object sender, RoutedEventArgs e) => RenderRunningIcons();
+    private async Task ChooseOnlineIconFromRowAsync(Pin pin)
+    {
+        if (!ApiKeyStore.HasMacOsIconsKey)
+        {
+            OnlineIconStatus.Text = L("Apps.ApiKeyMissing");
+            IconApiKeyInput.Focus();
+            return;
+        }
+        var result = await ChooseOnlineIconForPinAsync(pin);
+        OnlineIconStatus.Text = result switch
+        {
+            IconChoiceResult.Applied => L("Apps.SelectionApplied"),
+            IconChoiceResult.NoMatch => L("Apps.NoSelectionResults"),
+            IconChoiceResult.Canceled => L("Apps.SelectionCanceled"),
+            _ => OnlineIconStatus.Text
+        };
+        RenderPins();
+    }
+
+    private async Task ChooseOnlineIconForDockElementAsync(
+        string settingsKey,
+        string displayName,
+        string query)
+    {
+        if (!CanChooseOnlineIcon()) return;
+        var result = await ChooseOnlineIconAsync(
+            displayName,
+            query,
+            (settings, icon) => settings.DockIconOverrides[settingsKey] = icon);
+        ShowIconChoiceResult(result);
+        RenderSystemIcons();
+    }
+
+    private async Task ChooseOnlineIconForRunningAppAsync(Pin app)
+    {
+        if (!CanChooseOnlineIcon()) return;
+        var result = await ChooseOnlineIconForPinAsync(
+            app,
+            (settings, icon) => settings.DockIconOverrides[app.Id] = icon);
+        ShowIconChoiceResult(result);
+        RenderRunningIcons();
+    }
+
+    private bool CanChooseOnlineIcon()
+    {
+        if (_app.Preferences.IconStyle != DockIconStyle.Mac)
+        {
+            OnlineIconStatus.Text = L("Apps.OnlineRequiresMacStyle");
+            return false;
+        }
+        if (!ApiKeyStore.HasMacOsIconsKey)
+        {
+            OnlineIconStatus.Text = L("Apps.ApiKeyMissing");
+            IconApiKeyInput.Focus();
+            return false;
+        }
+        return EnsureOnlineIconConsent();
+    }
+
+    private void ShowIconChoiceResult(IconChoiceResult result)
+    {
+        OnlineIconStatus.Text = result switch
+        {
+            IconChoiceResult.Applied => L("Apps.SelectionApplied"),
+            IconChoiceResult.NoMatch => L("Apps.NoSelectionResults"),
+            IconChoiceResult.Canceled => L("Apps.SelectionCanceled"),
+            _ => OnlineIconStatus.Text
+        };
     }
     private void ResetPins_Click(object sender, RoutedEventArgs e)
     {

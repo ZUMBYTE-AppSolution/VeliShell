@@ -49,7 +49,9 @@ await TestAsync("parser accepts one official release asset and preserves the cha
     Check(request.Uri == new Uri("https://api.github.com/repos/ZUMBYTE-AppSolution/VeliShell/releases/latest"));
     Check(request.ApiVersion == "2026-03-10");
     Check(request.Accept.Contains("application/vnd.github+json", StringComparison.Ordinal));
-    Check(request.UserAgent.Contains("VeliShell-Updater/0.3", StringComparison.Ordinal));
+    Check(request.UserAgent.Contains(
+        $"VeliShell-Updater/{GitHubReleaseUpdateService.InstalledVersion}",
+        StringComparison.Ordinal));
 });
 
 await TestAsync("parser rejects a release page outside the official repository", async () =>

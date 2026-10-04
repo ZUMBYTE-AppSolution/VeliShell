@@ -60,8 +60,8 @@ try {
     Write-Host 'Keine Systemdateien, Taskleisten-Einstellungen oder Autostart-Eintraege werden veraendert.'
 
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'tests.log')
-    Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.UpdateService.Tests/VeliShell.UpdateService.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'service-tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Desktop.Updater.Tests/VeliShell.Desktop.Updater.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'desktop-updater-tests.log')
+    Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release') -Log (Join-Path $Out 'interaction-qa.log')
     if ($TestsOnly) { Write-Host 'Tests abgeschlossen.' -ForegroundColor Green; exit 0 }
 
     $Destination = Join-Path $Out $(if ($Portable) { 'portable' } else { 'app' })
@@ -73,12 +73,9 @@ try {
     # Keep staging names short: the longest versioned notice path otherwise
     # exceeds the legacy MAX_PATH boundary used by some Windows file APIs.
     $Staging = Join-Path $Out ('.vp-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
-    $ServiceStaging = Join-Path $Out ('.vs-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
-    foreach ($stagingPath in @($Staging, $ServiceStaging)) {
-        $stagingFull = [IO.Path]::GetFullPath($stagingPath).TrimEnd([IO.Path]::DirectorySeparatorChar)
-        if ([IO.Path]::GetDirectoryName($stagingFull) -ne $outFull) {
-            throw "Unsicheres Staging-Ziel: $stagingFull"
-        }
+    $stagingFull = [IO.Path]::GetFullPath($Staging).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if ([IO.Path]::GetDirectoryName($stagingFull) -ne $outFull) {
+        throw "Unsicheres Staging-Ziel: $stagingFull"
     }
     $Exe = Join-Path $Destination 'VeliShell.exe'
     $running = Get-Process -Name 'VeliShell' -ErrorAction SilentlyContinue
@@ -131,62 +128,6 @@ try {
                 }
             }
         }
-        if ($Portable) {
-            Invoke-Dotnet -Arguments @(
-                'publish', 'src/VeliShell.UpdateService/VeliShell.UpdateService.csproj',
-                '-c', 'Release',
-                '-r', $rid,
-                '--self-contained', 'true',
-                '-o', $ServiceStaging,
-                '-p:UseAppHost=true',
-                '-p:DebugType=None',
-                '-p:DebugSymbols=false'
-            ) -Log (Join-Path $Out 'service-build.log')
-            # Keep the service's self-contained runtime isolated from the WPF
-            # application's runtime. Both publishes contain files with the same
-            # names but different assembly identities (notably WindowsBase.dll).
-            # Combining them makes the service payload formally inconsistent and
-            # can prevent it from connecting to the Service Control Manager.
-            $serviceDestination = Join-Path $Staging 'UpdateService'
-            New-Item -ItemType Directory -Path $serviceDestination -Force | Out-Null
-            $serviceFiles = @(
-                Get-ChildItem -LiteralPath $ServiceStaging -File |
-                    Where-Object {
-                        $_.Extension -ne '.pdb' -and
-                        $_.Name -notin @('LICENSE', 'THIRD-PARTY-NOTICES.md')
-                    }
-            )
-            foreach ($serviceFile in $serviceFiles) {
-                Copy-Item -LiteralPath $serviceFile.FullName -Destination (Join-Path $serviceDestination $serviceFile.Name)
-            }
-            foreach ($requiredServiceFile in @(
-                'VeliShell.UpdateService.exe',
-                'VeliShell.UpdateService.dll',
-                'VeliShell.UpdateService.deps.json',
-                'VeliShell.UpdateService.runtimeconfig.json',
-                'VeliShell.Core.dll',
-                'System.Private.CoreLib.dll',
-                'WindowsBase.dll'
-            )) {
-                $publishedServiceFile = Join-Path $serviceDestination $requiredServiceFile
-                if (-not (Test-Path -LiteralPath $publishedServiceFile -PathType Leaf)) {
-                    throw "Der isolierte Updatepruefdienst ist unvollstaendig: $publishedServiceFile"
-                }
-                $sourceHash = (Get-FileHash -LiteralPath (Join-Path $ServiceStaging $requiredServiceFile) -Algorithm SHA256).Hash
-                $publishedHash = (Get-FileHash -LiteralPath $publishedServiceFile -Algorithm SHA256).Hash
-                if ($sourceHash -ne $publishedHash) {
-                    throw "Der isolierte Updatepruefdienst wurde beim Kopieren veraendert: $requiredServiceFile"
-                }
-            }
-            & (Join-Path $serviceDestination 'VeliShell.UpdateService.exe')
-            $serviceSmokeExit = $LASTEXITCODE
-            if ($serviceSmokeExit -ne 1063) {
-                throw "Der isolierte Updatepruefdienst konnte nicht geladen werden (SCM-Code $serviceSmokeExit statt 1063)."
-            }
-            # 1063 is the expected SCM-only startup result. Do not leak that
-            # successful smoke-test code as the PowerShell script exit code.
-            $global:LASTEXITCODE = 0
-        }
         if (Test-Path -LiteralPath $Destination) {
             Remove-Item -LiteralPath $Destination -Recurse -Force
         }
@@ -195,9 +136,6 @@ try {
     finally {
         if (Test-Path -LiteralPath $Staging) {
             Remove-Item -LiteralPath $Staging -Recurse -Force
-        }
-        if (Test-Path -LiteralPath $ServiceStaging) {
-            Remove-Item -LiteralPath $ServiceStaging -Recurse -Force
         }
     }
     Write-Host "Fertig: $Exe" -ForegroundColor Green

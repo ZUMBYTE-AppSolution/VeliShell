@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
       Name="VeliShell"
       Manufacturer="Zumbyte.de"
@@ -24,8 +23,7 @@
         Id="VeliShell.ico"
         SourceFile="$(sys.SOURCEFILEDIR)..\..\src\VeliShell.Desktop\Assets\VeliShellApp.ico" />
 
-    <util:QueryWindowsWellKnownSIDs />
-    <ui:WixUI Id="WixUI_FeatureTree" InstallDirectory="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <UIRef Id="WixUI_ErrorProgressText" />
     <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
     <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)Assets\VeliShellInstallerDialog.png" />
@@ -62,31 +60,6 @@
       </Directory>
     </StandardDirectory>
 
-    <StandardDirectory Id="CommonAppDataFolder">
-      <Directory Id="VeliShellProgramDataFolder" Name="VeliShell">
-        <Component Id="VeliShellUpdateStatusData" Guid="6EA652F5-AE42-4DA6-93AA-189EB096350C">
-          <CreateFolder>
-            <util:PermissionEx
-                User="[WIX_ACCOUNT_LOCALSERVICE]"
-                GenericRead="yes"
-                GenericWrite="yes"
-                DeleteChild="yes"
-                Inheritable="yes" />
-          </CreateFolder>
-          <RemoveFile Id="RemoveVeliShellUpdateStatus" Name="update-status.json" On="uninstall" />
-          <RemoveFile Id="RemoveVeliShellUpdateStatusTemporary" Name=".update-status.json.*.tmp" On="uninstall" />
-          <RemoveFolder Id="RemoveVeliShellProgramDataFolder" On="uninstall" />
-          <RegistryValue
-              Root="HKLM"
-              Key="Software\Zumbyte\VeliShell"
-              Name="UpdateServiceData"
-              Type="string"
-              Value="[VeliShellProgramDataFolder]"
-              KeyPath="yes" />
-        </Component>
-      </Directory>
-    </StandardDirectory>
-
     <Feature
         Id="VeliShellComplete"
         Title="VeliShell"
@@ -97,17 +70,6 @@
         AllowAdvertise="no">
       <ComponentGroupRef Id="VeliShellApplicationPayload" />
       <ComponentRef Id="VeliShellStartMenuShortcut" />
-      <Feature
-          Id="UpdateServiceFeature"
-          Title="Hintergrund-Updateprüfung (optional)"
-          Description="Startet automatisch mit Windows unter LocalService und prüft alle 12 Stunden ausschließlich GitHub-Release-Metadaten. Der Dienst zeigt keine Oberfläche, lädt nichts herunter und installiert nichts."
-          Level="2"
-          AllowAbsent="yes"
-          AllowAdvertise="no"
-          InstallDefault="local">
-        <ComponentGroupRef Id="VeliShellUpdateServicePayload" />
-        <ComponentRef Id="VeliShellUpdateStatusData" />
-      </Feature>
     </Feature>
   </Package>
 </Wix>

@@ -29,13 +29,37 @@ Teil der laufenden VeliShell-Anwendung installiert.
 - Projekt: <https://github.com/wixtoolset/wix>
 - Paket/Lizenzangabe (Microsoft Reciprocal License): <https://www.nuget.org/packages/WixToolset.Sdk/4.0.6>
 
-## macOS Icon Gallery
+## macOSicons.com API
 
-Die optionale Online-Suche greift nach Zustimmung des Nutzers auf öffentlich
-abrufbare Metadaten von <https://www.macosicongallery.com/> zu. VeliShell bündelt
-keine Gallery-Bilder. Rechte an geladenen Symbolen verbleiben bei den jeweiligen
-Urhebern, Designern und Markeninhabern. Die öffentliche Abrufbarkeit ist keine
-pauschale Lizenz zur Weiterverteilung oder kommerziellen Nutzung.
+Die optionale Online-Suche verwendet nach ausdrücklicher Aktivierung die
+dokumentierte API von <https://macosicons.com/developers>. Jeder Nutzer stellt
+seinen eigenen API-Schlüssel bereit. VeliShell bettet keinen gemeinsamen Schlüssel
+ein und bewahrt den Nutzerschlüssel im Windows-Anmeldeinformationsspeicher auf.
+
+Die API-Nutzungsbedingungen erlauben Integrationen das Suchen, Abrufen,
+Zwischenspeichern, Anzeigen und Anwenden angebotener Icons. Die jeweiligen Icons
+bleiben Eigentum ihrer Ersteller und können zusätzlichen Einzellizenzen unterliegen.
+VeliShell bewahrt deshalb die von der API gelieferten Angaben zu Quelle und Urheber
+und zeigt sie in der Auswahl an. Die Bibliothek wird weder gebündelt noch als eigener
+Katalog weiterverkauft oder massenhaft exportiert.
+
+- API: <https://api.macosicons.com/api/v1/search>
+- API-Bedingungen: <https://beta.macosicons.com/developers/terms>
+- Anbieter: <https://macosicons.com/>
+
+## Apple App Store und macOS-Systemsymbole
+
+VeliShell verwendet App-Store-Grafiken nicht als dauerhafte Dock-Ersatzsymbole und
+liefert keine originalen macOS-System-, Finder-, Einstellungs- oder Papierkorb-Icons
+mit. Apples Search-API-Richtlinien beschränken die bereitgestellten Promo-Inhalte auf
+die Bewerbung des zugehörigen Store-Inhalts in unmittelbarer Nähe eines Store-Links.
+Sie sind daher keine allgemeine Quelle für ein weiterverteilbares Windows-Icon-Paket.
+
+- Apple Search API: <https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/>
+
+Die mitgelieferten Leer- und Vollzustände des VeliShell-Papierkorbs sind eigens für
+dieses Projekt gestaltete, Mac-inspirierte Illustrationen ohne Apple-Logo und keine
+Kopien proprietärer Apple-Assets.
 
 ## VeliShell-Appsymbol
 
@@ -43,7 +67,7 @@ Das VeliShell-Appsymbol und das freistehende V-Signet basieren auf vom
 Projektinhaber bereitgestellten Bildvorlagen. Das Appsymbol wurde für die
 einheitliche VeliShell-Superellipse technisch normalisiert; das V-Signet bleibt
 als transparente Marke ohne künstliche Icon-Fläche erhalten. Beide stammen nicht
-aus macosicongallery.com. Die darin stilisiert angedeuteten Betriebssystem-, App-
+aus macOSicons.com. Die darin stilisiert angedeuteten Betriebssystem-, App-
 und Produktmerkmale übertragen keine Rechte an den zugrunde liegenden Marken oder
 Originalsymbolen auf VeliShell.
 

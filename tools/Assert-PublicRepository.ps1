@@ -14,6 +14,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not list tracked repository files.' }
     $forbidden = @(
         '(^|/)AGENTS\.md$',
+        '(^|/)(AGENT|AGENTS|ROADMAP|PLAN|DEVELOPER|DEV-NOTES|INTERNAL-NOTES)([-_.][^/]*)?\.(md|txt|json|ya?ml)$',
         '(^|/)(work|out|backups|outputs)/',
         '^BUILD-INFO\.txt$',
         '^docs/(ROADMAP|VERIFICATION|TEST-CHECKLIST|DESIGN-CONTRACT|SOURCES|RELEASING)\.md$',

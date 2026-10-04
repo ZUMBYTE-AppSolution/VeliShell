@@ -17,7 +17,7 @@ jobs:
   windows-x64:
     name: Test, portable package and installer
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: pwsh
@@ -50,11 +50,11 @@ jobs:
       - name: Test and publish self-contained Windows application
         run: ./tools/Build.ps1 -Portable
 
-      - name: Build per-machine MSI with optional service feature
+      - name: Build per-machine MSI
         run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.value }}' -PublishDirectory ./out/portable
 
-      - name: Install, start and remove optional Windows service
-        run: ./tools/Test-InstalledUpdateService.ps1 -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi'
+      - name: Smoke-test MSI install, uninstall and v0.3.1 upgrade
+        run: ./tools/Test-InstallerLifecycle.ps1 -Version '${{ steps.version.outputs.value }}' -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi' -AllowMachineChanges
 
       - name: Create versioned release candidates
         run: ./tools/New-ReleaseArtifacts.ps1 -Version '${{ steps.version.outputs.value }}'

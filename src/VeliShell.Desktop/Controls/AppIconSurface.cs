@@ -5,17 +5,15 @@ using System.Windows.Media;
 namespace VeliShell.Desktop.Controls;
 
 /// <summary>
-/// Keeps artwork and its generated accent plate in one centered, continuously
-/// rounded surface. Every instance has exactly the requested dock size. Source
-/// alpha bounds are used only to normalize transparent safe zones into that
-/// fixed plate; source pixels can never make the plate itself larger or smaller.
+/// Keeps the actual artwork centered, exactly sized, and continuously rounded.
+/// Source alpha bounds normalize transparent safe zones; VeliShell deliberately
+/// draws no generated color, gradient, tile, or backdrop behind the icon.
 /// </summary>
 internal sealed class AppIconSurface : Grid
 {
     private readonly Canvas _plate;
     private AppIconAppearance _appearance;
 
-    internal Border AccentBackground { get; }
     internal Image IconImage { get; }
     internal FrameworkElement PlateElement => _plate;
     internal Rect NormalizedArtworkBounds => _appearance.NormalizedArtworkBounds;
@@ -23,7 +21,7 @@ internal sealed class AppIconSurface : Grid
     // more accurate name. These are source crop bounds, not output plate bounds.
     internal Rect NormalizedPlateBounds => NormalizedArtworkBounds;
 
-    internal AppIconSurface(ImageSource? source, double side, Brush? background = null)
+    internal AppIconSurface(ImageSource? source, double side)
     {
         side = Math.Clamp(side, 1, 512);
         Width = side;
@@ -35,9 +33,7 @@ internal sealed class AppIconSurface : Grid
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
 
-        _appearance = source is null
-            ? AppIconAppearance.Empty(background ?? Brushes.Transparent)
-            : AppIconAppearance.For(source);
+        _appearance = source is null ? AppIconAppearance.Empty() : AppIconAppearance.For(source);
         _plate = new Canvas
         {
             Width = side,
@@ -47,12 +43,6 @@ internal sealed class AppIconSurface : Grid
             IsHitTestVisible = false,
             ClipToBounds = true,
             UseLayoutRounding = true,
-            SnapsToDevicePixels = true
-        };
-        AccentBackground = new Border
-        {
-            Background = background ?? _appearance.AccentBrush,
-            IsHitTestVisible = false,
             SnapsToDevicePixels = true
         };
         IconImage = new Image
@@ -67,7 +57,6 @@ internal sealed class AppIconSurface : Grid
             SnapsToDevicePixels = true
         };
         RenderOptions.SetBitmapScalingMode(IconImage, BitmapScalingMode.HighQuality);
-        _plate.Children.Add(AccentBackground);
         _plate.Children.Add(IconImage);
         _plate.SizeChanged += (_, args) =>
         {
@@ -79,12 +68,11 @@ internal sealed class AppIconSurface : Grid
         ApplyLayout(side);
     }
 
-    internal void UpdateSource(ImageSource source, Brush? background = null)
+    internal void UpdateSource(ImageSource source)
     {
         _appearance = AppIconAppearance.For(source);
         IconImage.Source = source;
         IconImage.Visibility = Visibility.Visible;
-        AccentBackground.Background = background ?? _appearance.AccentBrush;
         var actual = Math.Min(RenderSize.Width, RenderSize.Height);
         ApplyLayout(double.IsFinite(actual) && actual > 0 ? actual : Width);
     }
@@ -104,11 +92,6 @@ internal sealed class AppIconSurface : Grid
         _plate.Height = side;
         _plate.Margin = new Thickness(0);
         _plate.Clip = AppIconMask.Create(side);
-
-        AccentBackground.Width = side;
-        AccentBackground.Height = side;
-        Canvas.SetLeft(AccentBackground, 0);
-        Canvas.SetTop(AccentBackground, 0);
 
         var normalized = _appearance.NormalizedArtworkBounds;
         var normalizedSide = Math.Clamp(Math.Max(normalized.Width, normalized.Height), 1d / 256, 1);

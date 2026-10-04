@@ -346,7 +346,8 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     {
         var request = new HttpRequestMessage(method, uri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
-        request.Headers.UserAgent.ParseAdd("VeliShell-Updater/0.3 (+https://github.com/ZUMBYTE-AppSolution/VeliShell)");
+        request.Headers.UserAgent.ParseAdd(
+            $"VeliShell-Updater/{InstalledVersion} (+https://github.com/ZUMBYTE-AppSolution/VeliShell)");
         if (uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase))
             request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", ApiVersion);
         return request;

@@ -10,13 +10,28 @@ internal static class NativeMethods
     internal const long WsExTransparent = 0x20;
     internal const long WsExNoActivate = 0x08000000;
     internal const int SwHide = 0, SwShowNoActivate = 4;
+    internal const uint SpiSetWorkArea = 0x002F;
+    internal const uint WmSettingChange = 0x001A;
+    internal const uint WmApp = 0x8000;
+    internal const uint AbmNew = 0x00000000, AbmRemove = 0x00000001,
+        AbmQueryPos = 0x00000002, AbmSetPos = 0x00000003;
+    internal const uint AbeTop = 1;
+    internal const int AbnPosChanged = 1;
+    internal const uint SmtoBlock = 0x0001, SmtoAbortIfHung = 0x0002;
     internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModNoRepeat = 0x4000;
     internal delegate bool EnumWindowsCallback(nint hwnd, nint parameter);
+    internal delegate bool MonitorEnumCallback(nint monitor, nint deviceContext, ref Rect bounds, nint parameter);
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] internal struct NativeSize { public int Width, Height; }
-    [StructLayout(LayoutKind.Sequential)] internal struct MonitorInfo
-    { public int Size; public Rect Monitor; public Rect Work; public uint Flags; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct MonitorInfo
+    {
+        public int Size;
+        public Rect Monitor;
+        public Rect Work;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Device;
+    }
     [StructLayout(LayoutKind.Sequential)] internal struct MinMaxInfo
     { public Point Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct ShellFileInfo
@@ -37,6 +52,30 @@ internal static class NativeMethods
     {
         public int Size;
         public nint Data;
+    }
+    [StructLayout(LayoutKind.Sequential)] internal struct AppBarData
+    {
+        public uint Size;
+        public nint Window;
+        public uint CallbackMessage;
+        public uint Edge;
+        public Rect Bounds;
+        public nint Parameter;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct Credential
+    {
+        public uint Flags;
+        public uint Type;
+        public string TargetName;
+        public string? Comment;
+        public long LastWritten;
+        public uint CredentialBlobSize;
+        public nint CredentialBlob;
+        public uint Persist;
+        public uint AttributeCount;
+        public nint Attributes;
+        public string? TargetAlias;
+        public string UserName;
     }
     [StructLayout(LayoutKind.Sequential)] internal struct DwmThumbnailProperties
     {
@@ -69,9 +108,16 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumWindows(EnumWindowsCallback callback, nint parameter);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnumDisplayMonitors(
+        nint deviceContext,
+        nint clipRectangle,
+        MonitorEnumCallback callback,
+        nint parameter);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsZoomed(nint hwnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd, StringBuilder text, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetClassName(nint hwnd, StringBuilder text, int max);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd, out uint processId);
@@ -89,11 +135,23 @@ internal static class NativeMethods
     [DllImport("user32.dll")] internal static extern nint MonitorFromPoint(Point point, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SystemParametersInfo(uint action, uint parameter, ref Rect value, uint flags);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint virtualKey);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool UnregisterHotKey(nint hwnd, int id);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW", SetLastError = true)]
+    internal static extern nint SendMessageTimeout(
+        nint hwnd,
+        uint message,
+        nuint wParam,
+        nint lParam,
+        uint flags,
+        uint timeoutMilliseconds,
+        out nuint result);
     [DllImport("kernel32.dll", SetLastError = true)] internal static extern nint OpenProcess(uint access, bool inheritHandle, uint processId);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool QueryFullProcessImageName(nint process, uint flags, StringBuilder path, ref uint size);
@@ -109,6 +167,16 @@ internal static class NativeMethods
         nint prompt,
         uint flags,
         out DataBlob dataOut);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "CredWriteW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CredWrite(ref Credential credential, uint flags);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "CredReadW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CredRead(string target, uint type, uint flags, out nint credential);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "CredDeleteW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CredDelete(string target, uint type, uint flags);
+    [DllImport("advapi32.dll")] internal static extern void CredFree(nint credential);
     [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool CryptUnprotectData(
@@ -135,6 +203,8 @@ internal static class NativeMethods
         [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? imageFactory);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")]
     internal static extern int SHQueryRecycleBin(string? rootPath, ref QueryRecycleBinInfo info);
+    [DllImport("shell32.dll")]
+    internal static extern nuint SHAppBarMessage(uint message, ref AppBarData data);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHEmptyRecycleBinW")]
     internal static extern int SHEmptyRecycleBin(nint owner, string? rootPath, uint flags);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool DestroyIcon(nint icon);
@@ -146,5 +216,24 @@ internal static class NativeMethods
         if (!GetMonitorInfo(MonitorFromPoint(new Point(), 1), ref result))
             result.Work = result.Monitor = new Rect { Right = 1920, Bottom = 1080 };
         return result;
+    }
+
+    internal static bool TryAllMonitors(out IReadOnlyList<(nint Handle, MonitorInfo Info)> result)
+    {
+        var monitors = new List<(nint Handle, MonitorInfo Info)>();
+        var callbackSucceeded = true;
+        var enumerationSucceeded = EnumDisplayMonitors(0, 0, (nint handle, nint deviceContext, ref Rect bounds, nint parameter) =>
+        {
+            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(handle, ref info))
+            {
+                callbackSucceeded = false;
+                return false;
+            }
+            monitors.Add((handle, info));
+            return true;
+        }, 0);
+        result = monitors;
+        return enumerationSucceeded && callbackSucceeded && monitors.Count > 0;
     }
 }

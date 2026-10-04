@@ -24,6 +24,8 @@ try
     Test("Startup is opt-in", () => Check(new Settings().Startup == StartupMode.Disabled));
     Test("Update checks default to notify", () => Check(new Settings().Updates == UpdateMode.Notify));
     Test("Taskbar hiding is opt-in", () => Check(!new Settings().HideTaskbar));
+    Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
+    Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
     Test("Online icons are opt-in", () => Check(new Settings().OnlineIcons == OnlineIconMode.Disabled));
     Test("Clamp large icon size", () => { var s = new Settings { IconSize = 500 }; s.Normalize(); Check(s.IconSize == Settings.MaximumIconSize); });
     Test("Clamp small icon size", () => { var s = new Settings { IconSize = -1 }; s.Normalize(); Check(s.IconSize == Settings.MinimumIconSize); });
@@ -33,6 +35,7 @@ try
     Test("Invalid language falls back", () => { var s = new Settings { Language = (UiLanguage)999 }; s.Normalize(); Check(s.Language == UiLanguage.System); });
     Test("Invalid startup mode falls back", () => { var s = new Settings { Startup = (StartupMode)999 }; s.Normalize(); Check(s.Startup == StartupMode.Disabled); });
     Test("Invalid update mode falls back", () => { var s = new Settings { Updates = (UpdateMode)999 }; s.Normalize(); Check(s.Updates == UpdateMode.Notify); });
+    Test("Invalid icon style falls back", () => { var s = new Settings { IconStyle = (DockIconStyle)999 }; s.Normalize(); Check(s.IconStyle == DockIconStyle.Mac); });
     Test("Deduplicate pin IDs", () => { var s = new Settings { Pins = [new("a", "A", "a.exe"), new("A", "B", "b.exe")] }; s.Normalize(); Check(s.Pins.Count == 1); });
     Test("Filter missing targets", () => { var s = new Settings { Pins = [new("x", "", "")] }; s.Normalize(); Check(s.Pins.Count == 0); });
     Test("Generate missing IDs", () => { var s = new Settings { Pins = [new("", "A", "a.exe")] }; s.Normalize(); Check(s.Pins[0].Id.Length > 0); });
@@ -41,24 +44,68 @@ try
     Test("Empty pins stay empty", () => { var s = new Settings { Pins = [] }; s.Normalize(); Check(s.Pins.Count == 0); });
     Test("Valid online icon survives normalization", () =>
     {
-        var icon = new IconReference("macosicongallery", new string('c', 64), "search-data-v1", new string('a', 64));
+        var icon = new IconReference("macosicons", new string('c', 64), "api-v1", new string('a', 64));
         var s = new Settings { OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion,
             Pins = [new("a", "Firefox", "firefox.exe", "firefox", icon)] };
         s.Normalize();
         Check(s.SchemaVersion == Settings.CurrentSchemaVersion && s.Pins[0].Icon?.IconId == new string('c', 64));
     });
-    Test("Retired macosicons reference is discarded", () =>
+    Test("Retired Gallery reference is discarded", () =>
     {
-        var icon = new IconReference("macosicons", new string('c', 64), "api-v1", new string('a', 64));
+        var icon = new IconReference("macosicongallery", new string('c', 64), "search-data-v1", new string('a', 64));
         var s = new Settings { Pins = [new("a", "Firefox", "firefox.exe", "firefox", icon)] };
         s.Normalize();
         Check(s.Pins[0].Icon is null);
+    });
+    Test("Valid local icon survives normalization", () =>
+    {
+        var hash = new string('a', 64);
+        var icon = new IconReference("velishell-custom", hash, "1", hash);
+        var s = new Settings { Pins = [new("a", "A", "a.exe", null, icon)] };
+        s.Normalize();
+        Check(s.Pins[0].Icon == icon);
+    });
+    Test("Local icon requires a content-addressed reference", () =>
+    {
+        var icon = new IconReference("velishell-custom", new string('a', 64), "1", new string('b', 64));
+        var s = new Settings { Pins = [new("a", "A", "a.exe", null, icon)] };
+        s.Normalize();
+        Check(s.Pins[0].Icon is null);
+    });
+    Test("Dock icon overrides keep fixed and stable running identities", () =>
+    {
+        var hash = new string('c', 64);
+        var icon = new IconReference("velishell-custom", hash, "1", hash);
+        var running = Settings.RunningDockIconKey(@"C:\Apps\Example.exe", "Example");
+        var sameRunning = Settings.RunningDockIconKey("c:/apps/example.exe", "ignored");
+        var s = new Settings
+        {
+            DockIconOverrides = new Dictionary<string, IconReference>
+            {
+                ["trash-empty"] = icon,
+                [running.ToUpperInvariant()] = icon,
+                ["unknown-internal-element"] = icon
+            }
+        };
+        s.Normalize();
+        Check(running == sameRunning && s.GetDockIconOverride("trash-empty") == icon &&
+              s.GetDockIconOverride(running) == icon && s.DockIconOverrides.Count == 2);
     });
     Test("Old online consent disables provider", () =>
     {
         var s = new Settings { OnlineIcons = OnlineIconMode.AutomaticExactMatches, OnlineIconConsentVersion = 1 };
         s.Normalize();
         Check(s.OnlineIcons == OnlineIconMode.Disabled && s.OnlineIconConsentVersion == 1);
+    });
+    Test("Automatic icon selection migrates to picker", () =>
+    {
+        var s = new Settings
+        {
+            OnlineIcons = OnlineIconMode.AutomaticExactMatches,
+            OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion
+        };
+        s.Normalize();
+        Check(s.OnlineIcons == OnlineIconMode.OnDemand);
     });
     Test("Invalid online icon is discarded", () =>
     {
@@ -115,36 +162,43 @@ try
     Test("Recycle Bin empty state", () => Check(RecycleBinState.From(true, 0) == RecycleBinFillState.Empty));
     Test("Recycle Bin full state", () => Check(RecycleBinState.From(true, 1) == RecycleBinFillState.Full));
     Test("Recycle Bin ignores invalid negative count", () => Check(RecycleBinState.From(true, -1) == RecycleBinFillState.Empty));
-    Test("Gallery parser accepts lower camel case array", () =>
+    Test("macOSicons API parser keeps creator attribution", () =>
     {
         var json = Encoding.UTF8.GetBytes("""
-            [{"id":"finder-2026-09-23","name":"Finder","date":"2026-09-23","dateDisplay":"Sep 23, 2026","designer":null,"developer":"Apple","src":"https://cdn.jim-nielsen.com/thumb.png"}]
+            {"hits":[{"appName":"Safari","lowResPngUrl":"https://cdn.example/icon.png","icnsUrl":"https://cdn.example/icon.icns","iOSUrl":"https://cdn.example/icon@2x.png","category":"Browser","credit":"Elías","uploadedBy":"elias","creditUrl":"https://example.com/elias","downloads":7523}],"query":"Safari","totalHits":1}
             """);
-        var entries = MacOsIconGalleryCatalog.Parse(json);
-        Check(entries.Count == 1 && entries[0].Id == "finder-2026-09-23" && entries[0].Developer == "Apple");
+        var hits = MacOsIconsApi.ParseSearchResponse(json);
+        Check(hits.Count == 1 && hits[0].AppName == "Safari" && hits[0].Credit == "Elías" &&
+              hits[0].Downloads == 7523 && hits[0].IosUrl!.EndsWith("@2x.png", StringComparison.Ordinal));
     });
-    Test("Gallery parser rejects non-array root", () =>
+    Test("macOSicons API parser rejects an array root", () =>
     {
         try
         {
-            MacOsIconGalleryCatalog.Parse(Encoding.UTF8.GetBytes("{\"id\":\"finder\"}"));
+            MacOsIconsApi.ParseSearchResponse(Encoding.UTF8.GetBytes("[]"));
             throw new InvalidOperationException("Expected parser failure.");
         }
         catch (InvalidDataException) { }
     });
+    Test("macOSicons attribution keeps distinct credit and uploader", () =>
+        Check(MacOsIconsApi.FormatCreatorAttribution("Designer", "Uploader", "App") ==
+              "Designer · Uploader"));
+    Test("macOSicons attribution deduplicates creator names", () =>
+        Check(MacOsIconsApi.FormatCreatorAttribution(" Designer ", "designer", "App") ==
+              "Designer"));
     Test("Default Explorer maps to Apple Finder", () =>
     {
-        var plan = MacOsIconGalleryCatalog.CreatePlan(new Pin("files", "Dateien", "explorer.exe", "explorer"));
+        var plan = MacOsIconSearchCatalog.CreatePlan(new Pin("files", "Dateien", "explorer.exe", "explorer"));
         Check(plan is { ExactName: "Finder", RequireAppleDeveloper: true });
     });
     Test("Pin id has mapping priority", () =>
     {
-        var plan = MacOsIconGalleryCatalog.CreatePlan(new Pin("system", "Chrome", "chrome.exe", "chrome"));
+        var plan = MacOsIconSearchCatalog.CreatePlan(new Pin("system", "Chrome", "chrome.exe", "chrome"));
         Check(plan is { ExactName: "System Settings", RequireAppleDeveloper: true });
     });
     Test("Windows media player maps to QuickTime Player", () =>
     {
-        var plan = MacOsIconGalleryCatalog.CreatePlan(new Pin("media", "Media Player", "wmplayer.exe", "wmplayer"));
+        var plan = MacOsIconSearchCatalog.CreatePlan(new Pin("media", "Media Player", "wmplayer.exe", "wmplayer"));
         Check(plan is { ExactName: "QuickTime Player", RequireAppleDeveloper: true });
     });
     Test("Curated Windows aliases map to exact Apple app names", () =>
@@ -161,43 +215,37 @@ try
             (new("text", "WordPad", "wordpad.exe", "wordpad"), "TextEdit")
         };
         foreach (var item in cases)
-            Check(MacOsIconGalleryCatalog.CreatePlan(item.Pin) is
+            Check(MacOsIconSearchCatalog.CreatePlan(item.Pin) is
                 { RequireAppleDeveloper: true } plan && plan.ExactName == item.Name);
     });
     Test("Third-party app remains an exact non-Apple match", () =>
     {
-        var plan = MacOsIconGalleryCatalog.CreatePlan(new Pin("steam", "Steam", "steam.exe", "steam"));
+        var plan = MacOsIconSearchCatalog.CreatePlan(new Pin("steam", "Steam", "steam.exe", "steam"));
         Check(plan is { ExactName: "Steam", RequireAppleDeveloper: false });
     });
     Test("Third-party alias falls back to exact visible name", () =>
     {
-        var plans = MacOsIconGalleryCatalog.CreatePlans(
+        var plans = MacOsIconSearchCatalog.CreatePlans(
             new Pin("chat", "Teams", "ms-teams.exe", "msteams"));
         Check(plans.Count >= 2 && plans[0].ExactName == "Microsoft Teams" &&
               plans.Any(plan => plan.ExactName == "Teams") &&
               plans.All(plan => !plan.RequireAppleDeveloper));
     });
-    Test("System mapping requires Apple developer", () =>
-    {
-        var entries = new[]
-        {
-            new MacOsIconGalleryEntry("finder-third-2027-01-01", "Finder", "2027-01-01", null, null, "Other", "x"),
-            new MacOsIconGalleryEntry("finder-apple-2026-09-23", "Finder", "2026-09-23", null, null, "Apple", "x")
-        };
-        var plan = MacOsIconGalleryCatalog.CreatePlan(new Pin("files", "Dateien", "explorer.exe", "explorer"))!;
-        Check(MacOsIconGalleryCatalog.FindLatestExact(entries, plan)?.Developer == "Apple");
-    });
     var store = new SettingsStore(temp);
     Test("Missing settings return defaults", () => Check(store.Load().IconSize == Settings.DefaultIconSize));
     Test("JSON round trip", () =>
     {
-        var icon = new IconReference("macosicongallery", new string('d', 64), "search-data-v1", new string('b', 64));
+        var icon = new IconReference("macosicons", new string('d', 64), "api-v1", new string('b', 64));
         store.Save(new Settings { Appearance = Appearance.Dark, Language = UiLanguage.English, Startup = StartupMode.UserLogin, Updates = UpdateMode.AutomaticDownload, IconSize = 61, AutoHide = true, HideTaskbar = true,
+            IconStyle = DockIconStyle.Windows, MenuBarEnabled = true, MenuBarAutoHide = true, MenuBarAlwaysOnTop = false,
             OnlineIcons = OnlineIconMode.OnDemand, OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion,
+            DockIconOverrides = new Dictionary<string, IconReference> { ["trash-full"] = new("velishell-custom", new string('e', 64), "1", new string('e', 64)) },
             Pins = [new("steam", "Steam", "steam.exe", "steam", icon)] });
         var s = store.Load();
         Check(s.Appearance == Appearance.Dark && s.Language == UiLanguage.English && s.Startup == StartupMode.UserLogin && s.Updates == UpdateMode.AutomaticDownload && s.IconSize == 61 && s.AutoHide && s.HideTaskbar
-            && s.OnlineIcons == OnlineIconMode.OnDemand && s.Pins[0].Icon?.IconId == new string('d', 64));
+            && s.IconStyle == DockIconStyle.Windows && s.MenuBarEnabled && s.MenuBarAutoHide && !s.MenuBarAlwaysOnTop
+            && s.OnlineIcons == OnlineIconMode.OnDemand && s.Pins[0].Icon?.IconId == new string('d', 64)
+            && s.GetDockIconOverride("trash-full")?.IconId == new string('e', 64));
     });
     Test("Backup created on second save", () => { store.Save(new Settings { IconSize = 43 }); Check(File.Exists(store.FilePath + ".bak")); });
     Test("Recover corrupt JSON from backup", () => { File.WriteAllText(store.FilePath, "{broken"); var s = store.Load(); Check(s.IconSize == 61 && store.LoadWarning is not null); });

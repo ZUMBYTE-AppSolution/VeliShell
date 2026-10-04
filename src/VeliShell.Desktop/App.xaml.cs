@@ -17,10 +17,13 @@ public partial class App : Application
     private DispatcherTimer? _saveTimer;
     private DispatcherTimer? _updateTimer;
     private PreferencesWindow? _preferencesWindow;
+    private MenuBarWindow? _menuBarWindow;
     private bool _saveErrorShown;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _iconScanGate = new(1, 1);
     private readonly SemaphoreSlim _updateCheckGate = new(1, 1);
+    private readonly SemaphoreSlim _shellLayoutGate = new(1, 1);
+    private int _emergencyRestoreRequests;
     private readonly GitHubReleaseUpdateService _updates = new();
     private UpdateWindow? _updateWindow;
     private SemanticVersion? _lastOfferedVersion;
@@ -55,6 +58,9 @@ public partial class App : Application
             MessageBox.Show(L("App.AlreadyRunning"), L("Common.ErrorTitle"));
             Shutdown(); return;
         }
+        // A second rejected process must never touch the active owner's shell
+        // state. Recover non-persistent work areas only after mutex ownership.
+        Taskbars.RecoverWorkAreasAfterOwnershipConfirmed();
         DispatcherUnhandledException += (_, args) =>
         {
             Log("Unhandled UI exception", args.Exception);
@@ -80,6 +86,13 @@ public partial class App : Application
         Dock = new DockWindow(this);
         MainWindow = Dock;
         Dock.Show();
+        if (!SyncMenuBar())
+        {
+            Preferences.MenuBarEnabled = false;
+            SyncMenuBar();
+            SaveNow();
+            Log("The saved menu-bar preference was disabled because Windows did not accept its work-area reservation.");
+        }
         _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
         _updateTimer.Tick += async (_, _) =>
         {
@@ -87,7 +100,8 @@ public partial class App : Application
                 await CheckForUpdatesAsync(userInitiated: false, Dock);
         };
         _updateTimer.Start();
-        if (Preferences.OnlineIconConsentVersion >= Settings.CurrentOnlineIconConsentVersion &&
+        if (Preferences.IconStyle == DockIconStyle.Mac &&
+            Preferences.OnlineIconConsentVersion >= Settings.CurrentOnlineIconConsentVersion &&
             Preferences.OnlineIcons == OnlineIconMode.AutomaticExactMatches)
             _ = ApplyAutomaticIconsAsync(Preferences.Pins);
         if (!Preferences.FirstRunCompleted)
@@ -131,6 +145,7 @@ public partial class App : Application
             LocalizationService.Current.Apply(Preferences.Language);
         Themes.Apply(Preferences.Appearance);
         PreferencesChanged?.Invoke();
+        SyncMenuBar();
         _saveTimer?.Stop();
         _saveTimer?.Start();
     }
@@ -145,6 +160,27 @@ public partial class App : Application
         _preferencesWindow.Show();
         if (_preferencesWindow.WindowState == WindowState.Minimized) _preferencesWindow.WindowState = WindowState.Normal;
         _preferencesWindow.Activate();
+    }
+
+    private bool SyncMenuBar()
+    {
+        if (Preferences.MenuBarEnabled)
+        {
+            if (_menuBarWindow is null)
+            {
+                _menuBarWindow = new MenuBarWindow(this);
+                _menuBarWindow.Closed += (_, _) => _menuBarWindow = null;
+            }
+            if (!_menuBarWindow.IsVisible) _menuBarWindow.Show();
+            return _menuBarWindow.WorkAreaReserved;
+        }
+        else if (_menuBarWindow is not null)
+        {
+            var window = _menuBarWindow;
+            _menuBarWindow = null;
+            window.Close();
+        }
+        return true;
     }
 
     internal string GetUpdateStatusText() => UpdateState switch
@@ -259,6 +295,28 @@ public partial class App : Application
         bool showError = true,
         bool recoverExistingHiddenTaskbars = false)
     {
+        var gateEntered = false;
+        try
+        {
+            await _shellLayoutGate.WaitAsync(_shutdown.Token);
+            gateEntered = true;
+            return await SetTaskbarHiddenCoreAsync(hidden, showError, recoverExistingHiddenTaskbars);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            return false;
+        }
+        finally
+        {
+            if (gateEntered) _shellLayoutGate.Release();
+        }
+    }
+
+    private async Task<bool> SetTaskbarHiddenCoreAsync(
+        bool hidden,
+        bool showError,
+        bool recoverExistingHiddenTaskbars)
+    {
         if (hidden && !Dock.TaskbarRecoveryHotkeyAvailable)
         {
             // A persisted hide request may mean the previous VeliShell process was
@@ -305,31 +363,150 @@ public partial class App : Application
         return success;
     }
 
+    internal async Task<bool> SetMenuBarEnabledAsync(bool enabled, bool showError = true)
+    {
+        var gateEntered = false;
+        try
+        {
+            await _shellLayoutGate.WaitAsync(_shutdown.Token);
+            gateEntered = true;
+            if (Preferences.MenuBarEnabled == enabled &&
+                (!enabled || _menuBarWindow?.WorkAreaReserved == true))
+                return true;
+
+            // Taskbar work-area snapshots must be restored while the old menu
+            // appbar is still registered. After changing the appbar we capture
+            // a fresh baseline and re-hide, preserving both reservations.
+            var rehideTaskbar = Preferences.HideTaskbar || Taskbars.IsHidden;
+            if (Taskbars.IsHidden && !await Taskbars.RestoreAsync())
+            {
+                if (showError)
+                    MessageBox.Show(Taskbars.LastStatus, L("Common.ErrorTitle"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            UpdatePreferences(settings => settings.MenuBarEnabled = enabled);
+            var reservationConfirmed = !enabled || _menuBarWindow?.WorkAreaReserved == true;
+            if (!reservationConfirmed)
+            {
+                UpdatePreferences(settings => settings.MenuBarEnabled = false);
+                if (showError)
+                    MessageBox.Show(L("MenuBar.ReservationFailed"), L("Common.ErrorTitle"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            var shouldRehideTaskbar = ShouldRehideTaskbarAfterMenuBarChange(
+                rehideTaskbar,
+                Volatile.Read(ref _emergencyRestoreRequests) > 0);
+            if (rehideTaskbar && !shouldRehideTaskbar && Preferences.HideTaskbar)
+                UpdatePreferences(settings => settings.HideTaskbar = false);
+
+            var taskbarConfirmed = !shouldRehideTaskbar ||
+                await SetTaskbarHiddenCoreAsync(
+                    true,
+                    showError,
+                    recoverExistingHiddenTaskbars: false);
+            if (ShouldUndoMenuBarRehide(
+                    shouldRehideTaskbar,
+                    Volatile.Read(ref _emergencyRestoreRequests) > 0))
+            {
+                // The hotkey can arrive while HideAsync is in its verification
+                // delays. Restore before releasing the gate so the completed
+                // menu transition cannot hand an immediately re-hidden shell to
+                // the queued emergency operation.
+                taskbarConfirmed = await Taskbars.RestoreAsync(recoverCurrentShellTaskbars: true);
+                UpdatePreferences(settings =>
+                    settings.HideTaskbar = !taskbarConfirmed && Taskbars.IsHidden);
+            }
+            return reservationConfirmed && taskbarConfirmed;
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            return false;
+        }
+        finally
+        {
+            if (gateEntered) _shellLayoutGate.Release();
+        }
+    }
+
+    private static bool ShouldRehideTaskbarAfterMenuBarChange(
+        bool taskbarWasRequestedHidden,
+        bool emergencyRestorePending) =>
+        taskbarWasRequestedHidden && !emergencyRestorePending;
+
+    private static bool ShouldUndoMenuBarRehide(
+        bool menuRehideWasAttempted,
+        bool emergencyRestorePending) =>
+        menuRehideWasAttempted && emergencyRestorePending;
+
     public async void RestoreTaskbarFromEmergencyHotkey()
     {
-        var restored = await Taskbars.RestoreAsync(recoverCurrentShellTaskbars: true);
-        UpdatePreferences(s => s.HideTaskbar = !restored && Taskbars.IsHidden);
-        ShowPreferences();
-        MessageBox.Show(
-            restored
-                ? L("App.EmergencyRestored")
-                : Taskbars.LastStatus,
-            L("App.EmergencyTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
+        Interlocked.Increment(ref _emergencyRestoreRequests);
+        var gateEntered = false;
+        var restored = false;
+        var status = L("Taskbar.RestoreUnconfirmed");
+        try
+        {
+            // Do not cancel an explicit recovery request during shutdown. It is
+            // safer to complete shell restoration than to abandon it while a
+            // menu-bar transition owns the layout gate.
+            await _shellLayoutGate.WaitAsync();
+            gateEntered = true;
+            restored = await Taskbars.RestoreAsync(recoverCurrentShellTaskbars: true);
+            status = Taskbars.LastStatus;
+            UpdatePreferences(s => s.HideTaskbar = !restored && Taskbars.IsHidden);
+        }
+        catch (Exception exception)
+        {
+            Log("Emergency taskbar restoration failed", exception);
+            status = Taskbars.LastStatus;
+            try
+            {
+                if (Preferences is not null)
+                    UpdatePreferences(s => s.HideTaskbar = Taskbars.IsHidden);
+            }
+            catch (Exception preferenceException)
+            {
+                Log("Could not retain emergency taskbar recovery state", preferenceException);
+            }
+        }
+        finally
+        {
+            if (gateEntered) _shellLayoutGate.Release();
+            Interlocked.Decrement(ref _emergencyRestoreRequests);
+        }
+
+        if (_shutdown.IsCancellationRequested) return;
+        try
+        {
+            ShowPreferences();
+            MessageBox.Show(
+                restored ? L("App.EmergencyRestored") : status,
+                L("App.EmergencyTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            Log("Could not present emergency taskbar recovery status", exception);
+        }
     }
 
     internal async Task<IconScanSummary> FindAndApplyOnlineIconsAsync(IEnumerable<Pin> candidates)
     {
+        if (Preferences.IconStyle != DockIconStyle.Mac)
+            return new IconScanSummary(0, 0, 0, L("Apps.OnlineRequiresMacStyle"));
         if (Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion)
-            return new IconScanSummary(0, 0, 0, L("App.GalleryNotApproved"));
+            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsNotApproved"));
 
-        // The remote request is always the same fixed public catalog URL. App,
-        // document and folder names are compared only after it is in memory.
+        // Only eligible application names are sent to the documented,
+        // authenticated provider endpoint. Documents and folders stay local.
         var pins = candidates
             .Where(MacOsIconGalleryService.IsEligibleAppPin)
             .DistinctBy(pin => pin.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (pins.Count == 0)
-            return new IconScanSummary(0, 0, 0, L("App.GalleryNoPins"));
+            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsNoPins"));
 
         await _iconScanGate.WaitAsync(_shutdown.Token);
         try
@@ -358,14 +535,14 @@ public partial class App : Application
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
         {
-            return new IconScanSummary(0, 0, 0, L("App.GalleryCanceled"));
+            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsCanceled"));
         }
         catch (Exception ex)
         {
-            Log("macOS Icon Gallery search failed", ex);
+            Log("macOSicons.com search failed", ex);
             var message = ex is MacOsIconGalleryServiceException known
                 ? known.Message
-                : L("App.GalleryUnavailable");
+                : L("App.OnlineIconsUnavailable");
             return new IconScanSummary(0, 0, 1, message);
         }
         finally
@@ -376,20 +553,22 @@ public partial class App : Application
 
     internal async Task ApplyAutomaticIconsAsync(IEnumerable<Pin> pins)
     {
-        if (Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
+        if (Preferences.IconStyle != DockIconStyle.Mac ||
+            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
             Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
         try
         {
             var result = await FindAndApplyOnlineIconsAsync(pins);
-            if (result.Failed > 0) Log("Automatic macOS Icon Gallery scan: " + result.Message);
+            if (result.Failed > 0) Log("Automatic macOSicons.com scan: " + result.Message);
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-        catch (Exception ex) { Log("Automatic macOS Icon Gallery scan failed", ex); }
+        catch (Exception ex) { Log("Automatic macOSicons.com scan failed", ex); }
     }
 
     internal IconReference? GetRunningOnlineIcon(string runningId)
     {
-        if (Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
+        if (Preferences.IconStyle != DockIconStyle.Mac ||
+            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
             Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return null;
         lock (_runningIconGate)
             return _runningOnlineIcons.GetValueOrDefault(runningId);
@@ -397,7 +576,8 @@ public partial class App : Application
 
     internal void QueueAutomaticRunningIcons(IEnumerable<Pin> candidates)
     {
-        if (Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
+        if (Preferences.IconStyle != DockIconStyle.Mac ||
+            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
             Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
 
         List<Pin> pending;
@@ -452,7 +632,7 @@ public partial class App : Application
             if (changed && !_shutdown.IsCancellationRequested)
                 await Dispatcher.InvokeAsync(() => Dock.RefreshOnlineIcons());
             var failure = results.FirstOrDefault(result => result.Error is not null)?.Error;
-            if (failure is not null) Log("Automatic running-app Gallery scan: " + failure);
+            if (failure is not null) Log("Automatic running-app macOSicons.com scan: " + failure);
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception ex)
@@ -466,7 +646,7 @@ public partial class App : Application
                     _runningIconRetryAfter[pin.Id] = retryAfter;
                 }
             }
-            Log("Automatic running-app Gallery scan failed", ex);
+            Log("Automatic running-app macOSicons.com scan failed", ex);
         }
         finally
         {

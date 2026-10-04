@@ -13,6 +13,8 @@ public enum UpdateMode { Manual, Notify, AutomaticDownload }
 
 public enum OnlineIconMode { Disabled, OnDemand, AutomaticExactMatches }
 
+public enum DockIconStyle { Mac, Windows }
+
 public sealed record IconReference(
     string Provider,
     string IconId,
@@ -28,12 +30,13 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 5;
-    public const int CurrentOnlineIconConsentVersion = 2;
+    public const int CurrentSchemaVersion = 7;
+    public const int CurrentOnlineIconConsentVersion = 3;
     public const double MinimumIconSize = 32;
     public const double DefaultIconSize = 52;
     public const double MaximumIconSize = 96;
     public const int MaximumPins = 32;
+    public const int MaximumDockIconOverrides = 132;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Appearance Appearance { get; set; } = Appearance.System;
@@ -47,10 +50,16 @@ public sealed class Settings
     public bool AutoHide { get; set; }
     public bool AlwaysOnTop { get; set; } = true;
     public bool HideTaskbar { get; set; }
+    public DockIconStyle IconStyle { get; set; } = DockIconStyle.Mac;
+    public bool MenuBarEnabled { get; set; }
+    public bool MenuBarAutoHide { get; set; }
+    public bool MenuBarAlwaysOnTop { get; set; } = true;
     public OnlineIconMode OnlineIcons { get; set; } = OnlineIconMode.Disabled;
     public int OnlineIconConsentVersion { get; set; }
     public bool FirstRunCompleted { get; set; }
     public List<Pin> Pins { get; set; } = Defaults();
+    public Dictionary<string, IconReference> DockIconOverrides { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public static List<Pin> Defaults() =>
     [
@@ -68,10 +77,15 @@ public sealed class Settings
         if (!Enum.IsDefined(Language)) Language = UiLanguage.System;
         if (!Enum.IsDefined(Startup)) Startup = StartupMode.Disabled;
         if (!Enum.IsDefined(Updates)) Updates = UpdateMode.Notify;
+        if (!Enum.IsDefined(IconStyle)) IconStyle = DockIconStyle.Mac;
         if (!Enum.IsDefined(OnlineIcons)) OnlineIcons = OnlineIconMode.Disabled;
         OnlineIconConsentVersion = Math.Clamp(OnlineIconConsentVersion, 0, CurrentOnlineIconConsentVersion);
         if (OnlineIconConsentVersion < CurrentOnlineIconConsentVersion)
             OnlineIcons = OnlineIconMode.Disabled;
+        // API results are now presented to the user with creator attribution;
+        // unattended exact-match replacement is intentionally retired.
+        if (OnlineIcons == OnlineIconMode.AutomaticExactMatches)
+            OnlineIcons = OnlineIconMode.OnDemand;
         IconSize = double.IsFinite(IconSize)
             ? Math.Clamp(IconSize, MinimumIconSize, MaximumIconSize)
             : DefaultIconSize;
@@ -85,20 +99,54 @@ public sealed class Settings
             })
             .DistinctBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
             .Take(MaximumPins).ToList();
+        DockIconOverrides = (DockIconOverrides ?? new Dictionary<string, IconReference>())
+            .Select(pair => (Key: NormalizeDockIconKey(pair.Key), Icon: NormalizeIcon(pair.Value)))
+            .Where(pair => pair.Key is not null && pair.Icon is not null)
+            .DistinctBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(MaximumDockIconOverrides)
+            .ToDictionary(
+                pair => pair.Key!,
+                pair => pair.Icon!,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    public IconReference? GetDockIconOverride(string key) =>
+        DockIconOverrides.TryGetValue(key, out var icon) ? icon : null;
+
+    public static string RunningDockIconKey(string executable, string processName)
+    {
+        var identity = string.IsNullOrWhiteSpace(executable) ? processName : executable;
+        identity = identity.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .ToUpperInvariant();
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity));
+        return "running-" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static IconReference? NormalizeIcon(IconReference? icon)
     {
-        // References from the retired macosicons.com API deliberately fall back
-        // to the local Windows icon. Its cache and protected key are not deleted.
-        if (icon is null || !string.Equals(icon.Provider, "macosicongallery", StringComparison.Ordinal)) return null;
+        // References from the retired, undocumented Gallery catalog deliberately
+        // fall back to the local Windows icon.
+        if (icon is null) return null;
+        var isMacOsIcons = string.Equals(icon.Provider, "macosicons", StringComparison.Ordinal);
+        var isLocal = string.Equals(icon.Provider, "velishell-custom", StringComparison.Ordinal);
+        if (!isMacOsIcons && !isLocal) return null;
         var id = icon.IconId?.Trim() ?? "";
         if (id.Length is < 1 or > 64 || id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '-'))) return null;
         var version = icon.CatalogVersion?.Trim() ?? "";
         if (version.Length is < 1 or > 32 || version.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-'))) return null;
         var hash = icon.ContentSha256?.Trim().ToLowerInvariant() ?? "";
         if (hash.Length != 64 || hash.Any(c => !Uri.IsHexDigit(c))) return null;
-        return new IconReference("macosicongallery", id.ToLowerInvariant(), version, hash);
+        if (isLocal && (id.Length != 64 || !string.Equals(id, hash, StringComparison.OrdinalIgnoreCase) || version != "1"))
+            return null;
+        return new IconReference(isLocal ? "velishell-custom" : "macosicons", id.ToLowerInvariant(), version, hash);
+    }
+
+    private static string? NormalizeDockIconKey(string? key)
+    {
+        key = key?.Trim().ToLowerInvariant();
+        if (key is "velishell" or "overflow" or "trash-empty" or "trash-full") return key;
+        if (key is not { Length: 72 } || !key.StartsWith("running-", StringComparison.Ordinal)) return null;
+        return key[8..].All(Uri.IsHexDigit) ? key : null;
     }
 }
 

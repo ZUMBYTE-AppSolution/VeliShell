@@ -14,8 +14,8 @@ GitHub gelieferten SHA-256-Digest geprüft. Der Installer wird niemals automatis
 gestartet, sondern erst nach einer separaten, aktuellen Bestätigung.
 
 SHA-256 schützt vor einem beschädigten oder nachträglich veränderten Download, ist
-aber kein Ersatz für eine unabhängige Herausgebersignatur. Version 0.3.0 besitzt noch
-keinen fest hinterlegten Zumbyte-Zertifikatfingerabdruck. „Signatur gültig“ bedeutet
+aber kein Ersatz für eine unabhängige Herausgebersignatur. Solange VeliShell noch
+keinen fest hinterlegten Zumbyte-Zertifikatfingerabdruck besitzt, bedeutet „Signatur gültig“
 in diesem Stand deshalb ausschließlich, dass Windows der Signaturkette vertraut; der
 angezeigte Herausgeber ist nicht zusätzlich durch VeliShell auf Zumbyte festgelegt.
 Bevor VeliShell eine signierte Release-Reihe als Zumbyte-identifiziert bezeichnet,

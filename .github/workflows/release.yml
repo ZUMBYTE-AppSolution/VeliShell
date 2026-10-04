@@ -18,7 +18,7 @@ jobs:
   release-windows-x64:
     name: Build and publish Windows x64
     runs-on: windows-2025
-    timeout-minutes: 35
+    timeout-minutes: 50
     defaults:
       run:
         shell: pwsh
@@ -63,7 +63,7 @@ jobs:
           $hasPassword = -not [string]::IsNullOrWhiteSpace($env:SIGNING_PASSWORD)
           if ($hasPfx -xor $hasPassword) { throw 'Both Windows signing secrets must be configured together.' }
           if ($hasPfx) {
-            $executables = @('./out/portable/VeliShell.exe', './out/portable/UpdateService/VeliShell.UpdateService.exe')
+            $executables = @('./out/portable/VeliShell.exe')
             ./tools/Sign-WindowsArtifacts.ps1 -Files $executables -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
             'signed=true' >> $env:GITHUB_OUTPUT
           } else {
@@ -71,11 +71,8 @@ jobs:
             'signed=false' >> $env:GITHUB_OUTPUT
           }
 
-      - name: Build per-machine MSI with optional service feature
+      - name: Build per-machine MSI
         run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.value }}' -PublishDirectory ./out/portable
-
-      - name: Install, start and remove optional Windows service
-        run: ./tools/Test-InstalledUpdateService.ps1 -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi'
 
       - name: Sign installer when certificate secrets are configured
         if: steps.sign_app.outputs.signed == 'true'
@@ -83,6 +80,9 @@ jobs:
           SIGNING_PFX: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
           SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
         run: ./tools/Sign-WindowsArtifacts.ps1 -Files './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi' -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
+
+      - name: Smoke-test MSI install, uninstall and v0.3.1 upgrade
+        run: ./tools/Test-InstallerLifecycle.ps1 -Version '${{ steps.version.outputs.value }}' -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi' -AllowMachineChanges
 
       - name: Create release artifacts and security notice
         run: |

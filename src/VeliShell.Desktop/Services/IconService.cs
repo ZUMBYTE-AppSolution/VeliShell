@@ -18,16 +18,40 @@ internal static class IconService
 
     internal static ImageSource For(string id, string target = "", IconReference? icon = null)
     {
-        if (id == "velishell") return VeliShellAsset();
-        if (MacOsIconGalleryService.TryLoad(icon) is { } online) return online;
-        if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow") return BuiltIn(id);
-        var path = Environment.ExpandEnvironmentVariables(target);
-        if (string.IsNullOrWhiteSpace(path) || !(File.Exists(path) || Directory.Exists(path))) return BuiltIn("app");
+        // A user-selected local image is an explicit override in either icon
+        // style. Online catalog artwork keeps the existing Mac-style behavior.
+        if (CustomIconService.TryLoad(icon) is { } custom) return custom;
+        var iconStyle = CurrentIconStyle();
+        if (iconStyle == DockIconStyle.Mac)
+        {
+            if (MacOsIconGalleryService.TryLoad(icon) is { } online) return online;
+            if (id == "velishell") return VeliShellAsset();
+            if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow")
+                return id switch
+                {
+                    "trash" => BundledAsset("trash", "/VeliShell;component/Assets/SystemIcons/RecycleBinEmpty.png"),
+                    "trash-full" => BundledAsset("trash-full", "/VeliShell;component/Assets/SystemIcons/RecycleBinFull.png"),
+                    _ => BuiltIn(id)
+                };
+        }
+        else if (id == "velishell")
+        {
+            return VeliShellAsset();
+        }
+        else if (id == "overflow")
+        {
+            return BuiltIn(id);
+        }
+
+        var path = ResolveShellTarget(id, target, iconStyle);
+        if (string.IsNullOrWhiteSpace(path) ||
+            !(path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || File.Exists(path) || Directory.Exists(path)))
+            return BuiltIn("app");
         try
         {
-            path = Path.GetFullPath(path);
+            if (!path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) path = Path.GetFullPath(path);
             var pixels = RequestedPixelSize();
-            var cacheKey = $"shell:{pixels}:{path}";
+            var cacheKey = $"shell:{iconStyle}:{id}:{pixels}:{path}";
             if (TryGetCached(cacheKey, out var cached)) return cached;
 
             var image = ShellImage(path, pixels) ?? LegacyShellIcon(path) ?? BuiltIn("app");
@@ -38,19 +62,78 @@ internal static class IconService
         return BuiltIn("app");
     }
 
-    private static ImageSource VeliShellAsset()
+    private static DockIconStyle CurrentIconStyle()
     {
-        const string cacheKey = "asset:velishell";
+        try
+        {
+            if (Application.Current is App { Preferences: { } preferences }) return preferences.IconStyle;
+        }
+        catch (InvalidOperationException)
+        {
+            // A design-time or test host may not have a fully initialized app.
+        }
+        return DockIconStyle.Mac;
+    }
+
+    private static string ResolveShellTarget(string id, string target, DockIconStyle style)
+    {
+        var expanded = Environment.ExpandEnvironmentVariables(target ?? "").Trim();
+        if (style != DockIconStyle.Windows) return expanded;
+
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        var candidates = id switch
+        {
+            "files" => [Path.Combine(windows, "explorer.exe")],
+            "notes" => [Path.Combine(windows, "System32", "notepad.exe")],
+            "system" => [Path.Combine(windows, "ImmersiveControlPanel", "SystemSettings.exe")],
+            "browser" =>
+            [
+                Path.Combine(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+                Path.Combine(programFiles, "Microsoft", "Edge", "Application", "msedge.exe")
+            ],
+            "trash" or "trash-full" => ["shell:RecycleBinFolder"],
+            _ => Array.Empty<string>()
+        };
+        var known = candidates.FirstOrDefault(candidate =>
+            candidate.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || File.Exists(candidate));
+        if (!string.IsNullOrWhiteSpace(known)) return known;
+        if (File.Exists(expanded) || Directory.Exists(expanded) ||
+            expanded.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) return expanded;
+
+        if (!expanded.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+            expanded.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0)
+            return expanded;
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "")
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            try
+            {
+                var candidate = Path.Combine(directory, expanded);
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException) { }
+        }
+        return expanded;
+    }
+
+    private static ImageSource VeliShellAsset()
+        => BundledAsset("velishell", "/VeliShell;component/Assets/VeliShellApp.png");
+
+    private static ImageSource BundledAsset(string id, string packUri)
+    {
+        var cacheKey = "asset:" + id;
         if (TryGetCached(cacheKey, out var cached)) return cached;
 
         ImageSource image;
         try
         {
-            var resourceUri = new Uri("/VeliShell;component/Assets/VeliShellApp.png", UriKind.Relative);
+            var resourceUri = new Uri(packUri, UriKind.Relative);
             var resource = Application.GetResourceStream(resourceUri);
             if (resource?.Stream is null)
             {
-                image = BuiltIn("velishell");
+                image = BuiltIn(id);
             }
             else
             {
@@ -66,8 +149,8 @@ internal static class IconService
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or NotSupportedException or UriFormatException)
         {
-            App.Log("Could not load the bundled VeliShell icon", exception);
-            image = BuiltIn("velishell");
+            App.Log("Could not load the bundled " + id + " icon", exception);
+            image = BuiltIn(id);
         }
 
         StoreCached(cacheKey, image);

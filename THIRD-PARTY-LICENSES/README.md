@@ -1,7 +1,7 @@
 # Mitgelieferte Drittanbieter-Lizenztexte
 
 Dieser Ordner enthält die unveränderten Lizenz- und Hinweistexte der
-.NET-Komponenten, die VeliShell 0.3.0 im Self-contained-Paket für Windows x64
+.NET-Komponenten, die VeliShell 0.4.0 im Self-contained-Paket für Windows x64
 mitliefert.
 
 | Komponente | Version | Mitgelieferte Originaltexte |

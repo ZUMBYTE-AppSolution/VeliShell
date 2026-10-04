@@ -3,17 +3,28 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
 
 internal sealed record MacOsIconAttribution(string Text, string? SourceUrl);
+
+internal sealed record MacOsIconSearchHit(
+    string AppName,
+    Uri? LowResPngUrl,
+    Uri? IcnsUrl,
+    Uri? IosUrl,
+    string? Category,
+    string Credit,
+    string? UploadedBy,
+    Uri? CreditUrl,
+    long Downloads);
 
 internal sealed record MacOsIconMatchResult(
     string PinId,
@@ -30,6 +41,9 @@ internal sealed record MacOsIconDownloadResult(
 internal enum MacOsIconGalleryFailure
 {
     InvalidInput,
+    MissingApiKey,
+    InvalidApiKey,
+    RateLimited,
     Network,
     InvalidResponse
 }
@@ -43,19 +57,21 @@ internal sealed class MacOsIconGalleryServiceException : Exception
 }
 
 /// <summary>
-/// Opt-in client for macosicongallery.com. VeliShell downloads the fixed public
-/// catalog once and performs every name comparison locally. Only detail pages
-/// selected from that catalog and their declared PNG assets are requested.
+/// Opt-in client for the documented macOSicons.com API. Apple Search API
+/// artwork is deliberately not used: Apple's terms restrict it to Store
+/// promotion next to an App Store link, not persistent launcher artwork.
 /// </summary>
 internal static class MacOsIconGalleryService
 {
-    internal const string Provider = "macosicongallery";
-    internal const string CatalogVersion = "search-data-v1";
+    internal const string Provider = "macosicons";
+    internal const string CatalogVersion = "api-v1";
 
-    private const int CacheSchema = 2;
+    private static readonly string UserAgent =
+        $"VeliShell/{typeof(MacOsIconGalleryService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}";
+
+    private const int CacheSchema = 3;
     private const int MaximumPins = 32;
-    private const int MaximumCatalogBytes = 768 * 1024;
-    private const int MaximumDetailBytes = 512 * 1024;
+    private const int MaximumSearchBytes = 1024 * 1024;
     private const int MaximumImageBytes = 5 * 1024 * 1024;
     private const int MaximumMetadataBytes = 48 * 1024;
     private const int MinimumPixels = 128;
@@ -66,13 +82,11 @@ internal static class MacOsIconGalleryService
     private const long MaximumCacheBytes = 64L * 1024L * 1024L;
     private const int MaximumRedirects = 2;
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromDays(30);
-    private static readonly TimeSpan CatalogRetryDelay = TimeSpan.FromSeconds(30);
-    private static readonly Uri CatalogEndpoint = new("https://www.macosicongallery.com/search/data.json");
-    private static readonly Uri SourceUrl = new("https://www.macosicongallery.com/");
+    private static readonly Uri SearchEndpoint = new("https://api.macosicons.com/api/v1/search");
+    private static readonly Uri SourceUrl = new("https://macosicons.com/");
     private static readonly SemaphoreSlim NetworkGate = new(2, 2);
-    private static readonly SemaphoreSlim CatalogGate = new(1, 1);
     private static readonly object CacheMaintenanceGate = new();
-    private static readonly HttpClient WebsiteHttp = CreateHttpClient(IsAllowedWebsiteHost);
+    private static readonly HttpClient SearchHttp = CreateHttpClient(IsAllowedApiHost);
     private static readonly HttpClient ImageHttp = CreateHttpClient(IsAllowedImageHost);
     private static readonly ConcurrentDictionary<string, MemoryImage> MemoryCache = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -81,22 +95,10 @@ internal static class MacOsIconGalleryService
         PropertyNameCaseInsensitive = false,
         MaxDepth = 10
     };
-    private static readonly Regex TagRegex = new(
-        "<(?:meta|img)\\b[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(250));
-    private static readonly Regex AttributeRegex = new(
-        "(?<name>[A-Za-z_:][-A-Za-z0-9_:.]*)\\s*=\\s*(?:\"(?<dq>[^\"]*)\"|'(?<sq>[^']*)')",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(250));
-
     private static readonly HashSet<string> SafeAppProtocols = new(StringComparer.OrdinalIgnoreCase)
     {
         "microsoft-edge", "ms-settings"
     };
-
-    private static IReadOnlyList<MacOsIconGalleryEntry>? _catalog;
-    private static DateTimeOffset _lastCatalogAttemptUtc = DateTimeOffset.MinValue;
 
     static MacOsIconGalleryService() => PurgeExpiredCache();
 
@@ -125,7 +127,7 @@ internal static class MacOsIconGalleryService
                 // Packaged Windows apps often expose a shell link without a
                 // file-system executable. Only known Apple-analogy mappings
                 // may use that path; arbitrary document shortcuts remain out.
-                return MacOsIconGalleryCatalog.CreatePlan(pin) is { RequireAppleDeveloper: true };
+                return MacOsIconSearchCatalog.CreatePlan(pin) is { RequireAppleDeveloper: true };
             }
 
             var separator = target.IndexOf(':');
@@ -133,7 +135,7 @@ internal static class MacOsIconGalleryService
 
             // AUMIDs and packaged-app launch strings do not always resemble a
             // path. They are eligible only for the curated system-app map.
-            return MacOsIconGalleryCatalog.CreatePlan(pin) is { RequireAppleDeveloper: true };
+            return MacOsIconSearchCatalog.CreatePlan(pin) is { RequireAppleDeveloper: true };
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
         {
@@ -141,79 +143,261 @@ internal static class MacOsIconGalleryService
         }
     }
 
+    internal static async Task<IReadOnlyList<MacOsIconSearchHit>> SearchAsync(
+        string query,
+        CancellationToken cancellationToken = default)
+    {
+        if (!ApiKeyStore.TryGetMacOsIconsKey(out var apiKey))
+            throw new MacOsIconGalleryServiceException(
+                MacOsIconGalleryFailure.MissingApiKey,
+                LocalizationService.Current.Get("MacOsIcons.MissingKey"));
+        query = ValidateQuery(query);
+
+        try
+        {
+            var body = JsonSerializer.SerializeToUtf8Bytes(new SearchRequest { Query = query }, JsonOptions);
+            using var request = new HttpRequestMessage(HttpMethod.Post, SearchEndpoint)
+            {
+                Content = new ByteArrayContent(body)
+            };
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+            {
+                CharSet = "utf-8"
+            };
+            request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
+            request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+
+            await NetworkGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                using var response = await SearchHttp.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                    throw new MacOsIconGalleryServiceException(
+                        MacOsIconGalleryFailure.InvalidApiKey,
+                        LocalizationService.Current.Get("MacOsIcons.InvalidKey"));
+                if ((int)response.StatusCode == 429)
+                    throw new MacOsIconGalleryServiceException(
+                        MacOsIconGalleryFailure.RateLimited,
+                        LocalizationService.Current.Get("MacOsIcons.RateLimited"));
+                if (response.StatusCode != HttpStatusCode.OK)
+                    throw new MacOsIconGalleryServiceException(
+                        MacOsIconGalleryFailure.Network,
+                        LocalizationService.Current.Get("MacOsIcons.Unavailable"));
+                if (!string.Equals(response.Content.Headers.ContentType?.MediaType,
+                        "application/json", StringComparison.OrdinalIgnoreCase) ||
+                    response.Content.Headers.ContentLength is long length && length > MaximumSearchBytes)
+                    throw InvalidResponse();
+
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var bytes = await ReadWithLimitAsync(stream, MaximumSearchBytes, cancellationToken)
+                    .ConfigureAwait(false);
+                return MacOsIconsApi.ParseSearchResponse(bytes)
+                    .Select(ToSearchHit)
+                    .Where(hit => hit is not null)
+                    .Cast<MacOsIconSearchHit>()
+                    .ToArray();
+            }
+            finally
+            {
+                NetworkGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (MacOsIconGalleryServiceException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw new MacOsIconGalleryServiceException(
+                MacOsIconGalleryFailure.Network,
+                LocalizationService.Current.Get("MacOsIcons.Timeout"));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        {
+            throw new MacOsIconGalleryServiceException(
+                MacOsIconGalleryFailure.Network,
+                LocalizationService.Current.Get("MacOsIcons.Unavailable"));
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException or FormatException)
+        {
+            throw InvalidResponse();
+        }
+    }
+
+    private static string ValidateQuery(string? query)
+    {
+        var value = query?.Trim() ?? string.Empty;
+        if (value.Length is < 2 or > 160 || value.Any(char.IsControl))
+            throw new MacOsIconGalleryServiceException(
+                MacOsIconGalleryFailure.InvalidInput,
+                LocalizationService.Current.Get("MacOsIcons.InvalidQuery"));
+        return value;
+    }
+
+    private static MacOsIconGalleryServiceException InvalidResponse() =>
+        new(MacOsIconGalleryFailure.InvalidResponse,
+            LocalizationService.Current.Get("MacOsIcons.UnknownFormat"));
+
+    private static MacOsIconSearchHit? ToSearchHit(MacOsIconsApiHit hit)
+    {
+        var low = ParseHttpsUri(hit.LowResPngUrl);
+        var ios = ParseHttpsUri(hit.IosUrl);
+        if (low is null && ios is null) return null;
+        return new MacOsIconSearchHit(
+            hit.AppName,
+            low,
+            ParseHttpsUri(hit.IcnsUrl),
+            ios,
+            hit.Category,
+            hit.Credit,
+            hit.UploadedBy,
+            ParseHttpsUri(hit.CreditUrl),
+            hit.Downloads);
+    }
+
+    private static Uri? ParseHttpsUri(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 2_048 ||
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) || !IsSafeHttpsUri(uri))
+            return null;
+        return uri;
+    }
+
+    internal static async Task<BitmapSource?> LoadPreviewAsync(
+        MacOsIconSearchHit hit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        foreach (var uri in new[] { hit.LowResPngUrl, hit.IosUrl }
+                     .Where(IsAllowedImageUri).Cast<Uri>()
+                     .DistinctBy(candidate => candidate.AbsoluteUri, StringComparer.Ordinal))
+        {
+            try
+            {
+                var bytes = await DownloadImageBytesAsync(uri, cancellationToken).ConfigureAwait(false);
+                return DecodeAndNormalizePng(bytes).Bitmap;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsExpectedDownloadFailure(exception))
+            {
+                // A low-resolution preview may be too small for the hardened
+                // decoder. Try the provider's alternate PNG before giving up.
+            }
+        }
+        return null;
+    }
+
+    internal static async Task<MacOsIconDownloadResult> DownloadAsync(
+        MacOsIconSearchHit hit,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        if (!IsSafeText(hit.AppName, 160) || !IsSafeText(hit.Credit, 160) ||
+            !IsOptionalSafeText(hit.UploadedBy, 160)) return DownloadError();
+
+        foreach (var uri in new[] { hit.IosUrl, hit.LowResPngUrl }
+                     .Where(IsAllowedImageUri).Cast<Uri>()
+                     .DistinctBy(candidate => candidate.AbsoluteUri, StringComparer.Ordinal))
+        {
+            var iconId = Sha256(Encoding.UTF8.GetBytes(uri.AbsoluteUri));
+            if (TryReadCachedById(iconId, expectedHash: null, out var cached, out var cachedBitmap))
+            {
+                var cachedReference = new IconReference(Provider, iconId, CatalogVersion, cached.ContentSha256);
+                AddToMemoryCache(cachedReference, cached, cachedBitmap);
+                return new MacOsIconDownloadResult(cachedReference, ToAttribution(cached), null);
+            }
+
+            try
+            {
+                var decoded = DecodeAndNormalizePng(
+                    await DownloadImageBytesAsync(uri, cancellationToken).ConfigureAwait(false));
+                var contentHash = Sha256(decoded.PngBytes);
+                var metadata = new CacheMetadata(
+                    iconId,
+                    contentHash,
+                    iconId,
+                    hit.AppName.Trim(),
+                    hit.Credit.Trim(),
+                    CleanOptional(hit.UploadedBy, 160),
+                    IsSafeHttpsUri(hit.CreditUrl) ? hit.CreditUrl! : SourceUrl,
+                    uri,
+                    DateTimeOffset.UtcNow,
+                    decoded.Bitmap.PixelWidth,
+                    decoded.Bitmap.PixelHeight);
+                await WriteAtomicallyAsync(ImagePath(iconId), decoded.PngBytes, cancellationToken)
+                    .ConfigureAwait(false);
+                await WriteAtomicallyAsync(MetadataPath(iconId), SerializeMetadata(metadata), cancellationToken)
+                    .ConfigureAwait(false);
+                PurgeExpiredCache();
+                var reference = new IconReference(Provider, iconId, CatalogVersion, contentHash);
+                AddToMemoryCache(reference, metadata, decoded.Bitmap);
+                return new MacOsIconDownloadResult(reference, ToAttribution(metadata), null);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsExpectedDownloadFailure(exception))
+            {
+                // Try the provider's lower-resolution PNG next.
+            }
+        }
+        return DownloadError();
+    }
+
+    // Retained for compatibility with the background call path. The new
+    // settings migration converts automatic mode to on-demand, so user-facing
+    // searches always go through the picker instead of silently choosing art.
     internal static async Task<IReadOnlyList<MacOsIconMatchResult>> FindAndDownloadExactMatchesAsync(
         IEnumerable<Pin> pins,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pins);
-        var pinList = pins.Where(pin => pin is not null && IsEligibleAppPin(pin))
-            .DistinctBy(pin => pin.Id, StringComparer.OrdinalIgnoreCase)
-            .Take(MaximumPins)
-            .ToList();
-        if (pinList.Count == 0) return Array.Empty<MacOsIconMatchResult>();
-
-        var results = new MacOsIconMatchResult?[pinList.Count];
-        var plans = new IReadOnlyList<MacOsIconGalleryPlan>?[pinList.Count];
-        var needsCatalog = false;
-        for (var index = 0; index < pinList.Count; index++)
+        var results = new List<MacOsIconMatchResult>();
+        foreach (var pin in pins.Where(IsEligibleAppPin)
+                     .DistinctBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                     .Take(MaximumPins))
         {
-            var pin = pinList[index];
-            if (pin.Icon is not null && TryReadCached(pin.Icon, out var existing, out var bitmap))
+            var plan = MacOsIconSearchCatalog.CreatePlans(pin).FirstOrDefault();
+            if (plan is null || plan.RequireAppleDeveloper)
             {
-                AddToMemoryCache(pin.Icon, existing, bitmap);
-                results[index] = new MacOsIconMatchResult(
-                    pin.Id, existing.AppName, pin.Icon, ToAttribution(existing), null);
+                results.Add(new MacOsIconMatchResult(pin.Id, null, null, null, null));
                 continue;
             }
-
-            plans[index] = MacOsIconGalleryCatalog.CreatePlans(pin);
-            needsCatalog |= plans[index]!.Count > 0;
-        }
-
-        IReadOnlyList<MacOsIconGalleryEntry> catalog = Array.Empty<MacOsIconGalleryEntry>();
-        if (needsCatalog)
-            catalog = await GetCatalogAsync(cancellationToken).ConfigureAwait(false);
-
-        var selected = new MacOsIconGalleryEntry?[pinList.Count];
-        for (var index = 0; index < pinList.Count; index++)
-        {
-            if (results[index] is not null) continue;
-            var pinPlans = plans[index];
-            if (pinPlans is null || pinPlans.Count == 0)
+            try
             {
-                results[index] = new MacOsIconMatchResult(pinList[index].Id, null, null, null, null);
-                continue;
+                var hits = await SearchAsync(plan.ExactName, cancellationToken).ConfigureAwait(false);
+                var selected = hits
+                    .Where(hit => string.Equals(MacOsIconSearchCatalog.Normalize(hit.AppName),
+                        plan.ExactKey, StringComparison.Ordinal))
+                    .OrderByDescending(hit => hit.Downloads)
+                    .FirstOrDefault();
+                if (selected is null)
+                {
+                    results.Add(new MacOsIconMatchResult(pin.Id, null, null, null, null));
+                    continue;
+                }
+                var downloaded = await DownloadAsync(selected, cancellationToken).ConfigureAwait(false);
+                results.Add(new MacOsIconMatchResult(pin.Id, selected.AppName, downloaded.Icon,
+                    downloaded.Attribution, downloaded.Error));
             }
-
-            selected[index] = pinPlans
-                .Select(plan => MacOsIconGalleryCatalog.FindLatestExact(catalog, plan))
-                .FirstOrDefault(match => match is not null);
-            if (selected[index] is null)
-                results[index] = new MacOsIconMatchResult(pinList[index].Id, null, null, null, null);
+            catch (MacOsIconGalleryServiceException exception)
+            {
+                results.Add(new MacOsIconMatchResult(pin.Id, null, null, null, exception.Message));
+            }
         }
-
-        var downloads = new Dictionary<string, Task<MacOsIconDownloadResult>>(StringComparer.Ordinal);
-        foreach (var entry in selected.OfType<MacOsIconGalleryEntry>())
-        {
-            if (!downloads.ContainsKey(entry.Id))
-                downloads.Add(entry.Id, ResolveAndDownloadAsync(entry, cancellationToken));
-        }
-        await Task.WhenAll(downloads.Values).ConfigureAwait(false);
-
-        for (var index = 0; index < pinList.Count; index++)
-        {
-            if (results[index] is not null) continue;
-            var entry = selected[index]!;
-            var downloaded = await downloads[entry.Id].ConfigureAwait(false);
-            results[index] = new MacOsIconMatchResult(
-                pinList[index].Id,
-                entry.Name,
-                downloaded.Icon,
-                downloaded.Attribution,
-                downloaded.Error);
-        }
-
-        return results.Select(result => result!).ToArray();
+        return results;
     }
 
     internal static BitmapSource? TryLoad(IconReference? reference)
@@ -239,201 +423,11 @@ internal static class MacOsIconGalleryService
             return memory.Attribution;
         // Attribution is shown only when the corresponding image still passes
         // the same expiry, hash and PNG validation used by TryLoad. A stale or
-        // replaced cache file must not label a local fallback as Gallery art.
+        // replaced cache file must not label a local fallback as provider art.
         if (!TryReadCached(reference!, out var metadata, out var bitmap)) return null;
         AddToMemoryCache(reference!, metadata, bitmap);
         return ToAttribution(metadata);
     }
-
-    private static async Task<IReadOnlyList<MacOsIconGalleryEntry>> GetCatalogAsync(
-        CancellationToken cancellationToken)
-    {
-        if (_catalog is not null) return _catalog;
-
-        await CatalogGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_catalog is not null) return _catalog;
-            var now = DateTimeOffset.UtcNow;
-            if (now - _lastCatalogAttemptUtc < CatalogRetryDelay)
-                throw new MacOsIconGalleryServiceException(
-                    MacOsIconGalleryFailure.Network,
-                    LocalizationService.Current.Get("Gallery.CatalogUnavailable"));
-            _lastCatalogAttemptUtc = now;
-
-            try
-            {
-                var bytes = await DownloadWebsiteBytesAsync(
-                    CatalogEndpoint,
-                    "application/json",
-                    MaximumCatalogBytes,
-                    cancellationToken).ConfigureAwait(false);
-                _catalog = MacOsIconGalleryCatalog.Parse(bytes);
-                return _catalog;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (MacOsIconGalleryServiceException)
-            {
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                throw new MacOsIconGalleryServiceException(
-                    MacOsIconGalleryFailure.Network,
-                    LocalizationService.Current.Get("Gallery.Timeout"));
-            }
-            catch (Exception exception) when (exception is HttpRequestException or IOException)
-            {
-                throw new MacOsIconGalleryServiceException(
-                    MacOsIconGalleryFailure.Network,
-                    LocalizationService.Current.Get("Gallery.Unavailable"));
-            }
-            catch (Exception exception) when (exception is JsonException or InvalidDataException or FormatException)
-            {
-                throw new MacOsIconGalleryServiceException(
-                    MacOsIconGalleryFailure.InvalidResponse,
-                    LocalizationService.Current.Get("Gallery.UnknownFormat"));
-            }
-        }
-        finally
-        {
-            CatalogGate.Release();
-        }
-    }
-
-    private static async Task<MacOsIconDownloadResult> ResolveAndDownloadAsync(
-        MacOsIconGalleryEntry entry,
-        CancellationToken cancellationToken)
-    {
-        if (!IsSafeCatalogId(entry.Id)) return DownloadError();
-        var detailUrl = new Uri(SourceUrl, "icons/" + entry.Id + "/");
-        if (!IsExpectedDetailUri(detailUrl, entry.Id)) return DownloadError();
-
-        try
-        {
-            var detailBytes = await DownloadWebsiteBytesAsync(
-                detailUrl,
-                "text/html",
-                MaximumDetailBytes,
-                cancellationToken).ConfigureAwait(false);
-            var imageUrl = ExtractOfficialImageUri(detailBytes, detailUrl);
-            if (imageUrl is null) return DownloadError(LocalizationService.Current.Get("Gallery.MissingPng"));
-            return await DownloadAndCacheAsync(entry, detailUrl, imageUrl, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception) when (IsExpectedDownloadFailure(exception))
-        {
-            return DownloadError();
-        }
-    }
-
-    private static async Task<MacOsIconDownloadResult> DownloadAndCacheAsync(
-        MacOsIconGalleryEntry entry,
-        Uri detailUrl,
-        Uri imageUrl,
-        CancellationToken cancellationToken)
-    {
-        if (!IsExpectedDetailUri(detailUrl, entry.Id) || !IsAllowedImageUri(imageUrl)) return DownloadError();
-        var iconId = Sha256(Encoding.UTF8.GetBytes(entry.Id + "\n" + imageUrl.AbsoluteUri));
-        if (TryReadCachedById(iconId, expectedHash: null, out var cached, out var cachedBitmap))
-        {
-            var reference = new IconReference(Provider, iconId, CatalogVersion, cached.ContentSha256);
-            AddToMemoryCache(reference, cached, cachedBitmap);
-            return new MacOsIconDownloadResult(reference, ToAttribution(cached), null);
-        }
-
-        var bytes = await DownloadImageBytesAsync(imageUrl, cancellationToken).ConfigureAwait(false);
-        var decoded = DecodeAndNormalizePng(bytes);
-        var contentHash = Sha256(decoded.PngBytes);
-        var metadata = new CacheMetadata(
-            iconId,
-            contentHash,
-            entry.Id,
-            entry.Name,
-            CleanOptional(entry.Developer, 180),
-            CleanOptional(entry.Designer, 180),
-            detailUrl,
-            imageUrl,
-            DateTimeOffset.UtcNow,
-            decoded.Bitmap.PixelWidth,
-            decoded.Bitmap.PixelHeight);
-
-        var metadataBytes = SerializeMetadata(metadata);
-        await WriteAtomicallyAsync(ImagePath(iconId), decoded.PngBytes, cancellationToken).ConfigureAwait(false);
-        await WriteAtomicallyAsync(MetadataPath(iconId), metadataBytes, cancellationToken).ConfigureAwait(false);
-        PurgeExpiredCache();
-
-        var iconReference = new IconReference(Provider, iconId, CatalogVersion, contentHash);
-        AddToMemoryCache(iconReference, metadata, decoded.Bitmap);
-        return new MacOsIconDownloadResult(iconReference, ToAttribution(metadata), null);
-    }
-
-    private static Uri? ExtractOfficialImageUri(byte[] htmlBytes, Uri detailUrl)
-    {
-        var html = Encoding.UTF8.GetString(htmlBytes);
-        string? fallback = null;
-        foreach (Match tag in TagRegex.Matches(html))
-        {
-            var attributes = ParseAttributes(tag.Value);
-            if (tag.Value.StartsWith("<meta", StringComparison.OrdinalIgnoreCase) &&
-                attributes.TryGetValue("property", out var property) &&
-                property.Equals("og:image", StringComparison.OrdinalIgnoreCase) &&
-                attributes.TryGetValue("content", out var content))
-            {
-                var candidate = ParseDeclaredImageUri(content, detailUrl);
-                if (candidate is not null) return candidate;
-            }
-
-            if (fallback is null && tag.Value.StartsWith("<img", StringComparison.OrdinalIgnoreCase) &&
-                attributes.TryGetValue("alt", out var alt) &&
-                alt.EndsWith("app icon", StringComparison.OrdinalIgnoreCase) &&
-                attributes.TryGetValue("src", out var src))
-                fallback = src;
-        }
-        return fallback is null ? null : ParseDeclaredImageUri(fallback, detailUrl);
-    }
-
-    private static Dictionary<string, string> ParseAttributes(string tag)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match attribute in AttributeRegex.Matches(tag))
-        {
-            var name = attribute.Groups["name"].Value;
-            var value = attribute.Groups["dq"].Success
-                ? attribute.Groups["dq"].Value
-                : attribute.Groups["sq"].Value;
-            values.TryAdd(name, WebUtility.HtmlDecode(value));
-        }
-        return values;
-    }
-
-    private static Uri? ParseDeclaredImageUri(string value, Uri detailUrl)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 2_048) return null;
-        if (!Uri.TryCreate(value.Trim(), UriKind.RelativeOrAbsolute, out var parsed)) return null;
-        var absolute = parsed.IsAbsoluteUri ? parsed : new Uri(detailUrl, parsed);
-        return IsAllowedImageUri(absolute) ? absolute : null;
-    }
-
-    private static async Task<byte[]> DownloadWebsiteBytesAsync(
-        Uri initialUri,
-        string expectedMediaType,
-        int maximumBytes,
-        CancellationToken cancellationToken) =>
-        await DownloadBytesAsync(
-            WebsiteHttp,
-            initialUri,
-            IsAllowedWebsiteUri,
-            expectedMediaType,
-            maximumBytes,
-            cancellationToken).ConfigureAwait(false);
 
     private static async Task<byte[]> DownloadImageBytesAsync(Uri initialUri, CancellationToken cancellationToken) =>
         await DownloadBytesAsync(
@@ -460,7 +454,7 @@ internal static class MacOsIconGalleryService
             {
                 if (!uriAllowed(current)) throw new InvalidDataException("Unsafe remote URL.");
                 using var request = new HttpRequestMessage(HttpMethod.Get, current);
-                request.Headers.TryAddWithoutValidation("User-Agent", "VeliShell/0.3.1");
+                request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
                 using var response = await client.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -667,11 +661,11 @@ internal static class MacOsIconGalleryService
                 payload.CatalogVersion != CatalogVersion || payload.IconId != iconId ||
                 !IsSha256(payload.ContentSha256) ||
                 (expectedHash is not null && !FixedHashEquals(payload.ContentSha256, expectedHash)) ||
-                payload.Source != "macOS Icon Gallery" || payload.SourceUrl != SourceUrl.AbsoluteUri ||
+                payload.Source != "macOSicons.com" || payload.SourceUrl != SourceUrl.AbsoluteUri ||
                 !IsSafeCatalogId(payload.CatalogId) || !IsSafeText(payload.AppName, 180) ||
                 !IsOptionalSafeText(payload.Developer, 180) || !IsOptionalSafeText(payload.Designer, 180) ||
                 !Uri.TryCreate(payload.DetailUrl, UriKind.Absolute, out var detailUrl) ||
-                !IsExpectedDetailUri(detailUrl, payload.CatalogId) ||
+                !IsSafeHttpsUri(detailUrl) ||
                 !Uri.TryCreate(payload.ImageUrl, UriKind.Absolute, out var imageUrl) ||
                 !IsAllowedImageUri(imageUrl) ||
                 payload.PixelWidth is < MinimumPixels or > MaximumPixels ||
@@ -719,7 +713,7 @@ internal static class MacOsIconGalleryService
             AppName = metadata.AppName,
             Developer = metadata.Developer,
             Designer = metadata.Designer,
-            Source = "macOS Icon Gallery",
+            Source = "macOSicons.com",
             SourceUrl = SourceUrl.AbsoluteUri,
             DetailUrl = metadata.DetailUrl.AbsoluteUri,
             ImageUrl = metadata.ImageUrl.AbsoluteUri,
@@ -740,12 +734,15 @@ internal static class MacOsIconGalleryService
 
     private static MacOsIconAttribution ToAttribution(CacheMetadata metadata)
     {
-        var creator = metadata.Developer ?? metadata.Designer ?? metadata.AppName;
-        return new MacOsIconAttribution("macOS Icon Gallery · " + creator, metadata.DetailUrl.AbsoluteUri);
+        var creators = MacOsIconsApi.FormatCreatorAttribution(
+            metadata.Developer,
+            metadata.Designer,
+            metadata.AppName);
+        return new MacOsIconAttribution("macOSicons.com · " + creators, metadata.DetailUrl.AbsoluteUri);
     }
 
     private static MacOsIconDownloadResult DownloadError(string? message = null) =>
-        new(null, null, message ?? LocalizationService.Current.Get("Gallery.UnsafePng"));
+        new(null, null, message ?? LocalizationService.Current.Get("MacOsIcons.UnsafePng"));
 
     private static async Task<byte[]> ReadWithLimitAsync(
         Stream stream,
@@ -847,23 +844,17 @@ internal static class MacOsIconGalleryService
         IsDefaultPort: true
     } && !uri.IsLoopback && !string.IsNullOrWhiteSpace(uri.Host);
 
-    private static bool IsAllowedWebsiteUri(Uri? uri) =>
-        IsSafeHttpsUri(uri) && IsAllowedWebsiteHost(uri!.DnsSafeHost);
-
     private static bool IsAllowedImageUri(Uri? uri) =>
         IsSafeHttpsUri(uri) && IsAllowedImageHost(uri!.DnsSafeHost);
 
-    private static bool IsExpectedDetailUri(Uri? uri, string catalogId) =>
-        IsSafeCatalogId(catalogId) && IsAllowedWebsiteUri(uri) &&
-        string.IsNullOrEmpty(uri!.Query) && string.IsNullOrEmpty(uri.Fragment) &&
-        uri.AbsolutePath.Equals("/icons/" + catalogId + "/", StringComparison.Ordinal);
+    private static bool IsAllowedApiHost(string host) =>
+        string.Equals(host, "api.macosicons.com", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsAllowedWebsiteHost(string host) =>
-        string.Equals(host, "www.macosicongallery.com", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(host, "macosicongallery.com", StringComparison.OrdinalIgnoreCase);
-
+    // Image URLs are supplied by the authenticated API. The custom connection
+    // callback still pins DNS and rejects every private, loopback, link-local,
+    // documentation, multicast, or otherwise non-public address.
     private static bool IsAllowedImageHost(string host) =>
-        string.Equals(host, "cdn.jim-nielsen.com", StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(host) && host.Length <= 253;
 
     private static bool IsPublicAddress(IPAddress address)
     {
@@ -1153,6 +1144,11 @@ internal static class MacOsIconGalleryService
         DateTimeOffset FetchedAtUtc,
         int PixelWidth,
         int PixelHeight);
+
+    private sealed class SearchRequest
+    {
+        public string Query { get; init; } = "";
+    }
 
     private sealed class CachePayload
     {

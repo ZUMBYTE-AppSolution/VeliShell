@@ -20,7 +20,7 @@ if ($runtimeNoticeVersion -notmatch '^10\.0\.\d+$') {
     throw "Invalid or missing .NET notice version in Directory.Build.props: '$runtimeNoticeVersion'"
 }
 if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
-    throw "Installer releases require a stable SemVer version (for example 0.3.0), got '$Version'."
+    throw "Installer releases require a stable SemVer version (for example 0.4.0), got '$Version'."
 }
 if (-not $PublishDirectory) {
     $PublishDirectory = Join-Path $projectRoot 'out\portable'
@@ -30,11 +30,9 @@ $mainExecutable = Join-Path $PublishDirectory 'VeliShell.exe'
 if (-not (Test-Path -LiteralPath $mainExecutable -PathType Leaf)) {
     throw "The self-contained VeliShell payload is missing: $mainExecutable"
 }
-$serviceDirectory = 'UpdateService'
-$serviceRelativePath = $serviceDirectory + '\VeliShell.UpdateService.exe'
-$serviceExecutable = Join-Path $PublishDirectory $serviceRelativePath
-if (-not (Test-Path -LiteralPath $serviceExecutable -PathType Leaf)) {
-    throw "The optional update-service payload is missing: $serviceExecutable. Run tools\Build.ps1 -Portable first."
+$obsoleteServiceDirectory = Join-Path $PublishDirectory 'UpdateService'
+if (Test-Path -LiteralPath $obsoleteServiceDirectory) {
+    throw "The publish directory still contains the removed Windows-service payload: $obsoleteServiceDirectory. Run tools\Build.ps1 -Portable before building the installer."
 }
 $requiredLegalFiles = @(
     'LICENSE',
@@ -111,13 +109,6 @@ $files = [IO.Directory]::EnumerateFiles($PublishDirectory, '*', [IO.SearchOption
 $files = [string[]]@($files)
 [Array]::Sort($files, [StringComparer]::Ordinal)
 if ($files.Count -eq 0) { throw 'The publish directory does not contain installer payload files.' }
-$servicePrefix = $serviceDirectory + '\'
-$applicationFiles = [string[]]@($files | Where-Object { -not $_.StartsWith($servicePrefix, [StringComparison]::OrdinalIgnoreCase) })
-$serviceFiles = [string[]]@($files | Where-Object { $_.StartsWith($servicePrefix, [StringComparison]::OrdinalIgnoreCase) })
-if ($applicationFiles.Count -eq 0) { throw 'The publish directory does not contain an application payload.' }
-if (-not ($serviceFiles -contains $serviceRelativePath)) {
-    throw "The optional update-service executable is not in the generated payload: $serviceRelativePath"
-}
 
 $xml = [Text.StringBuilder]::new()
 [void]$xml.AppendLine('<?xml version="1.0" encoding="utf-8"?>')
@@ -148,25 +139,6 @@ function Add-PayloadGroup([string]$groupId, [string[]]$groupFiles) {
         $checksum = if ($isExecutable) { ' Checksum="yes"' } else { '' }
         [void]$xml.AppendLine(('      <Component Id="cmp_{0}" Guid="{1}" Directory="{2}">' -f $identity, $componentGuid, $directoryId))
         [void]$xml.AppendLine(('        <File Id="fil_{0}" Name="{1}" Source="{2}" KeyPath="yes"{3} />' -f $identity, (Escape-Xml $fileName), (Escape-Xml $source), $checksum))
-        if ($relative.Equals($serviceRelativePath, [StringComparison]::OrdinalIgnoreCase)) {
-            [void]$xml.AppendLine('        <ServiceInstall')
-            [void]$xml.AppendLine('            Id="VeliShellUpdateServiceInstall"')
-            [void]$xml.AppendLine('            Name="VeliShell.UpdateService"')
-            [void]$xml.AppendLine('            DisplayName="VeliShell Hintergrund-Updateprüfung"')
-            [void]$xml.AppendLine('            Description="Prüft alle 12 Stunden ausschließlich die Metadaten offizieller VeliShell-Releases. Lädt keine Updates herunter und installiert nichts."')
-            [void]$xml.AppendLine('            Type="ownProcess"')
-            [void]$xml.AppendLine('            Start="auto"')
-            [void]$xml.AppendLine('            ErrorControl="normal"')
-            [void]$xml.AppendLine('            Account="[WIX_ACCOUNT_LOCALSERVICE]"')
-            [void]$xml.AppendLine('            Interactive="no" />')
-            [void]$xml.AppendLine('        <ServiceControl')
-            [void]$xml.AppendLine('            Id="VeliShellUpdateServiceControl"')
-            [void]$xml.AppendLine('            Name="VeliShell.UpdateService"')
-            [void]$xml.AppendLine('            Start="install"')
-            [void]$xml.AppendLine('            Stop="both"')
-            [void]$xml.AppendLine('            Remove="uninstall"')
-            [void]$xml.AppendLine('            Wait="yes" />')
-        }
         if ($firstInDirectory.Add($directoryId)) {
             [void]$xml.AppendLine(('        <RemoveFolder Id="rm_{0}" Directory="{1}" On="uninstall" />' -f $identity, $directoryId))
         }
@@ -174,8 +146,7 @@ function Add-PayloadGroup([string]$groupId, [string[]]$groupFiles) {
     }
     [void]$xml.AppendLine('    </ComponentGroup>')
 }
-Add-PayloadGroup 'VeliShellApplicationPayload' $applicationFiles
-Add-PayloadGroup 'VeliShellUpdateServicePayload' $serviceFiles
+Add-PayloadGroup 'VeliShellApplicationPayload' $files
 [void]$xml.AppendLine('  </Fragment>')
 [void]$xml.AppendLine('</Wix>')
 [IO.File]::WriteAllText($generatedPayload, $xml.ToString(), [Text.UTF8Encoding]::new($false))

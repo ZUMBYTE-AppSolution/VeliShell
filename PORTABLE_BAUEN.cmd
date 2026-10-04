@@ -1,7 +1,7 @@
 @echo off
 setlocal
 pushd "%~dp0"
-echo VeliShell 0.3.0 - Portable Ausgabe bauen
+echo VeliShell 0.4.0 - Portable Ausgabe bauen
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\Build.ps1" -Portable
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (

@@ -177,8 +177,9 @@ public partial class DockWindow : Window
             foreach (var group in running)
             {
                 var first = group.First();
-                var runningId = "running:" + group.Key;
-                var onlineIcon = _app.GetRunningOnlineIcon(runningId);
+                var runningId = Settings.RunningDockIconKey(first.Executable, first.ProcessName);
+                var onlineIcon = preferences.GetDockIconOverride(runningId) ??
+                                 _app.GetRunningOnlineIcon(runningId);
                 items.Add(new DockItem { Key = runningId,
                     Name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal) ? first.Title : first.ProcessName,
                     Target = first.Executable,
@@ -195,15 +196,19 @@ public partial class DockWindow : Window
             var keep = Math.Max(0, capacity - 3);
             var overflow = items.Skip(keep).ToList();
             items = items.Take(keep).ToList();
-            items.Add(new DockItem { Key = "overflow", Name = L("Dock.MoreApps"), IconId = "overflow", Overflow = overflow });
+            items.Add(new DockItem { Key = "overflow", Name = L("Dock.MoreApps"), IconId = "overflow",
+                Icon = preferences.GetDockIconOverride("overflow"), Overflow = overflow });
         }
-        items.Add(new DockItem { Key = "velishell", Name = L("Dock.Settings"), IconId = "velishell" });
+        items.Add(new DockItem { Key = "velishell", Name = L("Dock.Settings"), IconId = "velishell",
+            Icon = preferences.GetDockIconOverride("velishell") });
         var recycle = RecycleBinService.Query();
         var recycleName = recycle.Available
             ? recycle.ItemCount == 0 ? L("Dock.RecycleEmpty") : LF("Dock.RecycleCount", recycle.ItemCount)
             : L("Dock.RecycleOpen");
         var recycleIcon = recycle.FillState == RecycleBinFillState.Full ? "trash-full" : "trash";
-        items.Add(new DockItem { Key = "trash", Name = recycleName, IconId = recycleIcon, Target = "shell:RecycleBinFolder" });
+        var recycleOverrideKey = recycle.FillState == RecycleBinFillState.Full ? "trash-full" : "trash-empty";
+        items.Add(new DockItem { Key = "trash", Name = recycleName, IconId = recycleIcon,
+            Icon = preferences.GetDockIconOverride(recycleOverrideKey), Target = "shell:RecycleBinFolder" });
 
         if (_tiles.Count == items.Count && _tiles.Select(t => t.Item.Key).SequenceEqual(items.Select(i => i.Key))
             && _tiles.All(t => Math.Abs(t.IconSize - preferences.IconSize) < 0.01))
@@ -246,10 +251,37 @@ public partial class DockWindow : Window
         if (!_closed && !_dragInProgress && !_dragPayloadCached) Rebuild();
     }
 
+    internal IReadOnlyList<Pin> GetConfigurableRunningApps()
+    {
+        var preferences = _app.Preferences;
+        return _windows
+            .Where(window => !preferences.Pins.Any(pin => WindowCatalog.Matches(window, pin)))
+            .GroupBy(window => string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var first = group.First();
+                var name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
+                    ? first.Title
+                    : first.ProcessName;
+                var iconKey = Settings.RunningDockIconKey(first.Executable, first.ProcessName);
+                return new Pin(
+                    iconKey,
+                    name,
+                    first.Executable,
+                    first.ProcessName,
+                    preferences.GetDockIconOverride(iconKey) ?? _app.GetRunningOnlineIcon(iconKey));
+            })
+            .OrderBy(pin => pin.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Take(Settings.MaximumPins)
+            .ToList();
+    }
+
     private void QueueRunningIconScan()
     {
         var preferences = _app.Preferences;
         if (!preferences.ShowRunningApps ||
+            preferences.IconStyle != DockIconStyle.Mac ||
             preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
             preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
 
@@ -263,7 +295,11 @@ public partial class DockWindow : Window
                 var name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
                     ? first.Title
                     : first.ProcessName;
-                return new Pin("running:" + group.Key, name, first.Executable, first.ProcessName);
+                return new Pin(
+                    Settings.RunningDockIconKey(first.Executable, first.ProcessName),
+                    name,
+                    first.Executable,
+                    first.ProcessName);
             });
         _app.QueueAutomaticRunningIcons(candidates);
     }
@@ -351,7 +387,7 @@ public partial class DockWindow : Window
                     AddMenuItem(menu, attribution.Text, () => LaunchService.Open(
                         Uri.TryCreate(attribution.SourceUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
                             ? uri.AbsoluteUri
-                            : "https://www.macosicongallery.com/"));
+                            : "https://macosicons.com/"));
                 AddMenuItem(menu, L("Dock.Remove"), () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
             }
             else if (File.Exists(item.Target))
@@ -545,8 +581,9 @@ public partial class DockWindow : Window
         if (Math.Abs(current.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(current.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
-        string? artifact = null;
+        var removePinAfterDrag = false;
         var dragSource = _dragSource!;
+        QueryContinueDragEventHandler? queryContinueDrag = null;
         try
         {
             _dragInProgress = true;
@@ -556,22 +593,29 @@ public partial class DockWindow : Window
             SetHidden(false);
             dragSource.Opacity = 0.42;
             dragSource.GiveFeedback += DragSource_GiveFeedback;
+            queryContinueDrag = (_, args) =>
+            {
+                var leftButtonReleased = (args.KeyStates & DragDropKeyStates.LeftMouseButton) == 0;
+                removePinAfterDrag = ShouldRemovePinAfterDrag(
+                    args.EscapePressed,
+                    leftButtonReleased,
+                    IsCursorOverDockPlate());
+            };
+            dragSource.QueryContinueDrag += queryContinueDrag;
             ShowDragGhost("pin:" + pin.Id, IconService.For(pin.Id, pin.Target, pin.Icon));
-            var data = new DataObject();
-            data.SetData(DockPinFormat, pin.Id);
-            artifact = ShellLinkService.CreateDragArtifact(pin);
-            if (artifact is not null) data.SetData(DataFormats.FileDrop, new[] { artifact });
-            System.Windows.DragDrop.DoDragDrop(dragSource, data,
-                artifact is null ? DragDropEffects.Move : DragDropEffects.Copy | DragDropEffects.Move);
+            System.Windows.DragDrop.DoDragDrop(
+                dragSource,
+                CreateDockPinDragData(pin.Id),
+                DragDropEffects.Move);
         }
         finally
         {
             dragSource.GiveFeedback -= DragSource_GiveFeedback;
+            if (queryContinueDrag is not null) dragSource.QueryContinueDrag -= queryContinueDrag;
             ClearDropSlot();
             dragSource.Opacity = 1;
             dragSource.Visibility = Visibility.Visible;
             CloseDragGhost();
-            ShellLinkService.CleanupDragArtifact(artifact);
             _dragInProgress = false;
             _dragSource = null;
             ResetDragPayloadCache();
@@ -580,9 +624,81 @@ public partial class DockWindow : Window
             if (!_closed) _pollTimer.Start();
             if (_app.Preferences.AutoHide && !IsMouseOver) _hideTimer.Start();
         }
+        if (removePinAfterDrag && !_closed)
+            _app.UpdatePreferences(settings => settings.Pins.RemoveAll(candidate =>
+                string.Equals(candidate.Id, pin.Id, StringComparison.OrdinalIgnoreCase)));
     }
 
-    private void DragSource_GiveFeedback(object sender, GiveFeedbackEventArgs e) => _dragGhost?.MoveToCursor();
+    private void DragSource_GiveFeedback(object sender, GiveFeedbackEventArgs e)
+    {
+        if (IsCursorOverDockPlate()) _dragGhost?.MoveToCursor();
+        else CloseDragGhost();
+    }
+
+    private static DataObject CreateDockPinDragData(string pinId)
+    {
+        if (string.IsNullOrWhiteSpace(pinId) || pinId.Length > 64)
+            throw new ArgumentException("Invalid dock pin identifier.", nameof(pinId));
+        var data = new DataObject();
+        data.SetData(DockPinFormat, pinId, autoConvert: false);
+        return data;
+    }
+
+    private static bool ShouldRemovePinAfterDrag(
+        bool escapePressed,
+        bool leftButtonReleased,
+        bool cursorInsideDock) =>
+        !escapePressed && leftButtonReleased && !cursorInsideDock;
+
+    private bool IsCursorOverDockPlate()
+    {
+        try
+        {
+            if (!DockPlate.IsVisible || DockPlate.ActualWidth <= 0 || DockPlate.ActualHeight <= 0 ||
+                !NativeMethods.GetCursorPos(out var cursor)) return true;
+            return IsScreenPointOverDockPlate(new Point(cursor.X, cursor.Y));
+        }
+        catch (InvalidOperationException)
+        {
+            // An unavailable visual transform must never remove a pin by guess.
+            return true;
+        }
+    }
+
+    private bool IsDragEventOverDockPlate(DragEventArgs e)
+    {
+        try
+        {
+            if (!DockPlate.IsVisible || DockPlate.ActualWidth <= 0 || DockPlate.ActualHeight <= 0)
+                return false;
+            return IsScreenPointOverDockPlate(PointToScreen(e.GetPosition(this)));
+        }
+        catch (InvalidOperationException)
+        {
+            // Failed hit testing must reject a drop, while the cursor-based
+            // removal path above remains conservative and keeps the pin.
+            return false;
+        }
+    }
+
+    private bool IsScreenPointOverDockPlate(Point screenPoint)
+    {
+        var topLeft = DockPlate.PointToScreen(new Point(0, 0));
+        var bottomRight = DockPlate.PointToScreen(
+            new Point(DockPlate.ActualWidth, DockPlate.ActualHeight));
+        return IsPointInsideDockBounds(screenPoint, topLeft, bottomRight);
+    }
+
+    private static bool IsPointInsideDockBounds(Point point, Point firstCorner, Point secondCorner) =>
+        point.X >= Math.Min(firstCorner.X, secondCorner.X) &&
+        point.X <= Math.Max(firstCorner.X, secondCorner.X) &&
+        point.Y >= Math.Min(firstCorner.Y, secondCorner.Y) &&
+        point.Y <= Math.Max(firstCorner.Y, secondCorner.Y);
+
+    private static DragDropEffects DockDropEffect(bool cursorInsideDock, bool hasPin, bool hasFiles) =>
+        !cursorInsideDock ? DragDropEffects.None :
+        hasPin ? DragDropEffects.Move :
+        hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
 
     private void ShowDragGhost(string key, ImageSource source)
     {
@@ -734,8 +850,6 @@ public partial class DockWindow : Window
         {
             Opacity = previewIcon is null ? 0.24 : 0.78,
         };
-        if (previewIcon is null)
-            iconSurface.AccentBackground.SetResourceReference(Border.BackgroundProperty, "DockMilkOverlay");
 
         var placeholder = new Grid
         {
@@ -844,7 +958,8 @@ public partial class DockWindow : Window
         if (!_dragPayloadCached) CacheDragPayload(e.Data);
         var hasPin = _cachedDragPinId.Length > 0;
         var hasFiles = _cachedDragPaths.Count > 0;
-        e.Effects = hasPin ? DragDropEffects.Move : hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
+        var cursorInsideDock = IsDragEventOverDockPlate(e);
+        e.Effects = DockDropEffect(cursorInsideDock, hasPin, hasFiles);
         if (e.Effects != DragDropEffects.None)
         {
             string? movingPinId = null;
@@ -873,15 +988,13 @@ public partial class DockWindow : Window
         else
         {
             ClearDropSlot();
-            if (!_dragInProgress) CloseDragGhost();
-            else _dragGhost?.FollowCursor();
+            CloseDragGhost();
         }
         e.Handled = true;
     }
     private void Dock_DragLeave(object sender, DragEventArgs e)
     {
-        var position = e.GetPosition(this);
-        if (position.X >= 0 && position.X <= ActualWidth && position.Y >= 0 && position.Y <= ActualHeight)
+        if (IsDragEventOverDockPlate(e))
         {
             e.Handled = true;
             return;
@@ -893,13 +1006,24 @@ public partial class DockWindow : Window
             CloseDragGhost();
             if (!_closed) _pollTimer.Start();
         }
-        else _dragGhost?.FollowCursor();
+        else CloseDragGhost();
         ResetDragPayloadCache();
         if (_app.Preferences.AutoHide && !IsMouseOver && !_dragInProgress) _hideTimer.Start();
         e.Handled = true;
     }
     private void Dock_Drop(object sender, DragEventArgs e)
     {
+        if (!IsDragEventOverDockPlate(e))
+        {
+            e.Effects = DragDropEffects.None;
+            ClearDropSlot();
+            CloseDragGhost();
+            ResetDragPayloadCache();
+            if (!_dragInProgress && !_closed) _pollTimer.Start();
+            e.Handled = true;
+            return;
+        }
+
         var insertion = _dropInsertionIndex < 0 ? _app.Preferences.Pins.Count : _dropInsertionIndex;
         ClearDropSlot();
         if (TryReadDockPin(e.Data, out var id))
@@ -937,7 +1061,8 @@ public partial class DockWindow : Window
         id = "";
         try
         {
-            if (!data.GetDataPresent(DockPinFormat) || data.GetData(DockPinFormat) is not string value
+            if (!data.GetDataPresent(DockPinFormat, autoConvert: false) ||
+                data.GetData(DockPinFormat, autoConvert: false) is not string value
                 || value.Length is < 1 or > 64)
                 return false;
             if (!_app.Preferences.Pins.Any(pin => string.Equals(pin.Id, value, StringComparison.OrdinalIgnoreCase)))
