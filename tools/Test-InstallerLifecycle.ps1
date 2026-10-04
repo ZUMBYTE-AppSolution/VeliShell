@@ -93,6 +93,14 @@ namespace VeliShell.InstallerLifecycle
             StringBuilder value,
             ref uint valueLength);
 
+        [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiQueryProductStateW")]
+        private static extern int MsiQueryProductState(string productCode);
+
+        public static int GetProductState(string productCode)
+        {
+            return MsiQueryProductState(productCode);
+        }
+
         public static string GetMachineProductProperty(string productCode, string property)
         {
             uint length = 0;
@@ -134,6 +142,7 @@ namespace VeliShell.InstallerLifecycle
 '@
 }
 
+$msiInstallStateUnknown = -1
 $msiInstallStateDefault = 5
 
 function Release-ComObject([object]$Value) {
@@ -261,8 +270,10 @@ function Get-MsiProductInfoValue([string]$ProductCode, [string]$Property, [switc
 }
 
 function Get-ProductRegistration([string]$ProductCode) {
-    $productState = Get-MsiProductInfoValue $ProductCode 'State' -AllowUnknownProduct
-    if ($null -eq $productState) {
+    # MsiQueryProductState is the documented product-presence check and avoids
+    # querying extended registration data for a product that is not installed.
+    $productState = [VeliShell.InstallerLifecycle.WindowsInstallerNative]::GetProductState($ProductCode)
+    if ($productState -eq $msiInstallStateUnknown) {
         return $null
     }
 
