@@ -37,6 +37,9 @@
       </Directory>
     </StandardDirectory>
 
+    <!-- In an ALLUSERS=1 per-machine package, MSI resolves ProgramMenuFolder to
+         the shared Start menu. The HKCU registry value is the required MSI key
+         path for this non-advertised shortcut and keeps ICE38/ICE43/ICE57 valid. -->
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="VeliShellProgramMenuFolder" Name="VeliShell">
         <Component Id="VeliShellStartMenuShortcut" Guid="D63FA7C7-66E0-4CC7-89FB-0924E7E2BF57">

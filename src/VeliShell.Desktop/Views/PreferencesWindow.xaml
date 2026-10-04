@@ -237,7 +237,10 @@
       <TextBlock Text="{services:Loc Info.Licenses}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <TextBlock Text="{services:Loc Info.LicenseDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
-       <Button Content="{services:Loc Info.GalleryLicense}" Click="OpenIconGallery_Click" HorizontalAlignment="Left" />
+       <WrapPanel>
+        <Button Content="{services:Loc Info.LocalLicenses}" Click="OpenLocalLicenses_Click" Margin="0,0,8,8" />
+        <Button Content="{services:Loc Info.GalleryLicense}" Click="OpenIconGallery_Click" Margin="0,0,0,8" />
+       </WrapPanel>
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Info.DiagnosticsSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>

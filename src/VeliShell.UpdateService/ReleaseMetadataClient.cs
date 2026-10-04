@@ -46,12 +46,23 @@ public sealed class GitHubReleaseMetadataClient : IReleaseMetadataSource, IDispo
     private const string Repository = "VeliShell";
     private const string GitHubApiVersion = "2026-03-10";
     private const int MaximumMetadataBytes = 2 * 1024 * 1024;
+    private static readonly TimeSpan DefaultBodyReadInactivityTimeout = TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _client;
+    private readonly TimeSpan _bodyReadInactivityTimeout;
     private readonly bool _ownsClient;
 
-    public GitHubReleaseMetadataClient(HttpClient? client = null)
+    public GitHubReleaseMetadataClient(
+        HttpClient? client = null,
+        TimeSpan? bodyReadInactivityTimeout = null)
     {
+        _bodyReadInactivityTimeout = bodyReadInactivityTimeout ?? DefaultBodyReadInactivityTimeout;
+        if (_bodyReadInactivityTimeout <= TimeSpan.Zero ||
+            _bodyReadInactivityTimeout.TotalMilliseconds > uint.MaxValue - 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(bodyReadInactivityTimeout),
+                "The response-body inactivity timeout must be finite and greater than zero.");
+
         if (client is null)
         {
             var handler = new HttpClientHandler
@@ -97,7 +108,10 @@ public sealed class GitHubReleaseMetadataClient : IReleaseMetadataSource, IDispo
 
         try
         {
-            var metadataBytes = await ReadLimitedAsync(response.Content, cancellationToken);
+            var metadataBytes = await ReadLimitedAsync(
+                response.Content,
+                _bodyReadInactivityTimeout,
+                cancellationToken);
             var release = Parse(metadataBytes);
             var state = release.Version > installedVersion
                 ? ReleaseCheckState.UpdateAvailable
@@ -153,6 +167,7 @@ public sealed class GitHubReleaseMetadataClient : IReleaseMetadataSource, IDispo
 
     private static async Task<byte[]> ReadLimitedAsync(
         HttpContent content,
+        TimeSpan inactivityTimeout,
         CancellationToken cancellationToken)
     {
         if (content.Headers.ContentLength is > MaximumMetadataBytes)
@@ -165,7 +180,11 @@ public sealed class GitHubReleaseMetadataClient : IReleaseMetadataSource, IDispo
         var buffer = new byte[16 * 1024];
         while (true)
         {
-            var read = await source.ReadAsync(buffer, cancellationToken);
+            var read = await ReadWithInactivityTimeoutAsync(
+                source,
+                buffer.AsMemory(),
+                inactivityTimeout,
+                cancellationToken);
             if (read == 0) break;
             if (destination.Length + read > MaximumMetadataBytes)
                 throw new ReleaseCheckException(
@@ -175,6 +194,34 @@ public sealed class GitHubReleaseMetadataClient : IReleaseMetadataSource, IDispo
         }
 
         return destination.ToArray();
+    }
+
+    private static async ValueTask<int> ReadWithInactivityTimeoutAsync(
+        Stream source,
+        Memory<byte> buffer,
+        TimeSpan inactivityTimeout,
+        CancellationToken cancellationToken)
+    {
+        using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        readCancellation.CancelAfter(inactivityTimeout);
+        try
+        {
+            return await source.ReadAsync(buffer, readCancellation.Token);
+        }
+        catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(
+                "The release metadata check was canceled by the service.",
+                error,
+                cancellationToken);
+        }
+        catch (OperationCanceledException error) when (readCancellation.IsCancellationRequested)
+        {
+            throw new ReleaseCheckException(
+                "timeout",
+                "The GitHub release metadata body stopped responding.",
+                error);
+        }
     }
 
     private static bool IsOfficialReleasePage(Uri uri, string tagName)

@@ -28,12 +28,15 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 - Einheitliche Dock-Icon-Fläche, Skalierung und kontinuierliche Rundung für lokale, geladene und VeliShell-eigene Icons.
 - Einstellungen und Update-Dialog verwenden eine gemeinsame barrierearme Hell-/Dunkel-Farbwelt mit Blau-Cyan-Violett-Verläufen, fokussierten Leuchteffekten und sichtbaren Tastaturzuständen; der MSI-Installer erhält passende Markenflächen.
+- Die Auswahlkarten für Hell, Dunkel und System zeigen ihren Rahmen nun in jeder Ansicht vollständig und mit gleichmäßigem Innenabstand.
 - Release-Metadaten, Dateinamen und Versionsinformationen verwenden eine gemeinsame SemVer-Version.
+- Der optionale Update-Dienst schreibt seinen Status auch bei gleichzeitigen Lesezugriffen atomar und begrenzt festhängende Netzwerkantworten durch eine Inaktivitätsfrist.
 
 ### Sicherheit
 
 - Automatische Downloads sind standardmäßig aus und müssen in den Einstellungen bewusst gewählt werden. Eine stille Installation gibt es in keinem Modus.
 - Installer-Downloads sind auf das offizielle Repository `ZUMBYTE-AppSolution/VeliShell` und dessen GitHub-CDN begrenzt.
+- Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
 [Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.3.0...HEAD

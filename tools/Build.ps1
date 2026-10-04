@@ -21,6 +21,19 @@ function Invoke-Dotnet {
     if ($code -ne 0) { throw "dotnet ist mit Code $code fehlgeschlagen. Protokoll: $Log" }
 }
 
+function Get-VeliShellRelativePath([string]$BasePath, [string]$TargetPath) {
+    $baseFull = [IO.Path]::GetFullPath($BasePath).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $targetFull = [IO.Path]::GetFullPath($TargetPath)
+    $baseUri = New-Object Uri($baseFull)
+    $targetUri = New-Object Uri($targetFull)
+    if ($baseUri.Scheme -ne $targetUri.Scheme) {
+        throw "The paths are on different volumes: '$baseFull' and '$targetFull'."
+    }
+    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString()).Replace('/', '\')
+}
+
 Push-Location $Root
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
@@ -52,6 +65,10 @@ try {
     }
     [xml]$versionProps = Get-Content (Join-Path $Root 'Directory.Build.props') -Raw
     $productVersion = [string]$versionProps.Project.PropertyGroup.Version
+    $runtimeNoticeVersion = [string]$versionProps.Project.PropertyGroup.VeliShellRuntimeNoticeVersion
+    if ($runtimeNoticeVersion -notmatch '^10\.0\.\d+$') {
+        throw "Ungueltige oder fehlende .NET-Hinweisversion in Directory.Build.props: '$runtimeNoticeVersion'"
+    }
     Write-Host "VeliShell $productVersion | $rid" -ForegroundColor Green
     Write-Host 'Keine Systemdateien, Taskleisten-Einstellungen oder Autostart-Eintraege werden veraendert.'
 
@@ -66,8 +83,16 @@ try {
     if ([IO.Path]::GetDirectoryName($destinationFull) -ne $outFull) {
         throw "Unsicheres Ausgabeziel: $destinationFull"
     }
-    $Staging = Join-Path $Out ('.velishell-publish-' + [Guid]::NewGuid().ToString('N'))
-    $ServiceStaging = Join-Path $Out ('.velishell-service-publish-' + [Guid]::NewGuid().ToString('N'))
+    # Keep staging names short: the longest versioned notice path otherwise
+    # exceeds the legacy MAX_PATH boundary used by some Windows file APIs.
+    $Staging = Join-Path $Out ('.vp-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
+    $ServiceStaging = Join-Path $Out ('.vs-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
+    foreach ($stagingPath in @($Staging, $ServiceStaging)) {
+        $stagingFull = [IO.Path]::GetFullPath($stagingPath).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if ([IO.Path]::GetDirectoryName($stagingFull) -ne $outFull) {
+            throw "Unsicheres Staging-Ziel: $stagingFull"
+        }
+    }
     $Exe = Join-Path $Destination 'VeliShell.exe'
     $running = Get-Process -Name 'VeliShell' -ErrorAction SilentlyContinue
     if ($running) { throw 'VeliShell laeuft noch. Bitte ueber sein Dock-Menue beenden und START.cmd erneut ausfuehren. Das Skript beendet keine Prozesse automatisch.' }
@@ -76,6 +101,34 @@ try {
         Invoke-Dotnet -Arguments @('publish', 'src/VeliShell.Desktop/VeliShell.Desktop.csproj', '-c', 'Release', '-r', $rid, '--self-contained', $contained, '-o', $Staging, '-p:UseAppHost=true') -Log (Join-Path $Out 'build.log')
         $stagedExe = Join-Path $Staging 'VeliShell.exe'
         if (-not (Test-Path $stagedExe)) { throw "Die EXE wurde nicht erstellt: $stagedExe" }
+        $requiredLegalFiles = @(
+            'LICENSE',
+            'THIRD-PARTY-NOTICES.md',
+            'THIRD-PARTY-LICENSES\README.md',
+            "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",
+            "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-THIRD-PARTY-NOTICES.txt",
+            "THIRD-PARTY-LICENSES\Microsoft.WindowsDesktop.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",
+            "THIRD-PARTY-LICENSES\Microsoft.WindowsDesktop.App.Runtime.win-x64-$runtimeNoticeVersion-THIRD-PARTY-NOTICES.txt"
+        )
+        foreach ($relativeLegalFile in $requiredLegalFiles) {
+            $publishedLegalFile = Join-Path $Staging $relativeLegalFile
+            if (-not (Test-Path -LiteralPath $publishedLegalFile -PathType Leaf)) {
+                throw "Ein erforderlicher Lizenz- oder Hinweistext fehlt im Publish: $publishedLegalFile"
+            }
+        }
+        if ($Portable) {
+            $runtimeVersionPattern = '^' + [Regex]::Escape($runtimeNoticeVersion) + '(?:[-+]|$)'
+            foreach ($runtimeBinary in @('System.Private.CoreLib.dll', 'PresentationFramework.dll')) {
+                $runtimeBinaryPath = Join-Path $Staging $runtimeBinary
+                if (-not (Test-Path -LiteralPath $runtimeBinaryPath -PathType Leaf)) {
+                    throw "Die Self-contained-Runtime ist unvollstaendig: $runtimeBinaryPath"
+                }
+                $publishedRuntimeVersion = (Get-Item -LiteralPath $runtimeBinaryPath).VersionInfo.ProductVersion
+                if ($publishedRuntimeVersion -notmatch $runtimeVersionPattern) {
+                    throw "Die mitgelieferte Runtime '$runtimeBinary' ($publishedRuntimeVersion) passt nicht zu den Lizenztexten fuer $runtimeNoticeVersion. Bitte THIRD-PARTY-LICENSES und VeliShellRuntimeNoticeVersion gemeinsam aktualisieren."
+                }
+            }
+        }
         if ($Portable) {
             Invoke-Dotnet -Arguments @(
                 'publish', 'src/VeliShell.UpdateService/VeliShell.UpdateService.csproj',
@@ -93,12 +146,18 @@ try {
                 'VeliShell.UpdateService.deps.json',
                 'VeliShell.UpdateService.runtimeconfig.json'
             )
+            $sharedRelativePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($sharedFile in (Get-ChildItem -LiteralPath $Staging -File -Recurse)) {
+                $sharedRelativePath = Get-VeliShellRelativePath $Staging $sharedFile.FullName
+                [void]$sharedRelativePaths.Add($sharedRelativePath)
+            }
             $missingSharedDependencies = @(
                 Get-ChildItem -LiteralPath $ServiceStaging -File -Recurse |
                     Where-Object {
+                        $serviceRelativePath = Get-VeliShellRelativePath $ServiceStaging $_.FullName
                         $_.Extension -ne '.pdb' -and
-                        $_.Name -notin $servicePayload -and
-                        -not (Test-Path -LiteralPath (Join-Path $Staging ([IO.Path]::GetRelativePath($ServiceStaging, $_.FullName))) -PathType Leaf)
+                        $serviceRelativePath -notin $servicePayload -and
+                        -not $sharedRelativePaths.Contains($serviceRelativePath)
                     }
             )
             if ($missingSharedDependencies.Count -gt 0) {

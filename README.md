@@ -141,6 +141,10 @@ Bitte bei einer Fehlermeldung die VeliShell-Version, die Windows-Version und ein
 
 VeliShell ist ein eigenständiges Projekt von **Zumbyte AppSolution** und steht in keiner Verbindung zu Apple. macOS, Finder, Safari und weitere Produktnamen sind Marken ihrer jeweiligen Rechteinhaber. Windows und Microsoft sind Marken der Microsoft-Unternehmensgruppe.
 
-Danke an die Projekte und Dienste, auf denen VeliShell aufbaut. Die vollständigen Hinweise befinden sich in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+VeliShell ist proprietäre Software. Die Nutzungsbedingungen stehen in der
+[LICENSE](LICENSE). Danke an die Projekte und Dienste, auf denen VeliShell
+aufbaut. Die vollständigen Hinweise befinden sich in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); die mitgelieferten
+Originaltexte liegen unter [THIRD-PARTY-LICENSES](THIRD-PARTY-LICENSES/README.md).
 
 <p align="center"><strong>VeliShell · von Zumbyte AppSolution</strong></p>

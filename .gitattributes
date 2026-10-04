@@ -11,6 +11,9 @@
 *.msi binary
 *.zip binary
 
+# Keep the vendored official license texts byte-for-byte identical to source.
+THIRD-PARTY-LICENSES/*.txt -text
+
 # Defense in depth for source archives created with git archive.
 AGENTS.md export-ignore
 docs/ROADMAP.md export-ignore

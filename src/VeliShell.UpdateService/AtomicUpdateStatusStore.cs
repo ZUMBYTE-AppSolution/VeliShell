@@ -8,9 +8,16 @@ public interface IUpdateStatusStore
     Task WriteAsync(UpdateStatusSnapshot status, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Replaces the public status file atomically from a temporary file on the same volume.</summary>
+/// <summary>
+/// Replaces the public status file atomically from a temporary file on the same volume.
+/// Long-lived Windows readers must open the status file with <see cref="FileShare.Delete"/>
+/// so that they can finish reading the old document while its directory entry is replaced.
+/// </summary>
 public sealed class AtomicUpdateStatusStore : IUpdateStatusStore
 {
+    private const int MaximumReplacementAttempts = 50;
+    private const int MaximumRetryDelayMilliseconds = 200;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -20,6 +27,7 @@ public sealed class AtomicUpdateStatusStore : IUpdateStatusStore
     };
 
     private readonly string _statusPath;
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     public AtomicUpdateStatusStore(string statusPath)
     {
@@ -32,34 +40,42 @@ public sealed class AtomicUpdateStatusStore : IUpdateStatusStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(status);
-        var directory = Path.GetDirectoryName(_statusPath) ??
-                        throw new InvalidOperationException("The update status path has no parent directory.");
-        Directory.CreateDirectory(directory);
-
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(_statusPath)}.{Guid.NewGuid():N}.tmp");
+        await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(status, SerializerOptions);
-            await using (var stream = new FileStream(
-                             temporaryPath,
-                             FileMode.CreateNew,
-                             FileAccess.Write,
-                             FileShare.None,
-                             16 * 1024,
-                             FileOptions.Asynchronous | FileOptions.WriteThrough))
-            {
-                await stream.WriteAsync(bytes, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
-                stream.Flush(flushToDisk: true);
-            }
+            var directory = Path.GetDirectoryName(_statusPath) ??
+                            throw new InvalidOperationException("The update status path has no parent directory.");
+            Directory.CreateDirectory(directory);
 
-            await ReplaceAtomicallyAsync(temporaryPath, _statusPath, cancellationToken);
+            var temporaryPath = Path.Combine(
+                directory,
+                $".{Path.GetFileName(_statusPath)}.{Guid.NewGuid():N}.tmp");
+            try
+            {
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(status, SerializerOptions);
+                await using (var stream = new FileStream(
+                                 temporaryPath,
+                                 FileMode.CreateNew,
+                                 FileAccess.Write,
+                                 FileShare.None,
+                                 16 * 1024,
+                                 FileOptions.Asynchronous | FileOptions.WriteThrough))
+                {
+                    await stream.WriteAsync(bytes, cancellationToken);
+                    await stream.FlushAsync(cancellationToken);
+                    stream.Flush(flushToDisk: true);
+                }
+
+                await ReplaceAtomicallyAsync(temporaryPath, _statusPath, cancellationToken);
+            }
+            finally
+            {
+                TryDelete(temporaryPath);
+            }
         }
         finally
         {
-            TryDelete(temporaryPath);
+            _writeGate.Release();
         }
     }
 
@@ -68,7 +84,7 @@ public sealed class AtomicUpdateStatusStore : IUpdateStatusStore
         string statusPath,
         CancellationToken cancellationToken)
     {
-        const int maximumAttempts = 6;
+        var retryDelayMilliseconds = 10;
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -90,11 +106,29 @@ public sealed class AtomicUpdateStatusStore : IUpdateStatusStore
                     return;
                 }
             }
-            catch (IOException) when (attempt < maximumAttempts)
+            catch (IOException error) when (
+                attempt < MaximumReplacementAttempts &&
+                IsTransientReplacementFailure(error))
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(20 * attempt), cancellationToken);
+                // Windows cannot replace a file while a reader has it open without
+                // FileShare.Delete. Antivirus and indexing handles are normally brief,
+                // so wait without ever publishing a partially written document.
+                await Task.Delay(retryDelayMilliseconds, cancellationToken);
+                retryDelayMilliseconds = Math.Min(
+                    retryDelayMilliseconds * 2,
+                    MaximumRetryDelayMilliseconds);
             }
         }
+    }
+
+    private static bool IsTransientReplacementFailure(IOException error)
+    {
+        if (!OperatingSystem.IsWindows()) return true;
+
+        // Win32 ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION. Retrying other
+        // I/O errors would only hide permanent failures such as an invalid volume.
+        var nativeError = error.HResult & 0xffff;
+        return nativeError is 32 or 33;
     }
 
     private static void TryDelete(string path)

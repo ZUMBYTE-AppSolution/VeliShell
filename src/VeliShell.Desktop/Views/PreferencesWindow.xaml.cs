@@ -281,6 +281,13 @@ public partial class PreferencesWindow : VeliShellWindow
     }
     private void OpenIconGallery_Click(object sender, RoutedEventArgs e) =>
         LaunchService.Open("https://www.macosicongallery.com/");
+    private void OpenLocalLicenses_Click(object sender, RoutedEventArgs e)
+    {
+        var localDirectory = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-LICENSES");
+        LaunchService.Open(Directory.Exists(localDirectory)
+            ? localDirectory
+            : "https://github.com/ZUMBYTE-AppSolution/VeliShell/tree/main/THIRD-PARTY-LICENSES");
+    }
     private void OpenDeveloperWebsite_Click(object sender, RoutedEventArgs e) =>
         LaunchService.Open("https://www.zumbyte.de/");
     private void OpenSupport_Click(object sender, RoutedEventArgs e) =>

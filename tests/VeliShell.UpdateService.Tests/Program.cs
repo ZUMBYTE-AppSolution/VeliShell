@@ -1,4 +1,5 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using VeliShell.Core;
@@ -163,6 +164,36 @@ await TestAsync("oversized metadata is rejected before reading", async () =>
     Check(error.Code == "metadata-too-large");
 });
 
+await TestAsync("stalled metadata body is bounded by the inactivity timeout", async () =>
+{
+    using var httpClient = new HttpClient(new StubHandler(_ => BlockingJsonResponse()));
+    using var client = new GitHubReleaseMetadataClient(
+        httpClient,
+        bodyReadInactivityTimeout: TimeSpan.FromMilliseconds(120));
+    var timer = Stopwatch.StartNew();
+
+    var error = await CaptureAsync<ReleaseCheckException>(() =>
+        client.CheckAsync(SemanticVersion.Parse("0.3.0")));
+
+    Check(error.Code == "timeout");
+    Check(timer.Elapsed < TimeSpan.FromSeconds(5),
+        "The inactivity timeout did not stop the stalled metadata read promptly.");
+});
+
+await TestAsync("service-stop cancellation wins over the body inactivity timeout", async () =>
+{
+    using var httpClient = new HttpClient(new StubHandler(_ => BlockingJsonResponse()));
+    using var client = new GitHubReleaseMetadataClient(
+        httpClient,
+        bodyReadInactivityTimeout: TimeSpan.FromSeconds(5));
+    using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(120));
+
+    var error = await CaptureAsync<OperationCanceledException>(() =>
+        client.CheckAsync(SemanticVersion.Parse("0.3.0"), cancellation.Token));
+
+    Check(error.CancellationToken == cancellation.Token);
+});
+
 var tempRoot = Path.Combine(Path.GetTempPath(), "VeliShellUpdateServiceTests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(tempRoot);
 try
@@ -219,8 +250,19 @@ try
             {
                 try
                 {
-                    var bytes = await File.ReadAllBytesAsync(path, stop.Token);
-                    using var document = JsonDocument.Parse(bytes);
+                    // Atomic replacement on Windows requires readers to share delete
+                    // access. This keeps the old handle readable while its directory
+                    // entry is swapped for the complete new document.
+                    await using var stream = new FileStream(
+                        path,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read | FileShare.Delete,
+                        16 * 1024,
+                        FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    using var document = await JsonDocument.ParseAsync(
+                        stream,
+                        cancellationToken: stop.Token);
                     if (document.RootElement.GetProperty("schemaVersion").GetInt32() != 1)
                         Interlocked.Increment(ref invalidReads);
                 }
@@ -249,6 +291,68 @@ try
         stop.Cancel();
         await reader;
         Check(invalidReads == 0, "A reader observed partial JSON.");
+    });
+
+    await TestAsync("status replacement survives a transient non-sharing reader", async () =>
+    {
+        var path = Path.Combine(tempRoot, "sharing", "update-status.json");
+        var store = new AtomicUpdateStatusStore(path);
+        await store.WriteAsync(UpdateStatusSnapshot.Failed(
+            SemanticVersion.Parse("0.3.0"),
+            DateTimeOffset.UtcNow,
+            "initial"));
+
+        Task replacement;
+        await using (var blocker = new FileStream(
+                         path,
+                         FileMode.Open,
+                         FileAccess.Read,
+                         FileShare.Read))
+        {
+            replacement = store.WriteAsync(UpdateStatusSnapshot.Failed(
+                SemanticVersion.Parse("0.3.0"),
+                DateTimeOffset.UtcNow,
+                "replacement"));
+
+            await Task.Delay(650);
+            Check(!replacement.IsCompletedSuccessfully,
+                "The test reader did not block replacement as expected on Windows.");
+        }
+
+        await replacement.WaitAsync(TimeSpan.FromSeconds(5));
+        using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(path));
+        Check(document.RootElement.GetProperty("errorCode").GetString() == "replacement");
+        Check(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp").Length == 0);
+    });
+
+    await TestAsync("blocked status replacement honors cancellation and cleans its temporary file", async () =>
+    {
+        var path = Path.Combine(tempRoot, "cancelled-sharing", "update-status.json");
+        var store = new AtomicUpdateStatusStore(path);
+        await store.WriteAsync(UpdateStatusSnapshot.Failed(
+            SemanticVersion.Parse("0.3.0"),
+            DateTimeOffset.UtcNow,
+            "initial"));
+
+        await using (var blocker = new FileStream(
+                         path,
+                         FileMode.Open,
+                         FileAccess.Read,
+                         FileShare.Read))
+        using (var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(150)))
+        {
+            var error = await CaptureAsync<OperationCanceledException>(() =>
+                store.WriteAsync(UpdateStatusSnapshot.Failed(
+                    SemanticVersion.Parse("0.3.0"),
+                    DateTimeOffset.UtcNow,
+                    "cancelled"),
+                    cancellation.Token));
+            Check(error.CancellationToken == cancellation.Token);
+        }
+
+        using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(path));
+        Check(document.RootElement.GetProperty("errorCode").GetString() == "initial");
+        Check(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp").Length == 0);
     });
 }
 finally
@@ -300,6 +404,16 @@ static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json) 
     Content = new StringContent(json, Encoding.UTF8, "application/json")
 };
 
+static HttpResponseMessage BlockingJsonResponse()
+{
+    var response = new HttpResponseMessage(HttpStatusCode.OK)
+    {
+        Content = new StreamContent(new BlockingReadStream())
+    };
+    response.Content.Headers.ContentLength = 128;
+    return response;
+}
+
 static async Task<TException> CaptureAsync<TException>(Func<Task> action)
     where TException : Exception
 {
@@ -339,6 +453,43 @@ file sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> resp
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken) => Task.FromResult(respond(request));
+}
+
+file sealed class BlockingReadStream : Stream
+{
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override void Flush() => throw new NotSupportedException();
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    public override async ValueTask<int> ReadAsync(
+        Memory<byte> buffer,
+        CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        return 0;
+    }
+
+    public override async Task<int> ReadAsync(
+        byte[] buffer,
+        int offset,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        return 0;
+    }
 }
 
 file sealed class RecordingStatusStore : IUpdateStatusStore

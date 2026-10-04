@@ -8,6 +8,25 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root 'out'
+
+function Get-VeliShellRelativePath([string]$BasePath, [string]$TargetPath) {
+    $baseFull = [IO.Path]::GetFullPath($BasePath).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $targetFull = [IO.Path]::GetFullPath($TargetPath)
+    $baseUri = New-Object Uri($baseFull)
+    $targetUri = New-Object Uri($targetFull)
+    if ($baseUri.Scheme -ne $targetUri.Scheme) {
+        throw "The paths are on different volumes: '$baseFull' and '$targetFull'."
+    }
+    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($targetUri).ToString()).Replace('/', '\')
+}
+
+[xml]$properties = Get-Content -LiteralPath (Join-Path $root 'Directory.Build.props') -Raw
+$runtimeNoticeVersion = [string]$properties.Project.PropertyGroup.VeliShellRuntimeNoticeVersion
+if ($runtimeNoticeVersion -notmatch '^10\.0\.\d+$') {
+    throw "Invalid or missing .NET notice version in Directory.Build.props: '$runtimeNoticeVersion'"
+}
 if (-not $PortableDirectory) { $PortableDirectory = Join-Path $out 'portable' }
 if (-not $InstallerPath) { $InstallerPath = Join-Path $out "installer\VeliShell-$Version-win-x64.msi" }
 $PortableDirectory = [IO.Path]::GetFullPath($PortableDirectory)
@@ -19,6 +38,32 @@ if (-not (Test-Path -LiteralPath (Join-Path $PortableDirectory 'VeliShell.exe') 
     throw 'The portable VeliShell payload is missing.'
 }
 if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) { throw "Installer not found: $InstallerPath" }
+$requiredLegalFiles = @(
+    'LICENSE',
+    'THIRD-PARTY-NOTICES.md',
+    'THIRD-PARTY-LICENSES\README.md',
+    "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",
+    "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-THIRD-PARTY-NOTICES.txt",
+    "THIRD-PARTY-LICENSES\Microsoft.WindowsDesktop.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",
+    "THIRD-PARTY-LICENSES\Microsoft.WindowsDesktop.App.Runtime.win-x64-$runtimeNoticeVersion-THIRD-PARTY-NOTICES.txt"
+)
+foreach ($relativeLegalFile in $requiredLegalFiles) {
+    $publishedLegalFile = Join-Path $PortableDirectory $relativeLegalFile
+    if (-not (Test-Path -LiteralPath $publishedLegalFile -PathType Leaf)) {
+        throw "A required license or notice file is missing from the portable release payload: $publishedLegalFile. Run tools\Build.ps1 -Portable first."
+    }
+}
+$runtimeVersionPattern = '^' + [Regex]::Escape($runtimeNoticeVersion) + '(?:[-+]|$)'
+foreach ($runtimeBinary in @('System.Private.CoreLib.dll', 'PresentationFramework.dll')) {
+    $runtimeBinaryPath = Join-Path $PortableDirectory $runtimeBinary
+    if (-not (Test-Path -LiteralPath $runtimeBinaryPath -PathType Leaf)) {
+        throw "The self-contained runtime is incomplete: $runtimeBinaryPath"
+    }
+    $publishedRuntimeVersion = (Get-Item -LiteralPath $runtimeBinaryPath).VersionInfo.ProductVersion
+    if ($publishedRuntimeVersion -notmatch $runtimeVersionPattern) {
+        throw "The bundled runtime '$runtimeBinary' ($publishedRuntimeVersion) does not match the license notices for $runtimeNoticeVersion. Update THIRD-PARTY-LICENSES and VeliShellRuntimeNoticeVersion together."
+    }
+}
 
 $releaseDirectory = Join-Path $out 'release'
 $stagingDirectory = Join-Path $out ('release-staging-' + [Guid]::NewGuid().ToString('N'))
@@ -41,13 +86,13 @@ try {
     )
     [Array]::Sort($portableFiles, [StringComparer]::Ordinal)
     foreach ($file in $portableFiles) {
-        $relative = [IO.Path]::GetRelativePath($PortableDirectory, $file)
+        $relative = Get-VeliShellRelativePath $PortableDirectory $file
         $destination = Join-Path $stagingDirectory $relative
         $destinationParent = Split-Path -Parent $destination
         if ($destinationParent) { New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null }
         Copy-Item -LiteralPath $file -Destination $destination -Force
     }
-    foreach ($document in @('README.md', 'CHANGELOG.md', 'THIRD-PARTY-NOTICES.md', 'SECURITY.md', 'SUPPORT.md')) {
+    foreach ($document in @('LICENSE', 'README.md', 'CHANGELOG.md', 'THIRD-PARTY-NOTICES.md', 'SECURITY.md', 'SUPPORT.md')) {
         Copy-Item -LiteralPath (Join-Path $root $document) -Destination (Join-Path $stagingDirectory $document) -Force
     }
 
@@ -60,7 +105,7 @@ try {
             $files = [string[]]@([IO.Directory]::EnumerateFiles($stagingDirectory, '*', [IO.SearchOption]::AllDirectories))
             [Array]::Sort($files, [StringComparer]::Ordinal)
             foreach ($file in $files) {
-                $relative = [IO.Path]::GetRelativePath($stagingDirectory, $file).Replace('\', '/')
+                $relative = (Get-VeliShellRelativePath $stagingDirectory $file).Replace('\', '/')
                 $entry = $archive.CreateEntry("VeliShell-$Version/$relative", [IO.Compression.CompressionLevel]::Optimal)
                 $entry.LastWriteTime = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
                 $entryStream = $entry.Open()
