@@ -68,6 +68,74 @@ $currentProductCode = $null
 $ownsMachineState = $false
 $capturedFailure = $null
 
+if (-not ('VeliShell.InstallerLifecycle.WindowsInstallerNative' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace VeliShell.InstallerLifecycle
+{
+    public static class WindowsInstallerNative
+    {
+        private const uint ErrorSuccess = 0;
+        private const uint ErrorMoreData = 234;
+        private const uint ErrorUnknownProduct = 1605;
+        private const uint MachineContext = 4;
+
+        [DllImport("msi.dll", CharSet = CharSet.Unicode, EntryPoint = "MsiGetProductInfoExW")]
+        private static extern uint MsiGetProductInfoEx(
+            string productCode,
+            string userSid,
+            uint context,
+            string property,
+            StringBuilder value,
+            ref uint valueLength);
+
+        public static string GetMachineProductProperty(string productCode, string property)
+        {
+            uint length = 0;
+            uint result = MsiGetProductInfoEx(
+                productCode, null, MachineContext, property, null, ref length);
+            if (result == ErrorUnknownProduct)
+            {
+                return null;
+            }
+            if (result != ErrorSuccess && result != ErrorMoreData)
+            {
+                ThrowIfFailed(result, property);
+            }
+
+            var value = new StringBuilder(checked((int)length + 1));
+            uint capacity = (uint)value.Capacity;
+            result = MsiGetProductInfoEx(
+                productCode, null, MachineContext, property, value, ref capacity);
+            if (result == ErrorUnknownProduct)
+            {
+                return null;
+            }
+            ThrowIfFailed(result, property);
+            return value.ToString();
+        }
+
+        private static void ThrowIfFailed(uint result, string property)
+        {
+            if (result == ErrorSuccess)
+            {
+                return;
+            }
+            string detail = new Win32Exception((int)result).Message;
+            throw new InvalidOperationException(
+                $"Windows Installer could not read '{property}' (error {result}: {detail}).");
+        }
+    }
+}
+'@
+}
+
+$msiInstallStateDefault = 5
+
 function Release-ComObject([object]$Value) {
     if ($null -ne $Value -and [Runtime.InteropServices.Marshal]::IsComObject($Value)) {
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($Value)
@@ -183,29 +251,28 @@ function Invoke-TrustedDownload([string]$Uri, [string]$Destination) {
     throw "Could not download '$Uri' after three attempts: $($lastError.Exception.Message)"
 }
 
-function Get-ProductRegistration([string]$ProductCode) {
-    $subKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$ProductCode"
-    foreach ($view in @([Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32)) {
-        $baseKey = $null
-        $key = $null
-        try {
-            $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
-            $key = $baseKey.OpenSubKey($subKey, $false)
-            if ($null -ne $key) {
-                return [pscustomobject]@{
-                    ProductCode = $ProductCode
-                    DisplayName = [string]$key.GetValue('DisplayName', '')
-                    DisplayVersion = [string]$key.GetValue('DisplayVersion', '')
-                    RegistryView = $view.ToString()
-                }
-            }
-        }
-        finally {
-            if ($null -ne $key) { $key.Dispose() }
-            if ($null -ne $baseKey) { $baseKey.Dispose() }
-        }
+function Get-MsiProductInfoValue([string]$ProductCode, [string]$Property, [switch]$AllowUnknownProduct) {
+    $value = [VeliShell.InstallerLifecycle.WindowsInstallerNative]::GetMachineProductProperty(
+        $ProductCode, $Property)
+    if ($null -eq $value -and -not $AllowUnknownProduct) {
+        throw "Windows Installer product $ProductCode is not registered in the per-machine context."
     }
-    return $null
+    return $value
+}
+
+function Get-ProductRegistration([string]$ProductCode) {
+    $productState = Get-MsiProductInfoValue $ProductCode 'State' -AllowUnknownProduct
+    if ($null -eq $productState) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        ProductCode = $ProductCode
+        ProductState = [int]$productState
+        DisplayName = Get-MsiProductInfoValue $ProductCode 'InstalledProductName'
+        DisplayVersion = Get-MsiProductInfoValue $ProductCode 'VersionString'
+        InstallContext = 'Machine'
+    }
 }
 
 function Assert-ProductInstalled([string]$ProductCode, [string]$ExpectedVersion) {
@@ -213,8 +280,11 @@ function Assert-ProductInstalled([string]$ProductCode, [string]$ExpectedVersion)
     if ($null -eq $registration) {
         throw "MSI product $ProductCode is not registered after installation."
     }
+    if ($registration.ProductState -ne $msiInstallStateDefault) {
+        throw "MSI product $ProductCode has unexpected Windows Installer state $($registration.ProductState); expected $msiInstallStateDefault (installed locally)."
+    }
     if ($registration.DisplayName -ne 'VeliShell' -or $registration.DisplayVersion -ne $ExpectedVersion) {
-        throw "MSI product $ProductCode has unexpected registration: '$($registration.DisplayName)' '$($registration.DisplayVersion)'."
+        throw "MSI product $ProductCode has unexpected Windows Installer registration: '$($registration.DisplayName)' '$($registration.DisplayVersion)'."
     }
 }
 
