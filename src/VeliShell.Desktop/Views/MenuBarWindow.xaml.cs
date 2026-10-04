@@ -31,6 +31,10 @@ public partial class MenuBarWindow : Window
     private bool _workAreaReserved;
     private bool _closed;
     private bool _hidden;
+    private ControlCenterWindow? _controlCenter;
+    private NotificationCenterWindow? _notificationCenter;
+    private Window? _openPanel;
+    private string? _lastNotifiedUpdateVersion;
 
     private static string L(string key) => LocalizationService.Current.Get(key);
 
@@ -39,6 +43,8 @@ public partial class MenuBarWindow : Window
         _app = app;
         InitializeComponent();
         _app.PreferencesChanged += ApplyPreferences;
+        _app.UpdateStateChanged += HandleUpdateStateChanged;
+        NotificationCenterService.Current.Changed += UpdateNotificationIndicator;
         SourceInitialized += (_, _) =>
         {
             _handle = new WindowInteropHelper(this).Handle;
@@ -62,7 +68,7 @@ public partial class MenuBarWindow : Window
         _hideTimer.Tick += (_, _) =>
         {
             _hideTimer.Stop();
-            if (_app.Preferences.MenuBarAutoHide && !IsMouseOver) SetHidden(true);
+            if (_app.Preferences.MenuBarAutoHide && !IsMouseOver && _openPanel is null) SetHidden(true);
         };
         Closed += (_, _) =>
         {
@@ -70,12 +76,16 @@ public partial class MenuBarWindow : Window
             _clockTimer.Stop();
             _windowTimer.Stop();
             _hideTimer.Stop();
+            ClosePanels();
             _app.PreferencesChanged -= ApplyPreferences;
+            _app.UpdateStateChanged -= HandleUpdateStateChanged;
+            NotificationCenterService.Current.Changed -= UpdateNotificationIndicator;
             if (_handle != 0) _app.Taskbars.ReleaseMenuBar(_handle);
             _workAreaReserved = false;
             _source?.RemoveHook(WindowHook);
             _source = null;
         };
+        HandleUpdateStateChanged();
     }
 
     internal bool WorkAreaReserved => _workAreaReserved;
@@ -84,9 +94,10 @@ public partial class MenuBarWindow : Window
     {
         if (_closed) return;
         Topmost = _app.Preferences.MenuBarAlwaysOnTop;
+        if (_openPanel is not null) _openPanel.Topmost = Topmost;
         PositionBar();
         SetHidden(false);
-        if (_app.Preferences.MenuBarAutoHide) _hideTimer.Start();
+        if (_app.Preferences.MenuBarAutoHide && _openPanel is null) _hideTimer.Start();
     }
 
     private void PositionBar()
@@ -135,6 +146,7 @@ public partial class MenuBarWindow : Window
                 ? L("Product.Name")
                 : FriendlyProcessName(_activeWindow);
             var fullscreen = WindowCatalog.ForegroundIsFullscreenOnPrimary();
+            if (fullscreen) ClosePanels();
             Visibility = fullscreen || !_workAreaReserved ? Visibility.Hidden : Visibility.Visible;
         }
         catch (Exception exception)
@@ -147,7 +159,6 @@ public partial class MenuBarWindow : Window
     {
         ClockLabel.Text = DateTime.Now.ToString("ddd d MMM  HH:mm", LocalizationService.Current.ActiveCulture);
         var online = NetworkInterface.GetIsNetworkAvailable();
-        NetworkGlyph.Text = online ? "●" : "○";
         NetworkButton.Opacity = online ? 1 : 0.52;
         if (GetSystemPowerStatus(out var status) && status.BatteryLifePercent <= 100)
         {
@@ -159,6 +170,40 @@ public partial class MenuBarWindow : Window
             PowerLabel.Text = "";
             PowerButton.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void HandleUpdateStateChanged()
+    {
+        if (_app.UpdateState == UpdateUiState.Available && _app.AvailableUpdateVersion is { } version)
+        {
+            var versionText = version.ToString();
+            if (!string.Equals(_lastNotifiedUpdateVersion, versionText, StringComparison.Ordinal))
+            {
+                _lastNotifiedUpdateVersion = versionText;
+                NotificationCenterService.Current.Publish(
+                    $"update-{versionText}",
+                    L("Notifications.UpdateTitle"),
+                    string.Format(LocalizationService.Current.ActiveCulture,
+                        L("Notifications.UpdateMessage"), versionText),
+                    VeliShellNotificationKind.Update);
+            }
+        }
+        UpdateNotificationIndicator();
+    }
+
+    private void UpdateNotificationIndicator()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(UpdateNotificationIndicator);
+            return;
+        }
+        var unread = NotificationCenterService.Current.UnreadCount;
+        NotificationBadge.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
+        NotificationBadgeLabel.Text = unread > 9 ? "9+" : unread.ToString(LocalizationService.Current.ActiveCulture);
+        NotificationCenterButton.ToolTip = unread > 0
+            ? string.Format(LocalizationService.Current.ActiveCulture, L("MenuBar.NotificationUnread"), unread)
+            : L("MenuBar.NotificationCenter");
     }
 
     private static string FriendlyProcessName(NativeWindow window)
@@ -246,6 +291,59 @@ public partial class MenuBarWindow : Window
     private void Power_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:batterysaver");
     private void Clock_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-clock:");
 
+    private void ControlCenter_Click(object sender, RoutedEventArgs e)
+    {
+        if (_controlCenter is { IsVisible: true })
+        {
+            _controlCenter.Close();
+            return;
+        }
+
+        ClosePanels();
+        _hideTimer.Stop();
+        SetHidden(false);
+        var panel = new ControlCenterWindow();
+        _controlCenter = panel;
+        _openPanel = panel;
+        panel.Closed += (_, _) => PanelClosed(panel);
+        panel.ShowRelativeTo(ControlCenterButton, this, Topmost);
+    }
+
+    private void NotificationCenter_Click(object sender, RoutedEventArgs e)
+    {
+        if (_notificationCenter is { IsVisible: true })
+        {
+            _notificationCenter.Close();
+            return;
+        }
+
+        ClosePanels();
+        _hideTimer.Stop();
+        SetHidden(false);
+        var panel = new NotificationCenterWindow(NotificationCenterService.Current);
+        _notificationCenter = panel;
+        _openPanel = panel;
+        panel.Closed += (_, _) => PanelClosed(panel);
+        panel.ShowRelativeTo(NotificationCenterButton, this, Topmost);
+    }
+
+    private void PanelClosed(Window panel)
+    {
+        if (ReferenceEquals(_controlCenter, panel)) _controlCenter = null;
+        if (ReferenceEquals(_notificationCenter, panel)) _notificationCenter = null;
+        if (ReferenceEquals(_openPanel, panel)) _openPanel = null;
+        if (!_closed && _app.Preferences.MenuBarAutoHide && !IsMouseOver) _hideTimer.Start();
+    }
+
+    private void ClosePanels()
+    {
+        var panel = _openPanel;
+        _openPanel = null;
+        if (panel is { IsVisible: true }) panel.Close();
+        _controlCenter = null;
+        _notificationCenter = null;
+    }
+
     private void Window_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
     {
         _hideTimer.Stop();
@@ -254,7 +352,7 @@ public partial class MenuBarWindow : Window
 
     private void Window_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        if (_app.Preferences.MenuBarAutoHide) _hideTimer.Start();
+        if (_app.Preferences.MenuBarAutoHide && _openPanel is null) _hideTimer.Start();
     }
 
     private void SetHidden(bool hidden)

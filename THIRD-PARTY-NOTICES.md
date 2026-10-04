@@ -56,10 +56,17 @@ die Bewerbung des zugehörigen Store-Inhalts in unmittelbarer Nähe eines Store-
 Sie sind daher keine allgemeine Quelle für ein weiterverteilbares Windows-Icon-Paket.
 
 - Apple Search API: <https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/>
+- Apple Design Resources License: <https://developer.apple.com/support/downloads/terms/apple-design-resources/Apple-Design-Resources-License-20230621-English.pdf>
 
 Die mitgelieferten Leer- und Vollzustände des VeliShell-Papierkorbs sind eigens für
 dieses Projekt gestaltete, Mac-inspirierte Illustrationen ohne Apple-Logo und keine
 Kopien proprietärer Apple-Assets.
+
+Auch Apple SF Symbols werden weder extrahiert noch als Font, SVG oder Bitmap in
+VeliShell eingebettet. Die kleinen Symbole in Menüleiste, Kontrollcenter und
+Einstellungen sind eigenständige, zur Laufzeit gezeichnete VeliShell-Vektoren auf
+einem gemeinsamen 24-Punkt-Raster. Sie übernehmen keine Apple-Originalpfade und
+bleiben bei jeder Windows-Skalierung scharf.
 
 ## VeliShell-Appsymbol
 

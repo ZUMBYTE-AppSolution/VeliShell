@@ -38,33 +38,43 @@
        <TextBlock Text="{services:Loc Product.Preview}" Style="{StaticResource SecondaryText}" FontSize="10.5" Margin="0,3,0,0" />
       </StackPanel>
      </Grid>
-     <RadioButton x:Name="AppearanceNav" GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="0" Checked="Navigation_Checked" IsChecked="True">
+     <RadioButton x:Name="AppearanceNav" GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="0" Checked="Navigation_Checked" IsChecked="True"
+                  AutomationProperties.Name="{services:Loc Nav.Appearance}">
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="◐" Width="25" FontSize="17" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+       <controls:VeliSymbol Symbol="Appearance" Width="18" Height="18" Margin="0,0,7,0" VerticalAlignment="Center"
+                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
        <TextBlock Text="{services:Loc Nav.Appearance}" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
       </StackPanel>
      </RadioButton>
-     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="1" Checked="Navigation_Checked">
+     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="1" Checked="Navigation_Checked"
+                  AutomationProperties.Name="{services:Loc Nav.Dock}">
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="▣" Width="25" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+       <controls:VeliSymbol Symbol="Dock" Width="18" Height="18" Margin="0,0,7,0" VerticalAlignment="Center"
+                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
        <TextBlock Text="{services:Loc Nav.Dock}" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
       </StackPanel>
      </RadioButton>
-     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="2" Checked="Navigation_Checked">
+     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="2" Checked="Navigation_Checked"
+                  AutomationProperties.Name="{services:Loc Nav.Apps}">
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="⌘" Width="25" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+       <controls:VeliSymbol Symbol="Apps" Width="18" Height="18" Margin="0,0,7,0" VerticalAlignment="Center"
+                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
        <TextBlock Text="{services:Loc Nav.Apps}" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
       </StackPanel>
      </RadioButton>
-     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="3" Checked="Navigation_Checked">
+     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="3" Checked="Navigation_Checked"
+                  AutomationProperties.Name="{services:Loc Nav.Windows}">
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="⊞" Width="25" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+       <controls:VeliSymbol Symbol="Windows" Width="18" Height="18" Margin="0,0,7,0" VerticalAlignment="Center"
+                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
        <TextBlock Text="{services:Loc Nav.Windows}" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
       </StackPanel>
      </RadioButton>
-     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="4" Checked="Navigation_Checked">
+     <RadioButton GroupName="Navigation" Style="{StaticResource NavChoice}" Tag="4" Checked="Navigation_Checked"
+                  AutomationProperties.Name="{services:Loc Nav.Info}">
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="ⓘ" Width="25" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+       <controls:VeliSymbol Symbol="Info" Width="18" Height="18" Margin="0,0,7,0" VerticalAlignment="Center"
+                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
        <TextBlock Text="{services:Loc Nav.Info}" VerticalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
       </StackPanel>
      </RadioButton>
@@ -249,8 +259,15 @@
        <TextBlock Text="{services:Loc Update.PreferenceDescription}" Style="{StaticResource SecondaryText}"
                   TextWrapping="Wrap" Margin="0,0,0,12" />
        <WrapPanel>
-        <Button x:Name="CheckUpdatesButton" Content="{services:Loc Update.ManualCheck}"
-                Style="{StaticResource PrimaryButton}" Click="CheckUpdates_Click" Margin="0,0,10,0" />
+         <Button x:Name="CheckUpdatesButton" Style="{StaticResource PrimaryButton}"
+                 Click="CheckUpdates_Click" Margin="0,0,10,0"
+                 AutomationProperties.Name="{services:Loc Update.ManualCheck}">
+         <StackPanel Orientation="Horizontal">
+          <controls:VeliSymbol Symbol="Update" Width="16" Height="16" Margin="0,0,7,0"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+          <TextBlock Text="{services:Loc Update.ManualCheck}" VerticalAlignment="Center" />
+         </StackPanel>
+        </Button>
         <TextBlock x:Name="UpdateStatus" Style="{StaticResource SecondaryText}"
                    VerticalAlignment="Center" TextWrapping="Wrap" />
        </WrapPanel>

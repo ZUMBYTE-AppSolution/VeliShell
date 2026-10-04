@@ -2,6 +2,7 @@
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
  Title="{services:Loc MenuBar.Title}" WindowStyle="None" AllowsTransparency="True"
  Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False"
  Topmost="True" Height="35" Width="900" UseLayoutRounding="True"
@@ -40,15 +41,35 @@
     <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
      <Button x:Name="NetworkButton" Style="{StaticResource MenuBarButton}" Click="Network_Click"
              ToolTip="{services:Loc MenuBar.Network}" AutomationProperties.Name="{services:Loc MenuBar.Network}">
-      <TextBlock x:Name="NetworkGlyph" Text="●" FontSize="10" />
+      <controls:VeliSymbol Symbol="Network" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
      </Button>
      <Button Style="{StaticResource MenuBarButton}" Click="Sound_Click"
              ToolTip="{services:Loc MenuBar.Sound}" AutomationProperties.Name="{services:Loc MenuBar.Sound}">
-      <TextBlock Text="◖))" FontSize="11" />
+      <controls:VeliSymbol Symbol="Sound" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
      </Button>
      <Button x:Name="PowerButton" Style="{StaticResource MenuBarButton}" Click="Power_Click"
              ToolTip="{services:Loc MenuBar.Power}" AutomationProperties.Name="{services:Loc MenuBar.Power}">
-      <TextBlock x:Name="PowerLabel" Text="" FontSize="11" />
+      <StackPanel Orientation="Horizontal">
+       <controls:VeliSymbol Symbol="Battery" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
+       <TextBlock x:Name="PowerLabel" Text="" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center" />
+      </StackPanel>
+     </Button>
+     <Button x:Name="ControlCenterButton" Style="{StaticResource MenuBarButton}" Click="ControlCenter_Click"
+             ToolTip="{services:Loc MenuBar.ControlCenter}" AutomationProperties.Name="{services:Loc MenuBar.ControlCenter}">
+      <controls:VeliSymbol Symbol="ControlCenter" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
+     </Button>
+     <Button x:Name="NotificationCenterButton" Style="{StaticResource MenuBarButton}" Click="NotificationCenter_Click"
+             ToolTip="{services:Loc MenuBar.NotificationCenter}" AutomationProperties.Name="{services:Loc MenuBar.NotificationCenter}">
+      <Grid Width="18" Height="18">
+       <controls:VeliSymbol Symbol="Notification" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
+       <Border x:Name="NotificationBadge" MinWidth="12" Height="12" CornerRadius="6"
+               HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-4,0"
+               Background="{DynamicResource AccentGradient}" BorderBrush="{DynamicResource AccentText}"
+               BorderThickness="1" Visibility="Collapsed">
+        <TextBlock x:Name="NotificationBadgeLabel" Foreground="{DynamicResource AccentText}" FontSize="7"
+                   FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0" />
+       </Border>
+      </Grid>
      </Button>
      <Button Style="{StaticResource MenuBarButton}" Click="Clock_Click"
              ToolTip="{services:Loc MenuBar.Clock}" AutomationProperties.Name="{services:Loc MenuBar.Clock}">

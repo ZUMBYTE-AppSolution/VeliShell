@@ -89,6 +89,7 @@ internal static class Program
             TestDockIconCustomizationContract();
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
+            TestMenuBarCenters();
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
             RenderIconSurfaceContactSheet(iconSurfacesPath);
@@ -99,8 +100,9 @@ internal static class Program
             Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed icon and uses the same p=4.37 contour without an accent plate.");
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
-            Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe and idempotent.");
+            Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
+            Console.WriteLine("PASS: Menu-bar Control Center and local Notification Center expose bounded, reversible and privacy-preserving contracts.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             return 0;
         }
@@ -917,6 +919,46 @@ internal static class Program
         Require(!(bool)releaseEdge.Invoke(null, ambiguousArguments)!,
             "An ambiguous floating taskbar geometry was allowed to change the work area.");
 
+        var classifyHidden = RequireMethod(serviceType, "ClassifyHiddenWorkArea");
+        string HiddenAction(
+            bool hasSnapshot,
+            object snapshotMonitor,
+            object snapshotOriginal,
+            object snapshotApplied,
+            object currentMonitor,
+            object currentWork,
+            object taskbar) =>
+            classifyHidden.Invoke(null,
+                [hasSnapshot, snapshotMonitor, snapshotOriginal, snapshotApplied,
+                    currentMonitor, currentWork, taskbar])!.ToString()!;
+        var standardMonitor = Rect(0, 0, 1920, 1080);
+        var menuAndTaskbarWork = Rect(0, 35, 1920, 1032);
+        var menuOnlyWork = Rect(0, 35, 1920, 1080);
+        var bottomTaskbar = Rect(0, 1032, 1920, 1080);
+        Require(HiddenAction(true, standardMonitor, menuAndTaskbarWork, menuOnlyWork,
+                    standardMonitor, menuOnlyWork, bottomTaskbar) == "Healthy",
+            "An already expanded work area was scheduled for another mutation.");
+        Require(HiddenAction(true, standardMonitor, menuAndTaskbarWork, menuOnlyWork,
+                    standardMonitor, menuAndTaskbarWork, bottomTaskbar) == "ApplySnapshot",
+            "Explorer reasserting the exact journaled taskbar reservation was not repairable.");
+        Require(HiddenAction(true, Rect(0, 0, 1600, 900), Rect(0, 35, 1600, 852),
+                    Rect(0, 35, 1600, 900), standardMonitor, menuAndTaskbarWork, bottomTaskbar) == "Recapture",
+            "A changed monitor topology with an exact taskbar edge was not safely recaptured.");
+        Require(HiddenAction(true, standardMonitor, menuAndTaskbarWork, menuOnlyWork,
+                    standardMonitor, Rect(0, 35, 1920, 1000), bottomTaskbar) == "PreserveExternal",
+            "A newer same-edge appbar reservation could be overwritten during reconciliation.");
+        Require(HiddenAction(false, Rect(0, 0, 0, 0), Rect(0, 0, 0, 0), Rect(0, 0, 0, 0),
+                    standardMonitor, menuOnlyWork, bottomTaskbar) == "PreserveExternal",
+            "A work area whose taskbar edge was already released was incorrectly expanded again.");
+        var shouldBroadcast = RequireMethod(serviceType, "ShouldBroadcastWorkAreaChange");
+        Require(!(bool)shouldBroadcast.Invoke(null, [true])! &&
+                (bool)shouldBroadcast.Invoke(null, [false])!,
+            "A hidden-taskbar work-area release can still broadcast the setting change that makes Explorer reclaim its edge.");
+        var reflowTargetType = serviceType.GetNestedType("WindowReflowTarget", BindingFlags.NonPublic)
+                               ?? throw new TypeLoadException("TaskbarVisibilityService.WindowReflowTarget");
+        Require(reflowTargetType.GetProperty("ExpectedWorkArea") is not null,
+            "Queued window reflow targets are not guarded against a later restore/re-hide transition.");
+
         var shouldRestore = RequireMethod(serviceType, "ShouldRestoreWorkArea");
         var monitor = Rect(0, 0, 1920, 1080);
         var original = Rect(0, 0, 1920, 1040);
@@ -973,6 +1015,90 @@ internal static class Program
         Require(notificationField.GetValue(service) is false,
             "A partial work-area SET rollback retained an uncommitted reflow/broadcast operation.");
         ((IDisposable)service).Dispose();
+    }
+
+    private static void TestMenuBarCenters()
+    {
+        var notificationType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
+        var notificationKindType = RequireType("VeliShell.Desktop.Services.VeliShellNotificationKind");
+        var current = notificationType.GetProperty("Current", BindingFlags.Static | BindingFlags.NonPublic)!
+                          .GetValue(null)
+                      ?? throw new InvalidOperationException("Notification center singleton is unavailable.");
+        var clear = RequireMethod(notificationType, "Clear");
+        var publish = RequireMethod(notificationType, "Publish");
+        var snapshot = RequireMethod(notificationType, "Snapshot");
+        var markAllRead = RequireMethod(notificationType, "MarkAllRead");
+        var unread = notificationType.GetProperty("UnreadCount", BindingFlags.Instance | BindingFlags.NonPublic)
+                     ?? throw new MissingMemberException(notificationType.FullName, "UnreadCount");
+        var information = Enum.Parse(notificationKindType, "Information");
+
+        clear.Invoke(current, null);
+        publish.Invoke(current, ["qa-dedup", "First", "First message", information]);
+        publish.Invoke(current, ["qa-dedup", "Replacement", "Replacement message", information]);
+        var deduplicated = ((System.Collections.IEnumerable)snapshot.Invoke(current, null)!).Cast<object>().ToList();
+        Require(deduplicated.Count == 1 &&
+                string.Equals(deduplicated[0].GetType().GetProperty("Title")!.GetValue(deduplicated[0]) as string,
+                    "Replacement", StringComparison.Ordinal),
+            "Local notifications are not deduplicated by stable key.");
+
+        for (var index = 0; index < 55; index++)
+            publish.Invoke(current, [$"qa-{index}", $"Title {index}", "Message", information]);
+        var bounded = ((System.Collections.IEnumerable)snapshot.Invoke(current, null)!).Cast<object>().Count();
+        Require(bounded == 50, "The local notification center no longer enforces its 50-item bound.");
+        Require((int)unread.GetValue(current)! == 50,
+            "New local notifications no longer update the unread count.");
+        markAllRead.Invoke(current, null);
+        Require((int)unread.GetValue(current)! == 0,
+            "Mark-all-read did not clear the local unread count.");
+        clear.Invoke(current, null);
+
+        var menuType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
+        Require(menuType.GetField("_controlCenter", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetField("_notificationCenter", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetMethod("ClosePanels", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The menu bar no longer owns a single, closeable center-panel lifecycle.");
+        Require(RequireType("VeliShell.Desktop.Views.ControlCenterWindow") is { } &&
+                RequireType("VeliShell.Desktop.Views.NotificationCenterWindow") is { },
+            "A menu-bar center window is missing.");
+
+        var placementType = RequireType("VeliShell.Desktop.Views.MenuPanelPlacement");
+        var calculateBounds = RequireMethod(placementType, "CalculateBounds");
+        Rect PanelBounds(Point anchor, Size desired, Rect workArea) =>
+            (Rect)calculateBounds.Invoke(null, [anchor, desired, workArea])!;
+
+        var ordinaryWorkArea = new Rect(0, 35, 1920, 1005);
+        var ordinaryBounds = PanelBounds(
+            new Point(1888, 35), new Size(376, 536), ordinaryWorkArea);
+        Require(ordinaryBounds == new Rect(1512, 42, 376, 536),
+            "Center-panel placement changed the authored size or anchor gap on a normal work area.");
+
+        // 1366x768 at 150% scaling leaves roughly this many logical DIPs after
+        // the menu-bar reservation. Both center windows must stay within it.
+        var compactWorkArea = new Rect(0, 35, 911, 445);
+        var compactControlBounds = PanelBounds(
+            new Point(890, 35), new Size(376, 536), compactWorkArea);
+        var compactNotificationBounds = PanelBounds(
+            new Point(850, 35), new Size(370, 480), compactWorkArea);
+        foreach (var bounds in new[] { compactControlBounds, compactNotificationBounds })
+        {
+            Require(bounds.Top >= compactWorkArea.Top &&
+                    bounds.Bottom <= compactWorkArea.Bottom &&
+                    bounds.Height > 0,
+                "A center panel can extend above or below a compact high-DPI work area.");
+        }
+        Require(compactControlBounds.Height < 536 && compactNotificationBounds.Height < 480,
+            "Compact work areas no longer constrain the usable center-panel height.");
+
+        var controlStatusType = RequireType("VeliShell.Desktop.Services.SystemControlStatusService");
+        var readStatus = controlStatusType.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic);
+        Require(readStatus is not null &&
+                controlStatusType.GetMethod("TrySetMasterVolume", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                controlStatusType.GetMethod("TrySetMuted", BindingFlags.Static | BindingFlags.NonPublic) is not null,
+            "Control Center no longer exposes its bounded Windows status/audio contract.");
+        var status = readStatus!.Invoke(null, null)!;
+        var volume = status.GetType().GetProperty("MasterVolume")!.GetValue(status) as double?;
+        Require(volume is null or >= 0 and <= 100,
+            "The read-only system-volume probe returned a value outside 0–100 percent.");
     }
 
     private static void TestMenuBarReservationPolicy()

@@ -5,7 +5,11 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
@@ -21,10 +25,15 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     private const string Repository = "VeliShell";
     private const string ApiVersion = "2026-03-10";
     private const int MaximumMetadataBytes = 2 * 1024 * 1024;
+    private const int MaximumChecksumBytes = 512 * 1024;
     private const long MaximumInstallerBytes = 512L * 1024 * 1024;
     private static readonly TimeSpan DefaultBodyReadInactivityTimeout = TimeSpan.FromSeconds(30);
     private static readonly Uri LatestReleaseApi = new(
         "https://api.github.com/repos/ZUMBYTE-AppSolution/VeliShell/releases/latest");
+    private static readonly Uri LatestReleasePage = new(
+        "https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest");
+    private static readonly Uri ReleasesAtomFeed = new(
+        "https://github.com/ZUMBYTE-AppSolution/VeliShell/releases.atom");
 
     private readonly HttpClient _client;
     private readonly TimeSpan _bodyReadInactivityTimeout;
@@ -84,6 +93,11 @@ public sealed class GitHubReleaseUpdateService : IDisposable
             cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return new UpdateCheckResult(UpdateCheckState.NoPublishedRelease, currentVersion, null);
+        if (ShouldUsePublicMetadataFallback(response.StatusCode))
+        {
+            response.Dispose();
+            return await CheckViaPublicMetadataAsync(currentVersion, cancellationToken);
+        }
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException(
                 $"GitHub release check failed with HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
@@ -100,6 +114,259 @@ public sealed class GitHubReleaseUpdateService : IDisposable
             release.Version > currentVersion ? UpdateCheckState.UpdateAvailable : UpdateCheckState.UpToDate,
             currentVersion,
             release);
+    }
+
+    /// <summary>
+    /// GitHub's unauthenticated REST quota is shared by every user behind the same
+    /// public IP address. When that small quota is exhausted, use public release
+    /// pages and assets from the same official repository instead. The exact tag is
+    /// pinned before checksums or installer metadata are read, preventing a moving
+    /// "latest" alias from mixing two releases.
+    /// </summary>
+    private async Task<UpdateCheckResult> CheckViaPublicMetadataAsync(
+        SemanticVersion currentVersion,
+        CancellationToken cancellationToken)
+    {
+        using var latestRequest = CreateRequest(HttpMethod.Get, LatestReleasePage, "text/html");
+        using var latestResponse = await _client.SendAsync(
+            latestRequest,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        if (latestResponse.StatusCode == HttpStatusCode.NotFound)
+            return new UpdateCheckResult(UpdateCheckState.NoPublishedRelease, currentVersion, null);
+        latestResponse.EnsureSuccessStatusCode();
+
+        if (latestResponse.RequestMessage?.RequestUri is not { } releasePage ||
+            !TryGetStableReleaseTag(releasePage, out var tag, out var version))
+            throw new UpdateSecurityException(
+                "GitHub's latest-release redirect did not resolve to the official VeliShell repository.");
+        latestResponse.Dispose();
+
+        // No changelog or package metadata is needed merely to report that this
+        // installation is current. This keeps the rate-limit fallback lightweight.
+        if (version <= currentVersion)
+            return new UpdateCheckResult(UpdateCheckState.UpToDate, currentVersion, null);
+
+        var atomBytes = await ReadOfficialMetadataAsync(
+            ReleasesAtomFeed,
+            "application/atom+xml",
+            MaximumMetadataBytes,
+            cancellationToken);
+        var atomRelease = ParseAtomRelease(atomBytes, tag, releasePage);
+
+        var checksumUri = OfficialReleaseAssetUri(tag, "SHA256SUMS.txt");
+        var checksumBytes = await ReadOfficialAssetMetadataAsync(
+            checksumUri,
+            MaximumChecksumBytes,
+            cancellationToken);
+        var installerName = InstallerName(version);
+        var sha256 = ParseSha256Checksums(checksumBytes, installerName);
+        var installerUri = OfficialReleaseAssetUri(tag, installerName);
+        var size = await ReadOfficialAssetSizeAsync(installerUri, cancellationToken);
+
+        var installer = new UpdateAsset(installerName, size, installerUri, sha256);
+        ValidateAsset(tag, version, installer);
+        var release = new UpdateRelease(
+            version,
+            tag,
+            atomRelease.DisplayName,
+            atomRelease.Changelog,
+            atomRelease.PublishedAt,
+            releasePage,
+            installer);
+        return new UpdateCheckResult(UpdateCheckState.UpdateAvailable, currentVersion, release);
+    }
+
+    private async Task<byte[]> ReadOfficialMetadataAsync(
+        Uri uri,
+        string accept,
+        int maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, uri, accept);
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        if (response.RequestMessage?.RequestUri is not { } finalUri ||
+            !IsExactGitHubEndpoint(finalUri, uri.AbsolutePath))
+            throw new UpdateSecurityException("GitHub redirected release metadata to an unapproved endpoint.");
+        return await ReadLimitedAsync(
+            response.Content,
+            maximumBytes,
+            _bodyReadInactivityTimeout,
+            cancellationToken);
+    }
+
+    private async Task<byte[]> ReadOfficialAssetMetadataAsync(
+        Uri uri,
+        int maximumBytes,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(HttpMethod.Get, uri, "application/octet-stream");
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        if (response.RequestMessage?.RequestUri is not { } finalUri || !IsAllowedAssetEndpoint(finalUri))
+            throw new UpdateSecurityException("GitHub redirected release checksums to an unapproved endpoint.");
+        return await ReadLimitedAsync(
+            response.Content,
+            maximumBytes,
+            _bodyReadInactivityTimeout,
+            cancellationToken);
+    }
+
+    private async Task<long> ReadOfficialAssetSizeAsync(
+        Uri uri,
+        CancellationToken cancellationToken)
+    {
+        var size = await ProbeOfficialAssetSizeAsync(uri, HttpMethod.Head, cancellationToken);
+        if (size is null or <= 0)
+            size = await ProbeOfficialAssetSizeAsync(uri, HttpMethod.Get, cancellationToken, useRange: true);
+        if (size is null or <= 0 or > MaximumInstallerBytes)
+            throw new UpdateSecurityException("GitHub did not provide a valid installer size.");
+        return size.Value;
+    }
+
+    private async Task<long?> ProbeOfficialAssetSizeAsync(
+        Uri uri,
+        HttpMethod method,
+        CancellationToken cancellationToken,
+        bool useRange = false)
+    {
+        using var request = CreateRequest(method, uri, "application/octet-stream");
+        if (useRange) request.Headers.Range = new RangeHeaderValue(0, 0);
+        using var response = await _client.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        if (response.RequestMessage?.RequestUri is not { } finalUri || !IsAllowedAssetEndpoint(finalUri))
+            throw new UpdateSecurityException("GitHub redirected installer metadata to an unapproved endpoint.");
+        if (method == HttpMethod.Head && response.StatusCode == HttpStatusCode.MethodNotAllowed)
+            return null;
+        response.EnsureSuccessStatusCode();
+        return response.Content.Headers.ContentRange?.Length ?? response.Content.Headers.ContentLength;
+    }
+
+    private static AtomReleaseMetadata ParseAtomRelease(
+        ReadOnlySpan<byte> utf8Xml,
+        string tag,
+        Uri releasePage)
+    {
+        using var source = new MemoryStream(utf8Xml.ToArray(), writable: false);
+        using var reader = XmlReader.Create(source, new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreComments = true,
+            MaxCharactersInDocument = MaximumMetadataBytes
+        });
+        var document = XDocument.Load(reader, LoadOptions.None);
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        if (document.Root?.Name != atom + "feed")
+            throw new InvalidDataException("GitHub returned an invalid release feed.");
+
+        XElement? matchingEntry = null;
+        foreach (var entry in document.Root.Elements(atom + "entry"))
+        {
+            var matches = entry.Elements(atom + "link").Any(link =>
+                string.Equals((string?)link.Attribute("rel"), "alternate", StringComparison.OrdinalIgnoreCase) &&
+                Uri.TryCreate((string?)link.Attribute("href"), UriKind.Absolute, out var linkUri) &&
+                IsReleasePageForTag(linkUri, tag) &&
+                linkUri == releasePage);
+            if (!matches) continue;
+            if (matchingEntry is not null)
+                throw new InvalidDataException("GitHub returned duplicate entries for the latest release.");
+            matchingEntry = entry;
+        }
+        if (matchingEntry is null)
+            throw new InvalidDataException("GitHub's release feed does not contain the latest stable release.");
+
+        var displayName = RequiredAtomValue(matchingEntry, atom + "title").Trim();
+        if (displayName.Length == 0) displayName = "VeliShell " + tag.TrimStart('v', 'V');
+        var content = matchingEntry.Element(atom + "content");
+        if (content is null || !string.Equals(
+                (string?)content.Attribute("type"), "html", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("GitHub's release feed contains no supported changelog.");
+        var changelog = HtmlToPlainText(content.Value);
+        if (changelog.Length == 0)
+            throw new InvalidDataException("The release has no changelog and cannot be offered in-app.");
+        if (!DateTimeOffset.TryParse(
+                RequiredAtomValue(matchingEntry, atom + "updated"),
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var publishedAt))
+            throw new InvalidDataException("GitHub's release feed contains an invalid publication date.");
+
+        return new AtomReleaseMetadata(displayName, changelog, publishedAt);
+    }
+
+    private static string RequiredAtomValue(XElement element, XName name) =>
+        element.Element(name)?.Value is { Length: > 0 } value
+            ? value
+            : throw new InvalidDataException($"GitHub's release feed is missing '{name.LocalName}'.");
+
+    private static string HtmlToPlainText(string html)
+    {
+        const RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        var timeout = TimeSpan.FromSeconds(1);
+        var text = Regex.Replace(
+            html,
+            @"<(?:br\s*/?|/p|/div|/h[1-6]|/ul|/ol|/pre|/blockquote)\s*>",
+            "\n",
+            options,
+            timeout);
+        text = Regex.Replace(text, @"<li(?:\s[^>]*)?>", "• ", options, timeout);
+        text = Regex.Replace(text, @"</li\s*>", "\n", options, timeout);
+        text = Regex.Replace(text, @"<[^>]+>", string.Empty, options, timeout);
+        text = WebUtility.HtmlDecode(text).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+
+        var result = new StringBuilder(text.Length);
+        var previousWasBlank = true;
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = Regex.Replace(rawLine, @"[\t ]+", " ", RegexOptions.CultureInvariant, timeout).Trim();
+            if (line.Length == 0)
+            {
+                if (!previousWasBlank) result.AppendLine();
+                previousWasBlank = true;
+                continue;
+            }
+            result.AppendLine(line);
+            previousWasBlank = false;
+        }
+        return result.ToString().Trim();
+    }
+
+    internal static string ParseSha256Checksums(ReadOnlySpan<byte> utf8Text, string expectedFileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedFileName);
+        if (Path.GetFileName(expectedFileName) != expectedFileName)
+            throw new ArgumentException("The expected checksum filename must not contain a path.", nameof(expectedFileName));
+
+        var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            .GetString(utf8Text);
+        string? match = null;
+        using var lines = new StringReader(text);
+        while (lines.ReadLine() is { } rawLine)
+        {
+            var line = rawLine.AsSpan().Trim();
+            if (line.Length < 66 || !line[..64].ToArray().All(Uri.IsHexDigit) ||
+                !char.IsWhiteSpace(line[64]))
+                continue;
+            var fileName = line[64..].TrimStart();
+            if (!fileName.IsEmpty && fileName[0] == '*') fileName = fileName[1..];
+            fileName = fileName.Trim();
+            if (!fileName.Equals(expectedFileName.AsSpan(), StringComparison.Ordinal)) continue;
+            if (match is not null)
+                throw new InvalidDataException($"SHA256SUMS.txt contains duplicate entries for {expectedFileName}.");
+            match = line[..64].ToString().ToLowerInvariant();
+        }
+        return match ?? throw new InvalidDataException(
+            $"SHA256SUMS.txt does not contain a SHA-256 checksum for {expectedFileName}.");
     }
 
     /// <summary>
@@ -220,7 +487,7 @@ public sealed class GitHubReleaseUpdateService : IDisposable
             System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.AssumeUniversal);
         var releasePage = RequireUri(RequiredString(root, "html_url"));
-        if (!IsRepositoryReleasePage(releasePage))
+        if (!IsReleasePageForTag(releasePage, tag))
             throw new UpdateSecurityException("The release page is outside the official VeliShell repository.");
 
         if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
@@ -297,7 +564,7 @@ public sealed class GitHubReleaseUpdateService : IDisposable
         TimeSpan inactivityTimeout,
         CancellationToken cancellationToken)
     {
-        if (content.Headers.ContentLength is > MaximumMetadataBytes)
+        if (content.Headers.ContentLength is { } declaredLength && declaredLength > maximumBytes)
             throw new InvalidDataException("The GitHub release metadata is unexpectedly large.");
         await using var source = await content.ReadAsStreamAsync(cancellationToken);
         using var destination = new MemoryStream();
@@ -369,11 +636,54 @@ public sealed class GitHubReleaseUpdateService : IDisposable
 
     private static string InstallerName(SemanticVersion version) => $"VeliShell-{version}-win-x64.msi";
 
-    private static bool IsRepositoryReleasePage(Uri uri) =>
+    private static bool ShouldUsePublicMetadataFallback(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests ||
+        (int)statusCode >= 500;
+
+    private static bool TryGetStableReleaseTag(
+        Uri uri,
+        out string tag,
+        out SemanticVersion version)
+    {
+        const string marker = "/releases/tag/";
+        tag = string.Empty;
+        version = default;
+        var expectedPrefix = $"/{Owner}/{Repository}{marker}";
+        if (uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
+            !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment) ||
+            !uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        tag = Uri.UnescapeDataString(uri.AbsolutePath[expectedPrefix.Length..]);
+        return tag.Length > 0 &&
+               !tag.Contains('/') &&
+               SemanticVersion.TryParse(tag, out version) &&
+               !version.IsPrerelease &&
+               IsReleasePageForTag(uri, tag);
+    }
+
+    private static bool IsReleasePageForTag(Uri uri, string tag) =>
         uri.Scheme == Uri.UriSchemeHttps &&
         uri.IsDefaultPort &&
         uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
-        uri.AbsolutePath.StartsWith($"/{Owner}/{Repository}/releases/", StringComparison.OrdinalIgnoreCase);
+        uri.AbsolutePath.Equals(
+            $"/{Owner}/{Repository}/releases/tag/{Uri.EscapeDataString(tag)}",
+            StringComparison.OrdinalIgnoreCase) &&
+        string.IsNullOrEmpty(uri.Query) &&
+        string.IsNullOrEmpty(uri.Fragment);
+
+    private static bool IsExactGitHubEndpoint(Uri uri, string expectedPath) =>
+        uri.Scheme == Uri.UriSchemeHttps &&
+        uri.IsDefaultPort &&
+        uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
+        uri.AbsolutePath.Equals(expectedPath, StringComparison.Ordinal) &&
+        string.IsNullOrEmpty(uri.Query) &&
+        string.IsNullOrEmpty(uri.Fragment);
+
+    private static Uri OfficialReleaseAssetUri(string tag, string fileName) => new(
+        $"https://github.com/{Owner}/{Repository}/releases/download/" +
+        $"{Uri.EscapeDataString(tag)}/{Uri.EscapeDataString(fileName)}");
 
     private static bool IsOfficialAssetUrl(Uri uri, string tag, string fileName) =>
         uri.Scheme == Uri.UriSchemeHttps &&
@@ -444,6 +754,11 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     {
         if (_ownsClient) _client.Dispose();
     }
+
+    private sealed record AtomReleaseMetadata(
+        string DisplayName,
+        string Changelog,
+        DateTimeOffset PublishedAt);
 }
 
 public sealed class UpdateTransferTimeoutException(TimeSpan inactivityTimeout, Exception innerException)

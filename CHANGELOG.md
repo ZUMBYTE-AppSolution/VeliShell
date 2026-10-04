@@ -10,6 +10,30 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 - Signierte Windows-Pakete, sobald ein dauerhaftes Zumbyte.de-Codesigning-Zertifikat bereitsteht.
 
+## [0.5.0] - 2026-10-04
+
+### Neu
+
+- Die VeliShell-Menüleiste besitzt jetzt ein milchiges Kontrollzentrum mit Netzwerk-, Bluetooth-, Fokus-, Anzeige- und Energiezugriffen sowie echter Regelung der Windows-Masterlautstärke und Stummschaltung.
+- Ein lokales Benachrichtigungscenter zeigt VeliShell-Ereignisse und gefundene Updates, zählt ungelesene Hinweise im Menüleisten-Badge und unterstützt Gelesen-Markierung, einzelnes Entfernen und vollständiges Leeren.
+- Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen, bei jeder DPI-Stufe scharf gezeichneten VeliShell-Vektorsymbolsatz mit einheitlichem 24-Punkt-Raster und automatischer Theme-Farbe.
+
+### Geändert
+
+- Kontroll- und Benachrichtigungscenter öffnen exklusiv unter dem jeweiligen Menüleistensymbol, bleiben innerhalb des verfügbaren Bildschirmbereichs und schließen sich bei Deaktivierung oder mit Escape.
+- Die Updateprüfung verwendet bei einem ausgeschöpften anonymen GitHub-REST-Limit automatisch die öffentliche Release-Seite, den offiziellen Atom-Feed und taggebundene Release-Artefakte, ohne einen persönlichen GitHub-Schlüssel zu verlangen.
+
+### Behoben
+
+- Beim vollständigen Ausblenden der Windows-Taskleiste bleibt kein schwarzer, reservierter Streifen mehr zurück. VeliShell vermeidet den Explorer-Broadcast, der die freigegebene Kante erneut beanspruchte, überwacht die Arbeitsfläche weiter und ordnet maximierte Fenster bis zum echten Bildschirmrand neu an.
+- Die obere Reservierung der VeliShell-Menüleiste bleibt bei der Taskleistenfreigabe erhalten; Monitor-, DPI- und Explorer-Neustarts werden ohne Überschreiben fremder AppBars neu abgeglichen.
+- Die manuelle und automatische Aktualisierungssuche bleibt auch dann verfügbar, wenn GitHub die an eine öffentliche IP gebundenen anonymen REST-Anfragen mit HTTP 403 oder 429 begrenzt.
+
+### Sicherheit
+
+- Der Update-Fallback akzeptiert ausschließlich HTTPS-Ziele des offiziellen VeliShell-Repositories bzw. der erlaubten GitHub-Asset-CDNs und verknüpft Release-Seite, stabilen SemVer-Tag, Changelog, Installername, Größe und SHA-256-Prüfsumme miteinander.
+- Originale Apple SF Symbols werden nicht extrahiert oder im Windows-Paket verteilt. Die neue Symbolsprache besteht vollständig aus eigenem VeliShell-Vektorcode.
+
 ## [0.4.0] - 2026-10-04
 
 ### Neu
@@ -82,7 +106,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.0

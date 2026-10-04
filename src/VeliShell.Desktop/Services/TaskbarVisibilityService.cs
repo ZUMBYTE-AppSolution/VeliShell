@@ -229,7 +229,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
                     _lastStatus = taskbars.Count == 1
                         ? L("Taskbar.Hidden")
                         : LF("Taskbar.HiddenDisplays", taskbars.Count);
-                    if (TryExpandWorkAreasCore())
+                    if (TrySynchronizeWorkAreasCore(taskbars))
                     {
                         workAreasExpanded = true;
                     }
@@ -419,6 +419,19 @@ internal sealed class TaskbarVisibilityService : IDisposable
         _lastStatus = changed > 0
             ? LF("Taskbar.HiddenDisplays", changed)
             : L("Taskbar.Hidden");
+
+        // Explorer can recreate its appbar reservation after the taskbar window
+        // was hidden (most commonly after a display/DPI change). Only repair the
+        // work area after every taskbar is confirmed hidden. The synchronizer
+        // accepts the exact journaled baseline, or a newly observed taskbar edge
+        // that can be identified without touching another appbar reservation.
+        if (changed == 0 && !TrySynchronizeWorkAreasCore(taskbars))
+        {
+            _hideRequested = false;
+            RollBackCore(shellProcessId);
+            _lastStatus = L("Taskbar.WorkAreaExpandFailed");
+            return false;
+        }
         return true;
     }
 
@@ -694,7 +707,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
         return false;
     }
 
-    private bool TryExpandWorkAreasCore()
+    private bool TrySynchronizeWorkAreasCore(IReadOnlyList<TrackedTaskbar> taskbars)
     {
         if (!NativeMethods.TryAllMonitors(out var monitors)) return false;
 
@@ -702,42 +715,197 @@ internal sealed class TaskbarVisibilityService : IDisposable
             .GroupBy(monitor => MonitorKey(monitor.Info), StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Key.Length > 0 && group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
-        if (_workAreas.Values.Any(snapshot =>
-                !current.TryGetValue(snapshot.DeviceName, out var monitor) ||
-                !RectEquals(snapshot.MonitorBounds, monitor.Info.Monitor) ||
-                !RectEquals(snapshot.OriginalWorkArea, monitor.Info.Work)))
-            return false;
-        foreach (var snapshot in _workAreas.Values.ToArray())
-        {
-            var monitor = current[snapshot.DeviceName];
 
-            var expanded = snapshot.AppliedWorkArea;
+        var taskbarsByDevice = taskbars
+            .GroupBy(taskbar => taskbar.DeviceName, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Key.Length > 0 && group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
+        if (taskbarsByDevice.Count != taskbars.Count) return false;
+
+        var previousSnapshots = _workAreas.ToDictionary(
+            pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        var planned = new List<WorkAreaMutation>();
+        var journalChanged = false;
+        foreach (var taskbar in taskbarsByDevice.Values)
+        {
+            if (!current.TryGetValue(taskbar.DeviceName, out var monitor) ||
+                !NativeMethods.GetWindowRect(taskbar.Handle, out var taskbarBounds) ||
+                !IsValidWorkArea(monitor.Info.Monitor, monitor.Info.Work))
+                return false;
+
+            _workAreas.TryGetValue(taskbar.DeviceName, out var snapshot);
+            var action = ClassifyHiddenWorkArea(
+                snapshot is not null,
+                snapshot?.MonitorBounds ?? default,
+                snapshot?.OriginalWorkArea ?? default,
+                snapshot?.AppliedWorkArea ?? default,
+                monitor.Info.Monitor,
+                monitor.Info.Work,
+                taskbarBounds);
+
+            if (action == HiddenWorkAreaAction.Healthy) continue;
+            if (action == HiddenWorkAreaAction.PreserveExternal)
+            {
+                // The taskbar edge is already released or a different appbar has
+                // changed the same edge. Forget an obsolete geometry snapshot so
+                // restore cannot overwrite that newer owner; taskbar visibility
+                // remains independently journaled.
+                if (snapshot is not null)
+                {
+                    _workAreas.Remove(taskbar.DeviceName);
+                    journalChanged = true;
+                }
+                continue;
+            }
+
+            if (!_taskbarRecovery.ContainsKey(TaskbarRecoveryKey(taskbar.ClassName, taskbar.DeviceName)))
+                return false;
+
+            if (action == HiddenWorkAreaAction.Recapture)
+            {
+                if (!TryReleaseOnlyTaskbarEdge(
+                        monitor.Info.Monitor,
+                        monitor.Info.Work,
+                        taskbarBounds,
+                        out var refreshedApplied) ||
+                    RectEquals(refreshedApplied, monitor.Info.Work))
+                    return false;
+                snapshot = new WorkAreaSnapshot(
+                    monitor.Handle,
+                    taskbar.DeviceName,
+                    monitor.Info.Monitor,
+                    monitor.Info.Work,
+                    refreshedApplied);
+                _workAreas[taskbar.DeviceName] = snapshot;
+                journalChanged = true;
+            }
+
+            if (snapshot is null) return false;
             var reflowTargets = CaptureWindowReflowTargetsCore(
-                snapshot.DeviceName, snapshot.OriginalWorkArea, expanded);
+                snapshot.DeviceName, monitor.Info.Work, snapshot.AppliedWorkArea);
             if (reflowTargets is null)
+            {
+                RestoreSnapshotDictionary(previousSnapshots);
+                return false;
+            }
+            planned.Add(new WorkAreaMutation(snapshot, monitor.Handle, monitor.Info.Work, reflowTargets));
+        }
+
+        // A refreshed topology/baseline must be durable before any system work
+        // area is changed, otherwise a crash could leave no exact rollback data.
+        if (journalChanged && !PersistWorkAreasCore())
+        {
+            RestoreSnapshotDictionary(previousSnapshots);
+            return false;
+        }
+
+        var committedReflowTargets = new List<WindowReflowTarget>();
+        foreach (var mutation in planned)
+        {
+            var snapshot = mutation.Snapshot;
+            var verifiedBefore = new NativeMethods.MonitorInfo
+            {
+                Size = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MonitorInfo>()
+            };
+            if (!NativeMethods.GetMonitorInfo(mutation.MonitorHandle, ref verifiedBefore) ||
+                !RectEquals(verifiedBefore.Monitor, snapshot.MonitorBounds) ||
+                !RectEquals(verifiedBefore.Work, mutation.SourceWorkArea))
             {
                 RollBackWorkAreasWithoutPublishingCore();
                 return false;
             }
-            if (!RectEquals(monitor.Info.Work, expanded) &&
-                !NativeMethods.SystemParametersInfo(NativeMethods.SpiSetWorkArea, 0, ref expanded, 0))
+
+            var expanded = snapshot.AppliedWorkArea;
+            if (!NativeMethods.SystemParametersInfo(NativeMethods.SpiSetWorkArea, 0, ref expanded, 0))
             {
                 RollBackWorkAreasWithoutPublishingCore();
                 return false;
             }
 
             var verified = new NativeMethods.MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MonitorInfo>() };
-            if (!NativeMethods.GetMonitorInfo(monitor.Handle, ref verified) ||
+            if (!NativeMethods.GetMonitorInfo(mutation.MonitorHandle, ref verified) ||
                 !RectEquals(verified.Work, snapshot.AppliedWorkArea))
             {
                 RollBackWorkAreasWithoutPublishingCore();
                 return false;
             }
-            _pendingWindowReflow.AddRange(reflowTargets);
-            _workAreaNotificationPending = true;
+            committedReflowTargets.AddRange(mutation.ReflowTargets);
         }
+        if (planned.Count > 0) _pendingWindowReflow.AddRange(committedReflowTargets);
+        // Do not broadcast WM_SETTINGCHANGE while the shell taskbar appbar is
+        // still registered: Explorer handles that broadcast by claiming the
+        // taskbar edge again, recreating the black reserved band. Cancelling a
+        // pending restore broadcast also makes a concurrent hide transition win
+        // deterministically. The SPI update is verified above and existing
+        // maximized windows are reflowed explicitly by FlushWorkAreaEffects.
+        _workAreaNotificationPending = ShouldBroadcastWorkAreaChange(taskbarHidden: true);
         return true;
     }
+
+    private void RestoreSnapshotDictionary(IReadOnlyDictionary<string, WorkAreaSnapshot> snapshots)
+    {
+        _workAreas.Clear();
+        foreach (var pair in snapshots) _workAreas[pair.Key] = pair.Value;
+    }
+
+    private static HiddenWorkAreaAction ClassifyHiddenWorkArea(
+        bool hasSnapshot,
+        NativeMethods.Rect snapshotMonitor,
+        NativeMethods.Rect originalWorkArea,
+        NativeMethods.Rect appliedWorkArea,
+        NativeMethods.Rect currentMonitor,
+        NativeMethods.Rect currentWorkArea,
+        NativeMethods.Rect taskbarBounds)
+    {
+        if (hasSnapshot && RectEquals(snapshotMonitor, currentMonitor))
+        {
+            if (RectEquals(appliedWorkArea, currentWorkArea)) return HiddenWorkAreaAction.Healthy;
+            if (RectEquals(originalWorkArea, currentWorkArea)) return HiddenWorkAreaAction.ApplySnapshot;
+        }
+
+        return IsExactTaskbarWorkAreaEdge(currentMonitor, currentWorkArea, taskbarBounds)
+            ? HiddenWorkAreaAction.Recapture
+            : HiddenWorkAreaAction.PreserveExternal;
+    }
+
+    private static bool IsExactTaskbarWorkAreaEdge(
+        NativeMethods.Rect monitor,
+        NativeMethods.Rect workArea,
+        NativeMethods.Rect taskbar)
+    {
+        if (!IsValidWorkArea(monitor, workArea)) return false;
+        const int edgeTolerance = 4;
+        var monitorWidth = monitor.Right - monitor.Left;
+        var monitorHeight = monitor.Bottom - monitor.Top;
+        var taskbarWidth = Math.Min(taskbar.Right, monitor.Right) - Math.Max(taskbar.Left, monitor.Left);
+        var taskbarHeight = Math.Min(taskbar.Bottom, monitor.Bottom) - Math.Max(taskbar.Top, monitor.Top);
+        if (monitorWidth <= 0 || monitorHeight <= 0 || taskbarWidth <= 0 || taskbarHeight <= 0)
+            return false;
+
+        if (taskbarWidth >= taskbarHeight * 2)
+        {
+            var atTop = Math.Abs(taskbar.Top - monitor.Top) <= edgeTolerance;
+            var atBottom = Math.Abs(taskbar.Bottom - monitor.Bottom) <= edgeTolerance;
+            if (atTop == atBottom || taskbarHeight > monitorHeight / 3) return false;
+            return atTop
+                ? Math.Abs(workArea.Top - taskbar.Bottom) <= edgeTolerance
+                : Math.Abs(workArea.Bottom - taskbar.Top) <= edgeTolerance;
+        }
+
+        if (taskbarHeight >= taskbarWidth * 2)
+        {
+            var atLeft = Math.Abs(taskbar.Left - monitor.Left) <= edgeTolerance;
+            var atRight = Math.Abs(taskbar.Right - monitor.Right) <= edgeTolerance;
+            if (atLeft == atRight || taskbarWidth > monitorWidth / 3) return false;
+            return atLeft
+                ? Math.Abs(workArea.Left - taskbar.Right) <= edgeTolerance
+                : Math.Abs(workArea.Right - taskbar.Left) <= edgeTolerance;
+        }
+
+        return false;
+    }
+
+    private static bool ShouldBroadcastWorkAreaChange(bool taskbarHidden) => !taskbarHidden;
 
     private bool RestoreWorkAreasCore(bool publishEffects = true)
     {
@@ -803,7 +971,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
             if (publishEffects)
             {
                 _pendingWindowReflow.AddRange(reflowTargets);
-                _workAreaNotificationPending = true;
+                _workAreaNotificationPending = ShouldBroadcastWorkAreaChange(taskbarHidden: false);
             }
             _workAreas.Remove(snapshot.DeviceName);
         }
@@ -867,7 +1035,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
             };
             if (target.Right <= target.Left || target.Bottom <= target.Top) continue;
             if (NativeMethods.GetWindowThreadProcessId(handle, out var processId) == 0 || processId == 0) continue;
-            targets.Add(new WindowReflowTarget(handle, processId, deviceName, target));
+            targets.Add(new WindowReflowTarget(handle, processId, deviceName, targetWorkArea, target));
         }
         return targets;
     }
@@ -896,7 +1064,10 @@ internal sealed class TaskbarVisibilityService : IDisposable
                 out _);
         }
 
-        foreach (var target in targets.DistinctBy(target => target.Handle))
+        // A restore and re-hide can cross between the native mutation and this
+        // out-of-lock flush. The newest target wins, and it is applied only if
+        // the monitor still exposes the work area for which it was calculated.
+        foreach (var target in targets.AsEnumerable().Reverse().DistinctBy(target => target.Handle))
         {
             if (!NativeMethods.IsWindow(target.Handle) || !NativeMethods.IsWindowVisible(target.Handle) ||
                 NativeMethods.IsIconic(target.Handle) || !NativeMethods.IsZoomed(target.Handle))
@@ -909,7 +1080,8 @@ internal sealed class TaskbarVisibilityService : IDisposable
                 Size = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MonitorInfo>()
             };
             if (monitorHandle == 0 || !NativeMethods.GetMonitorInfo(monitorHandle, ref monitor) ||
-                !string.Equals(MonitorKey(monitor), target.DeviceName, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(MonitorKey(monitor), target.DeviceName, StringComparison.OrdinalIgnoreCase) ||
+                !RectEquals(monitor.Work, target.ExpectedWorkArea))
                 continue;
             var bounds = target.TargetBounds;
             _ = NativeMethods.SetWindowPos(
@@ -1333,13 +1505,27 @@ internal sealed class TaskbarVisibilityService : IDisposable
         nint Handle,
         uint ProcessId,
         string DeviceName,
+        NativeMethods.Rect ExpectedWorkArea,
         NativeMethods.Rect TargetBounds);
+    private sealed record WorkAreaMutation(
+        WorkAreaSnapshot Snapshot,
+        nint MonitorHandle,
+        NativeMethods.Rect SourceWorkArea,
+        IReadOnlyList<WindowReflowTarget> ReflowTargets);
     private sealed record WorkAreaSnapshot(
         nint Handle,
         string DeviceName,
         NativeMethods.Rect MonitorBounds,
         NativeMethods.Rect OriginalWorkArea,
         NativeMethods.Rect AppliedWorkArea);
+
+    private enum HiddenWorkAreaAction
+    {
+        Healthy,
+        ApplySnapshot,
+        Recapture,
+        PreserveExternal
+    }
 
     private sealed class WorkAreaRecoveryFile
     {

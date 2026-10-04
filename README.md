@@ -38,8 +38,9 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Milchiger Hintergrund:** Helles und dunkles Design, weiche Transparenz und eine zurückhaltende Vergrößerung beim Darüberfahren.
 - **VeliShell-Farbwelt:** Einstellungen, Info und Update-Dialog passen sich mit gut lesbaren Blau-Cyan-Violett-Verläufen, sanftem Glow und eigener Hell-/Dunkelabstimmung an das Markensignet an.
 - **Skalierbar:** Die Icongröße lässt sich von 32 bis 96 DIP einstellen und bleibt auch bei Windows-Skalierung sauber zentriert.
-- **Windows-Taskleiste optional ausblenden:** Nur nach ausdrücklicher Aktivierung. Der freigegebene Arbeitsbereich wird bis an den Bildschirmrand erweitert und beim Einblenden, Beenden oder nach einem unterbrochenen Lauf wiederhergestellt.
-- **Optionale VeliShell-Menüleiste:** Ein erster funktionaler, Mac-inspirierter Menüleistenmodus mit App-Menü, offenen Fenstern, Uhr sowie Schnellzugriffen für Netzwerk, Ton und Energie. Ist sie aktiv, reserviert VeliShell ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
+- **Windows-Taskleiste optional ausblenden:** Nur nach ausdrücklicher Aktivierung. Der freigegebene Arbeitsbereich reicht wirklich bis zum Bildschirmrand – ohne reservierten schwarzen Streifen – und wird beim Einblenden, Beenden oder nach einem unterbrochenen Lauf wiederhergestellt.
+- **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Das lokale Benachrichtigungscenter sammelt VeliShell-Hinweise samt ungelesenem Badge, „Gelesen“-Status und Einzel-/Gesamtlöschung. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
+- **Scharfe Vektorsymbole:** Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen VeliShell-Symbolsatz auf gemeinsamem 24-Punkt-Raster. Er skaliert verlustfrei, übernimmt automatisch das aktive Theme und bündelt keine Apple-SF-Symbol-Dateien.
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
 
 ## 🚀 Installation
@@ -69,6 +70,8 @@ Für einen Test ohne Installation gibt es zusätzlich eine [portable ZIP-Datei](
 ## 🔄 Updates ohne Überraschungen
 
 VeliShell fragt GitHub ausschließlich nach der neuesten veröffentlichten Version. Das Verhalten bestimmst du selbst: nur manuell prüfen, bei neuen Versionen benachrichtigen oder das geprüfte Paket automatisch herunterladen. Das vollständige Changelog bleibt dabei sichtbar; die Installation beginnt nie von allein.
+
+Ist das an die öffentliche IP gebundene GitHub-API-Limit ausgeschöpft, wechselt die Prüfung automatisch auf die offizielle Release-Seite und deren Feed. Release-Tag, Changelog, Dateigröße und SHA-256-Prüfsumme werden dabei weiterhin ausschließlich aus taggebundenen Quellen des offiziellen Repositories zusammengesetzt und gegengeprüft; ein eigener GitHub-Schlüssel ist dafür nicht nötig.
 
 - automatische Downloads nur nach ausdrücklicher Auswahl in den Einstellungen;
 - keine unbeaufsichtigte Installation;
@@ -129,7 +132,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.4.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.5.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

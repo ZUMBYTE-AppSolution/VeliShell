@@ -54,6 +54,142 @@ await TestAsync("parser accepts one official release asset and preserves the cha
         StringComparison.Ordinal));
 });
 
+await TestAsync("REST rate limit falls back to pinned public release metadata", async () =>
+{
+    var payload = Encoding.UTF8.GetBytes("installer-body");
+    var requests = new List<RequestObservation>();
+    using var httpClient = Client((request, _) =>
+    {
+        requests.Add(RequestObservation.From(request));
+        var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI missing.");
+        if (uri == LatestApiUri())
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+        if (uri == LatestPageUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                ReleasePageUri(),
+                new ByteArrayContent([])));
+        if (uri == AtomFeedUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                AtomFeedUri(),
+                new StringContent(ReleaseAtom(), Encoding.UTF8, "application/atom+xml")));
+        if (uri == ChecksumsUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                new Uri("https://release-assets.githubusercontent.com/github-production-release-asset/checksums"),
+                new StringContent(
+                    $"{Sha256(payload)}  VeliShell-0.4.0-win-x64.msi\n" +
+                    $"{new string('1', 64)}  VeliShell-0.4.0-win-x64-portable.zip\n",
+                    Encoding.UTF8,
+                    "text/plain")));
+        if (uri == InstallerUri() && request.Method == HttpMethod.Head)
+        {
+            var response = ResponseAt(
+                HttpStatusCode.OK,
+                new Uri("https://release-assets.githubusercontent.com/github-production-release-asset/installer"),
+                new ByteArrayContent([]));
+            response.Content.Headers.ContentLength = payload.LongLength;
+            return Task.FromResult(response);
+        }
+        throw new InvalidOperationException($"Unexpected fallback request: {request.Method} {uri}");
+    });
+    using var service = new GitHubReleaseUpdateService(httpClient);
+
+    var result = await service.CheckForUpdateAsync(SemanticVersion.Parse("0.3.0"));
+
+    Check(result.State == UpdateCheckState.UpdateAvailable);
+    var release = result.Release ?? throw new InvalidOperationException("Fallback release was not parsed.");
+    Check(release.Version == SemanticVersion.Parse("0.4.0"));
+    Check(release.TagName == "v0.4.0");
+    Check(release.DisplayName == "VeliShell 0.4.0");
+    Check(release.Changelog.Contains("• Fallback works.", StringComparison.Ordinal));
+    Check(release.PublishedAt == DateTimeOffset.Parse("2026-10-04T12:44:35Z"));
+    Check(release.Installer.Size == payload.LongLength);
+    Check(release.Installer.Sha256 == Sha256(payload));
+    Check(requests.Select(item => (item.Method, item.Uri)).SequenceEqual(new[]
+    {
+        (HttpMethod.Get, (Uri?)LatestApiUri()),
+        (HttpMethod.Get, (Uri?)LatestPageUri()),
+        (HttpMethod.Get, (Uri?)AtomFeedUri()),
+        (HttpMethod.Get, (Uri?)ChecksumsUri()),
+        (HttpMethod.Head, (Uri?)InstallerUri())
+    }));
+});
+
+await TestAsync("REST rate-limit fallback reports current versions without downloading metadata assets", async () =>
+{
+    var calls = 0;
+    using var httpClient = Client((request, _) =>
+    {
+        calls++;
+        if (request.RequestUri == LatestApiUri())
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+        if (request.RequestUri == LatestPageUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                ReleasePageUri(),
+                new ByteArrayContent([])));
+        throw new InvalidOperationException("An up-to-date fallback must not fetch release assets.");
+    });
+    using var service = new GitHubReleaseUpdateService(httpClient);
+
+    var result = await service.CheckForUpdateAsync(SemanticVersion.Parse("0.4.0"));
+
+    Check(result.State == UpdateCheckState.UpToDate);
+    Check(result.Release is null);
+    Check(calls == 2);
+});
+
+await TestAsync("public fallback rejects a checksum file without the exact installer", async () =>
+{
+    var calls = 0;
+    using var httpClient = Client((request, _) =>
+    {
+        calls++;
+        var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI missing.");
+        if (uri == LatestApiUri())
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        if (uri == LatestPageUri())
+            return Task.FromResult(ResponseAt(HttpStatusCode.OK, ReleasePageUri(), new ByteArrayContent([])));
+        if (uri == AtomFeedUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                AtomFeedUri(),
+                new StringContent(ReleaseAtom(), Encoding.UTF8, "application/atom+xml")));
+        if (uri == ChecksumsUri())
+            return Task.FromResult(ResponseAt(
+                HttpStatusCode.OK,
+                new Uri("https://release-assets.githubusercontent.com/github-production-release-asset/checksums"),
+                new StringContent(
+                    $"{new string('1', 64)}  VeliShell-0.4.0-win-x64-portable.zip\n",
+                    Encoding.UTF8,
+                    "text/plain")));
+        throw new InvalidOperationException("The installer must not be probed after checksum rejection.");
+    });
+    using var service = new GitHubReleaseUpdateService(httpClient);
+
+    await ExpectAsync<InvalidDataException>(() =>
+        service.CheckForUpdateAsync(SemanticVersion.Parse("0.3.0")));
+    Check(calls == 4);
+});
+
+await TestAsync("ordinary REST client errors are not hidden by the public fallback", async () =>
+{
+    var calls = 0;
+    using var httpClient = Client((_, _) =>
+    {
+        calls++;
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest));
+    });
+    using var service = new GitHubReleaseUpdateService(httpClient);
+
+    var error = await ExpectAsync<HttpRequestException>(() =>
+        service.CheckForUpdateAsync(SemanticVersion.Parse("0.3.0")));
+    Check(error.StatusCode == HttpStatusCode.BadRequest);
+    Check(calls == 1);
+});
+
 await TestAsync("parser rejects a release page outside the official repository", async () =>
 {
     using var service = ServiceForJson(ReleaseJson(
@@ -349,6 +485,26 @@ await TestAsync("installer launch gates reject safely before process start", asy
     }
 });
 
+if (args.Contains("--live-update-check", StringComparer.Ordinal))
+{
+    await TestAsync("live public GitHub update metadata", async () =>
+    {
+        using var service = new GitHubReleaseUpdateService();
+        var result = await service.CheckForUpdateAsync(new SemanticVersion(0, 0, 0));
+        Check(result.State == UpdateCheckState.UpdateAvailable);
+        var release = result.Release ?? throw new InvalidOperationException("The live release was not returned.");
+        Check(release.Version > new SemanticVersion(0, 0, 0));
+        Check(release.ReleasePage.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase));
+        Check(release.Installer.DownloadUrl.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase));
+        Check(release.Installer.Size > 0);
+        Check(release.Installer.Sha256.Length == 64);
+        var currentResult = await service.CheckForUpdateAsync(release.Version);
+        Check(currentResult.State == UpdateCheckState.UpToDate);
+        Console.WriteLine(
+            $"      live release {release.TagName}, {release.Installer.Size} bytes, sha256 {release.Installer.Sha256}");
+    });
+}
+
 Console.WriteLine($"{count - failures}/{count} updater tests passed.");
 return failures == 0 ? 0 : 1;
 
@@ -370,6 +526,43 @@ static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
 {
     Content = new StringContent(json, Encoding.UTF8, "application/json")
 };
+
+static HttpResponseMessage ResponseAt(HttpStatusCode status, Uri finalUri, HttpContent content) => new(status)
+{
+    Content = content,
+    RequestMessage = new HttpRequestMessage(HttpMethod.Get, finalUri)
+};
+
+static Uri LatestApiUri() =>
+    new("https://api.github.com/repos/ZUMBYTE-AppSolution/VeliShell/releases/latest");
+
+static Uri LatestPageUri() =>
+    new("https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest");
+
+static Uri ReleasePageUri() =>
+    new("https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0");
+
+static Uri AtomFeedUri() =>
+    new("https://github.com/ZUMBYTE-AppSolution/VeliShell/releases.atom");
+
+static Uri ChecksumsUri() =>
+    new("https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/download/v0.4.0/SHA256SUMS.txt");
+
+static Uri InstallerUri() =>
+    new("https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/download/v0.4.0/VeliShell-0.4.0-win-x64.msi");
+
+static string ReleaseAtom() => """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <id>tag:github.com,2008:Repository/1404074157/v0.4.0</id>
+        <updated>2026-10-04T12:44:35Z</updated>
+        <link rel="alternate" type="text/html" href="https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0" />
+        <title>VeliShell 0.4.0</title>
+        <content type="html">&lt;h3&gt;What changed&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Fallback works.&lt;/li&gt;&lt;/ul&gt;</content>
+      </entry>
+    </feed>
+    """;
 
 static HttpResponseMessage DownloadResponse(byte[] payload, Uri finalUri) => new(HttpStatusCode.OK)
 {
