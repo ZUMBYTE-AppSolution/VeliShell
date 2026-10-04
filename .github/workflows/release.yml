@@ -19,6 +19,8 @@ jobs:
     name: Build and publish Windows x64
     runs-on: windows-2025
     timeout-minutes: 50
+    outputs:
+      version: ${{ steps.version.outputs.value }}
     defaults:
       run:
         shell: pwsh
@@ -63,8 +65,21 @@ jobs:
           $hasPassword = -not [string]::IsNullOrWhiteSpace($env:SIGNING_PASSWORD)
           if ($hasPfx -xor $hasPassword) { throw 'Both Windows signing secrets must be configured together.' }
           if ($hasPfx) {
-            $executables = @('./out/portable/VeliShell.exe')
-            ./tools/Sign-WindowsArtifacts.ps1 -Files $executables -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
+            $applicationFiles = @(
+              './out/portable/VeliShell.exe',
+              './out/portable/VeliShell.dll',
+              './out/portable/VeliShell.Core.dll'
+            )
+            ./tools/Sign-WindowsArtifacts.ps1 -Files $applicationFiles -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
+            $invalidPortableSignatures = @(
+              Get-ChildItem -LiteralPath './out/portable' -File -Recurse |
+                Where-Object Extension -in '.exe', '.dll' |
+                Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' } |
+                Select-Object -ExpandProperty FullName
+            )
+            if ($invalidPortableSignatures.Count -gt 0) {
+              throw "The Store-ready payload contains unsigned or untrusted PE files:`n$($invalidPortableSignatures -join "`n")"
+            }
             'signed=true' >> $env:GITHUB_OUTPUT
           } else {
             Write-Warning 'Publishing an unsigned application; Windows SmartScreen may warn users.'
@@ -115,3 +130,12 @@ jobs:
             'out/release/RELEASE-INFO.txt'
           )
           gh release create "v$version" @assets --verify-tag --latest --title "VeliShell $version" --notes-file out/release-notes.md
+
+  publish-microsoft-store:
+    name: Submit signed MSI to Microsoft Store
+    needs: release-windows-x64
+    if: ${{ vars.MICROSOFT_STORE_PUBLISH_ENABLED == 'true' }}
+    uses: ./.github/workflows/store-publish.yml
+    with:
+      tag: v${{ needs.release-windows-x64.outputs.version }}
+    secrets: inherit

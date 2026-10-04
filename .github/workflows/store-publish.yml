@@ -1,0 +1,164 @@
+name: Submit VeliShell to Microsoft Store
+
+"on":
+  workflow_call:
+    inputs:
+      tag:
+        description: Stable GitHub release tag to submit
+        required: true
+        type: string
+    secrets:
+      AZURE_AD_APPLICATION_CLIENT_ID:
+        required: true
+      AZURE_AD_APPLICATION_SECRET:
+        required: true
+      AZURE_AD_TENANT_ID:
+        required: true
+      SELLER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable GitHub release tag, for example v0.6.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: velishell-store-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  submit-msi:
+    name: Submit signed MSI
+    runs-on: windows-2025
+    timeout-minutes: 30
+    environment: microsoft-store-production
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
+
+    steps:
+      - name: Validate release and prepare Store package data
+        id: package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v(?<version>(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$') {
+            throw "Only stable SemVer tags can be submitted, got '$env:RELEASE_TAG'."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:STORE_PRODUCT_ID)) {
+            throw 'Repository or environment variable MICROSOFT_STORE_PRODUCT_ID is not configured.'
+          }
+
+          $version = $Matches.version
+          $assetName = "VeliShell-$version-win-x64.msi"
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "GitHub release $env:RELEASE_TAG was not found." }
+          if ($release.draft -or $release.prerelease) { throw 'Draft and prerelease builds cannot be submitted to the production Store listing.' }
+
+          $asset = @($release.assets | Where-Object name -eq $assetName)
+          if ($asset.Count -ne 1) { throw "Expected exactly one release asset named $assetName." }
+          $checksumAsset = @($release.assets | Where-Object name -eq 'SHA256SUMS.txt')
+          if ($checksumAsset.Count -ne 1) { throw 'The release does not contain exactly one SHA256SUMS.txt asset.' }
+
+          $storeDirectory = Join-Path $env:RUNNER_TEMP 'velishell-store'
+          New-Item -ItemType Directory -Path $storeDirectory -Force | Out-Null
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --dir $storeDirectory --pattern $assetName --pattern SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the release assets.' }
+
+          $installerPath = Join-Path $storeDirectory $assetName
+          $checksumPath = Join-Path $storeDirectory 'SHA256SUMS.txt'
+          $escapedAssetName = [Regex]::Escape($assetName)
+          $checksumMatch = Select-String -LiteralPath $checksumPath -Pattern "^(?<hash>[0-9a-fA-F]{64})  $escapedAssetName$"
+          if (@($checksumMatch).Count -ne 1) { throw "No unique checksum entry exists for $assetName." }
+          $expectedHash = $checksumMatch.Matches[0].Groups['hash'].Value.ToLowerInvariant()
+          $actualHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $expectedHash) { throw "SHA-256 verification failed for $assetName." }
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $installerPath
+          if ($signature.Status -ne 'Valid') {
+            throw "The Store requires a trusted code-signing certificate; $assetName has signature status '$($signature.Status)'."
+          }
+
+          $packageUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/$assetName"
+          if ([string]$asset.browser_download_url -ne $packageUrl) {
+            throw "The release asset URL is not the expected immutable versioned URL: $packageUrl"
+          }
+          $package = @{
+            packages = @(
+              @{
+                packageUrl = $packageUrl
+                languages = @('de-de', 'en-us')
+                architectures = @('X64')
+                isSilentInstall = $false
+                installerParameters = '/qn /norestart'
+                packageType = 'msi'
+              }
+            )
+          }
+          $packageJsonPath = Join-Path $storeDirectory 'package.json'
+          [IO.File]::WriteAllText(
+            $packageJsonPath,
+            ($package | ConvertTo-Json -Depth 6 -Compress),
+            [Text.UTF8Encoding]::new($false))
+          "json_path=$packageJsonPath" >> $env:GITHUB_OUTPUT
+          "package_url=$packageUrl" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+
+      - name: Authenticate with Partner Center
+        env:
+          STORE_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          STORE_SELLER_ID: ${{ secrets.SELLER_ID }}
+          STORE_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+        run: |
+          $required = @{
+            AZURE_AD_TENANT_ID = $env:STORE_TENANT_ID
+            SELLER_ID = $env:STORE_SELLER_ID
+            AZURE_AD_APPLICATION_CLIENT_ID = $env:STORE_CLIENT_ID
+            AZURE_AD_APPLICATION_SECRET = $env:STORE_CLIENT_SECRET
+          }
+          foreach ($entry in $required.GetEnumerator()) {
+            if ([string]::IsNullOrWhiteSpace([string]$entry.Value)) { throw "Required secret $($entry.Key) is not configured." }
+          }
+          msstore reconfigure `
+            --tenantId $env:STORE_TENANT_ID `
+            --sellerId $env:STORE_SELLER_ID `
+            --clientId $env:STORE_CLIENT_ID `
+            --clientSecret $env:STORE_CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { throw 'Microsoft Store CLI authentication failed.' }
+
+      - name: Update and publish Store submission
+        env:
+          PACKAGE_JSON_PATH: ${{ steps.package.outputs.json_path }}
+        run: |
+          $packageJson = Get-Content -LiteralPath $env:PACKAGE_JSON_PATH -Raw
+          msstore submission update $env:STORE_PRODUCT_ID $packageJson
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the package update.' }
+          msstore submission publish $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the submission.' }
+          msstore submission status $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw 'The submitted Store status could not be read.' }
+
+      - name: Write submission summary
+        env:
+          PACKAGE_URL: ${{ steps.package.outputs.package_url }}
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          @(
+            '## Microsoft Store submission created',
+            '',
+            "VeliShell $env:RELEASE_VERSION was submitted to Partner Center for certification.",
+            '',
+            "Installer: [$env:PACKAGE_URL]($env:PACKAGE_URL)"
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
