@@ -30,8 +30,8 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 7;
-    public const int CurrentOnlineIconConsentVersion = 3;
+    public const int CurrentSchemaVersion = 8;
+    public const int CurrentOnlineIconConsentVersion = 4;
     public const double MinimumIconSize = 32;
     public const double DefaultIconSize = 52;
     public const double MaximumIconSize = 96;
@@ -50,6 +50,9 @@ public sealed class Settings
     public bool AutoHide { get; set; }
     public bool AlwaysOnTop { get; set; } = true;
     public bool HideTaskbar { get; set; }
+    public bool HideDesktopIcons { get; set; }
+    public bool ShowVeliShellDockItem { get; set; } = true;
+    public bool WindowsNotificationsEnabled { get; set; }
     public DockIconStyle IconStyle { get; set; } = DockIconStyle.Mac;
     public bool MenuBarEnabled { get; set; }
     public bool MenuBarAutoHide { get; set; }
@@ -124,12 +127,13 @@ public sealed class Settings
 
     private static IconReference? NormalizeIcon(IconReference? icon)
     {
-        // References from the retired, undocumented Gallery catalog deliberately
-        // fall back to the local Windows icon.
+        // Current App Store selections and already-downloaded macOSicons cache
+        // entries remain readable. The legacy provider has no network path.
         if (icon is null) return null;
-        var isMacOsIcons = string.Equals(icon.Provider, "macosicons", StringComparison.Ordinal);
+        var isAppStore = string.Equals(icon.Provider, ItunesSearchApi.ProviderId, StringComparison.Ordinal);
+        var isLegacyMacOsIcons = string.Equals(icon.Provider, "macosicons", StringComparison.Ordinal);
         var isLocal = string.Equals(icon.Provider, "velishell-custom", StringComparison.Ordinal);
-        if (!isMacOsIcons && !isLocal) return null;
+        if (!isAppStore && !isLegacyMacOsIcons && !isLocal) return null;
         var id = icon.IconId?.Trim() ?? "";
         if (id.Length is < 1 or > 64 || id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '-'))) return null;
         var version = icon.CatalogVersion?.Trim() ?? "";
@@ -138,7 +142,8 @@ public sealed class Settings
         if (hash.Length != 64 || hash.Any(c => !Uri.IsHexDigit(c))) return null;
         if (isLocal && (id.Length != 64 || !string.Equals(id, hash, StringComparison.OrdinalIgnoreCase) || version != "1"))
             return null;
-        return new IconReference(isLocal ? "velishell-custom" : "macosicons", id.ToLowerInvariant(), version, hash);
+        var provider = isLocal ? "velishell-custom" : isAppStore ? ItunesSearchApi.ProviderId : "macosicons";
+        return new IconReference(provider, id.ToLowerInvariant(), version, hash);
     }
 
     private static string? NormalizeDockIconKey(string? key)

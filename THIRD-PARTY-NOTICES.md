@@ -29,38 +29,41 @@ Teil der laufenden VeliShell-Anwendung installiert.
 - Projekt: <https://github.com/wixtoolset/wix>
 - Paket/Lizenzangabe (Microsoft Reciprocal License): <https://www.nuget.org/packages/WixToolset.Sdk/4.0.6>
 
-## macOSicons.com API
+## Apple iTunes Search API und App-Store-Inhalte
 
-Die optionale Online-Suche verwendet nach ausdrücklicher Aktivierung die
-dokumentierte API von <https://macosicons.com/developers>. Jeder Nutzer stellt
-seinen eigenen API-Schlüssel bereit. VeliShell bettet keinen gemeinsamen Schlüssel
-ein und bewahrt den Nutzerschlüssel im Windows-Anmeldeinformationsspeicher auf.
+Die optionale Online-Suche verwendet ausschließlich nach einem ausdrücklichen Klick
+die dokumentierte Apple iTunes Search API. Dafür ist kein API-Schlüssel erforderlich.
+Der Suchbegriff und ein aus der Windows-Region abgeleiteter Ländercode werden an
+`itunes.apple.com` übertragen; Vorschaubilder kommen von Apples `mzstatic.com`-CDN.
+VeliShell zeigt mehrere Treffer mit Anbieter und direktem App-Store-Link. Es wählt
+keinen Treffer automatisch aus. Nur das ausdrücklich gewählte Bild wird zusammen
+mit Quelle und Store-Link in einem auf 64 Einträge, 64 MiB und 30 Tage begrenzten
+lokalen Cache gespeichert. In Installer und Portable-Paket ist kein App-Store-Katalog
+enthalten.
 
-Die API-Nutzungsbedingungen erlauben Integrationen das Suchen, Abrufen,
-Zwischenspeichern, Anzeigen und Anwenden angebotener Icons. Die jeweiligen Icons
-bleiben Eigentum ihrer Ersteller und können zusätzlichen Einzellizenzen unterliegen.
-VeliShell bewahrt deshalb die von der API gelieferten Angaben zu Quelle und Urheber
-und zeigt sie in der Auswahl an. Die Bibliothek wird weder gebündelt noch als eigener
-Katalog weiterverkauft oder massenhaft exportiert.
-
-- API: <https://api.macosicons.com/api/v1/search>
-- API-Bedingungen: <https://beta.macosicons.com/developers/terms>
-- Anbieter: <https://macosicons.com/>
-
-## Apple App Store und macOS-Systemsymbole
-
-VeliShell verwendet App-Store-Grafiken nicht als dauerhafte Dock-Ersatzsymbole und
-liefert keine originalen macOS-System-, Finder-, Einstellungs- oder Papierkorb-Icons
-mit. Apples Search-API-Richtlinien beschränken die bereitgestellten Promo-Inhalte auf
-die Bewerbung des zugehörigen Store-Inhalts in unmittelbarer Nähe eines Store-Links.
-Sie sind daher keine allgemeine Quelle für ein weiterverteilbares Windows-Icon-Paket.
+Die Search API erteilt keine allgemeine Lizenz, App-Store-Grafiken als frei
+weiterverteilbares Windows-Icon-Paket zu verwenden. Die Bilder bleiben Inhalte ihrer
+jeweiligen Rechteinhaber. VeliShell hält deshalb Anbieter und direkten Store-Link am
+gewählten Eintrag sichtbar; Nutzer müssen selbst sicherstellen, dass ihre konkrete
+Verwendung zulässig ist. Für eine unabhängige Nutzung steht die lokale Bildauswahl
+zur Verfügung.
 
 - Apple Search API: <https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/>
+- Apple-Bedingungen für Promo-Inhalte: <https://www.apple.com/legal/internet-services/itunes/>
 - Apple Design Resources License: <https://developer.apple.com/support/downloads/terms/apple-design-resources/Apple-Design-Resources-License-20230621-English.pdf>
 
-Die mitgelieferten Leer- und Vollzustände des VeliShell-Papierkorbs sind eigens für
-dieses Projekt gestaltete, Mac-inspirierte Illustrationen ohne Apple-Logo und keine
-Kopien proprietärer Apple-Assets.
+Bereits mit einer älteren VeliShell-Version heruntergeladene macOSicons.com-Dateien
+bleiben aus dem vorhandenen lokalen Cache lesbar. VeliShell sendet keine neuen
+Anfragen an diesen Anbieter und speichert oder verwendet dafür keinen API-Schlüssel
+mehr. Die alten Bilder bleiben Eigentum ihrer jeweiligen Ersteller und unterliegen
+deren Bedingungen.
+
+## macOS-Systemsymbole und Papierkorb-Grafiken
+
+Die mitgelieferten Leer- und Vollgrafiken des Papierkorbs wurden ohne fremde
+Bildvorlage eigenständig für VeliShell gestaltet. Sie verwenden eine eigene
+Geometrie und VeliShell-Farbwelt, enthalten keine Apple-Logos oder extrahierten
+Apple-Assets und werden unter der Projektlizenz ausgeliefert.
 
 Auch Apple SF Symbols werden weder extrahiert noch als Font, SVG oder Bitmap in
 VeliShell eingebettet. Die kleinen Symbole in Menüleiste, Kontrollcenter und

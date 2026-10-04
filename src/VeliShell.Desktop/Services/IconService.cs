@@ -24,7 +24,7 @@ internal static class IconService
         var iconStyle = CurrentIconStyle();
         if (iconStyle == DockIconStyle.Mac)
         {
-            if (MacOsIconGalleryService.TryLoad(icon) is { } online) return online;
+            if (OnlineIconService.TryLoad(icon) is { } online) return online;
             if (id == "velishell") return VeliShellAsset();
             if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow")
                 return id switch

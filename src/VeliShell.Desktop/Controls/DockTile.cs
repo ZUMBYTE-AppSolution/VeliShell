@@ -34,7 +34,7 @@ internal sealed class DockTile : Button
         UpdateAutomationStatus(item);
         var grid = new Grid { Width = size + 22, Height = size + 22, ClipToBounds = false };
         var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
-        _iconSurface = new AppIconSurface(iconSource, size)
+        _iconSurface = new AppIconSurface(iconSource, size, UsesFreeformArtwork(item))
         {
             RenderTransformOrigin = new Point(0.5, 1), RenderTransform = _scale
         };
@@ -62,9 +62,11 @@ internal sealed class DockTile : Button
         AutomationProperties.SetName(this, item.Name);
         UpdateAutomationStatus(item);
         var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
-        _iconSurface.UpdateSource(iconSource);
+        _iconSurface.UpdateSource(iconSource, UsesFreeformArtwork(item));
         UpdateIndicator();
     }
+
+    private static bool UsesFreeformArtwork(DockItem item) => item.Key == "trash";
 
     private void UpdateAutomationStatus(DockItem item)
     {

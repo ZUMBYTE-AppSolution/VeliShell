@@ -172,12 +172,7 @@
       <TextBlock Text="{services:Loc Apps.OnlineSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <TextBlock Text="{services:Loc Apps.OnlineDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
-       <TextBlock Text="{services:Loc Apps.ApiKeyLabel}" FontWeight="SemiBold" Margin="0,0,0,7" />
-       <PasswordBox x:Name="IconApiKeyInput" MaxLength="512" Margin="0,0,0,9"
-                    AutomationProperties.Name="{services:Loc Apps.ApiKeyLabel}" />
        <WrapPanel>
-        <Button Content="{services:Loc Apps.SaveKey}" Click="SaveIconKey_Click" Margin="0,0,8,8" />
-        <Button x:Name="RemoveIconKeyButton" Content="{services:Loc Apps.RemoveKey}" Click="RemoveIconKey_Click" Margin="0,0,8,8" />
         <Button x:Name="FindOnlineIconsButton" Content="{services:Loc Apps.FindIcons}" Style="{StaticResource PrimaryButton}" Click="FindOnlineIcons_Click" Margin="0,0,8,8" />
         <Button Content="{services:Loc Apps.OpenSource}" Click="OpenIconSource_Click" Margin="0,0,0,8" />
        </WrapPanel>
@@ -218,12 +213,40 @@
        <TextBlock x:Name="TaskbarStatus" Style="{StaticResource SecondaryText}" />
        <TextBlock Text="{services:Loc Windows.EmergencyHint}" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
       </StackPanel></Border>
+      <TextBlock Text="{services:Loc Windows.DesktopSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <CheckBox x:Name="DesktopIconsSwitch" Content="{services:Loc Windows.HideDesktopIcons}"
+                 Style="{StaticResource ToggleSwitch}" Click="DesktopIcons_Click" />
+       <TextBlock Text="{services:Loc Windows.DesktopIconsDescription}" Style="{StaticResource SecondaryText}"
+                  Margin="0,5,44,10" />
+       <Button Content="{services:Loc Windows.RestoreDesktopIcons}" HorizontalAlignment="Left"
+               Click="RestoreDesktopIcons_Click" Margin="0,0,8,8" />
+       <TextBlock x:Name="DesktopIconsStatus" Style="{StaticResource SecondaryText}" />
+      </StackPanel></Border>
       <TextBlock Text="{services:Loc MenuBar.Section}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <CheckBox x:Name="MenuBarSwitch" Content="{services:Loc MenuBar.Enable}" Style="{StaticResource ToggleSwitch}" Click="MenuBar_Click" />
        <CheckBox x:Name="MenuBarAutoHideSwitch" Content="{services:Loc MenuBar.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAutoHide_Click" />
        <CheckBox x:Name="MenuBarTopmostSwitch" Content="{services:Loc MenuBar.Topmost}" Style="{StaticResource ToggleSwitch}" Click="MenuBarTopmost_Click" />
        <TextBlock Text="{services:Loc MenuBar.Description}" Style="{StaticResource SecondaryText}" Margin="0,7,44,0" />
+      </StackPanel></Border>
+      <TextBlock Text="{services:Loc Notifications.SettingsSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <CheckBox x:Name="WindowsNotificationsSwitch"
+                 Content="{services:Loc Notifications.ReadWindows}"
+                 Style="{StaticResource ToggleSwitch}" Click="WindowsNotifications_Click" />
+       <TextBlock Text="{services:Loc Notifications.ReadWindowsDescription}"
+                  Style="{StaticResource SecondaryText}" Margin="0,5,44,10" />
+       <WrapPanel>
+        <Button x:Name="RefreshWindowsNotificationsButton"
+                Content="{services:Loc Notifications.RefreshWindows}"
+                Click="RefreshWindowsNotifications_Click" Margin="0,0,8,8" />
+        <Button Content="{services:Loc Notifications.OpenPrivacySettings}"
+                Click="OpenNotificationPrivacy_Click" Margin="0,0,8,8" />
+       </WrapPanel>
+       <TextBlock x:Name="WindowsNotificationsStatus" Style="{StaticResource SecondaryText}" />
+       <TextBlock Text="{services:Loc Notifications.PrivacyHint}" Style="{StaticResource SecondaryText}"
+                  Margin="0,7,0,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Startup.Section}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>

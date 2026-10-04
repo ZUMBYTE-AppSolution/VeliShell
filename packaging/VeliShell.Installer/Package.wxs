@@ -31,7 +31,43 @@
 
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="VeliShellCompanyFolder" Name="Zumbyte">
-        <Directory Id="INSTALLFOLDER" Name="VeliShell" />
+        <Directory Id="INSTALLFOLDER" Name="VeliShell">
+          <!-- Static per-user verbs launch the normal EXE and never load code
+               into Explorer. Runtime registration keeps portable/moved builds
+               current; these MSI-owned entries are removed on uninstall. -->
+          <Component Id="VeliShellFilePinVerb" Guid="99C76E93-4110-49D9-A064-B6E1B35E4C8B">
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock"
+                Value="Im Dock anheften" Type="string" KeyPath="yes" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock"
+                Name="MUIVerb" Value="Im Dock anheften" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock"
+                Name="Icon" Value="[INSTALLFOLDER]VeliShell.exe,0" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock"
+                Name="MultiSelectModel" Value="Single" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock"
+                Name="VeliShellExecutable" Value="[INSTALLFOLDER]VeliShell.exe" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\*\shell\VeliShell.PinToDock\command"
+                Value="&quot;[INSTALLFOLDER]VeliShell.exe&quot; --pin-to-dock &quot;%1&quot;" Type="string" />
+            <RemoveRegistryKey Id="RemoveVeliShellFilePinVerb" Root="HKCU"
+                Key="Software\Classes\*\shell\VeliShell.PinToDock" Action="removeOnUninstall" />
+          </Component>
+          <Component Id="VeliShellDirectoryPinVerb" Guid="4BA07617-08D6-4859-A02D-F5E1B44D69BC">
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock"
+                Value="Im Dock anheften" Type="string" KeyPath="yes" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock"
+                Name="MUIVerb" Value="Im Dock anheften" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock"
+                Name="Icon" Value="[INSTALLFOLDER]VeliShell.exe,0" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock"
+                Name="MultiSelectModel" Value="Single" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock"
+                Name="VeliShellExecutable" Value="[INSTALLFOLDER]VeliShell.exe" Type="string" />
+            <RegistryValue Root="HKCU" Key="Software\Classes\Directory\shell\VeliShell.PinToDock\command"
+                Value="&quot;[INSTALLFOLDER]VeliShell.exe&quot; --pin-to-dock &quot;%1&quot;" Type="string" />
+            <RemoveRegistryKey Id="RemoveVeliShellDirectoryPinVerb" Root="HKCU"
+                Key="Software\Classes\Directory\shell\VeliShell.PinToDock" Action="removeOnUninstall" />
+          </Component>
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -70,6 +106,8 @@
         AllowAdvertise="no">
       <ComponentGroupRef Id="VeliShellApplicationPayload" />
       <ComponentRef Id="VeliShellStartMenuShortcut" />
+      <ComponentRef Id="VeliShellFilePinVerb" />
+      <ComponentRef Id="VeliShellDirectoryPinVerb" />
     </Feature>
   </Package>
 </Wix>

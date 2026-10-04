@@ -8,42 +8,63 @@
  Foreground="{DynamicResource TextPrimary}"
  ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="Manual"
  UseLayoutRounding="True" SnapsToDevicePixels="True" KeyDown="Window_KeyDown">
- <Border Background="{DynamicResource DockSurfaceGradient}" CornerRadius="18"
-         BorderBrush="{DynamicResource DockStroke}" BorderThickness="1" Padding="1">
+ <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
+         BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect>
-   <DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="30" ShadowDepth="8" Opacity="0.48" />
+   <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="34" ShadowDepth="9" Opacity="0.58" />
   </Border.Effect>
   <Grid ClipToBounds="True">
    <Grid.RowDefinitions>
-    <RowDefinition Height="64" />
+    <RowDefinition Height="66" />
+    <RowDefinition Height="Auto" />
     <RowDefinition Height="*" />
     <RowDefinition Height="Auto" />
    </Grid.RowDefinitions>
-   <Border Grid.RowSpan="3" Background="{DynamicResource DockMilkOverlay}" CornerRadius="17" IsHitTestVisible="False" />
-   <Ellipse Grid.RowSpan="2" Width="260" Height="260" HorizontalAlignment="Right" VerticalAlignment="Top"
-            Margin="0,-165,-135,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.13" IsHitTestVisible="False">
-    <Ellipse.Effect><BlurEffect Radius="45" /></Ellipse.Effect>
+   <Border Grid.RowSpan="4" Background="{DynamicResource DockMilkOverlay}" CornerRadius="23"
+           IsHitTestVisible="False" />
+   <Ellipse Grid.RowSpan="3" Width="280" Height="250" HorizontalAlignment="Right" VerticalAlignment="Top"
+            Margin="0,-165,-135,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.12"
+            IsHitTestVisible="False">
+    <Ellipse.Effect><BlurEffect Radius="50" /></Ellipse.Effect>
    </Ellipse>
+   <Border Grid.RowSpan="4" Height="1" Margin="24,1" VerticalAlignment="Top" CornerRadius="0.5"
+           Background="{DynamicResource GlassHighlight}" Opacity="0.72" IsHitTestVisible="False" />
 
-   <Grid Margin="20,0">
-    <TextBlock Text="{services:Loc Notifications.Title}" FontSize="20" FontWeight="SemiBold"
-               VerticalAlignment="Center" />
+   <Grid Margin="17,8,15,4">
+    <StackPanel VerticalAlignment="Center">
+     <TextBlock x:Name="DateLabel" FontSize="11" FontWeight="SemiBold"
+                Foreground="{DynamicResource TextSecondary}" />
+     <TextBlock Text="{services:Loc Notifications.Title}" FontSize="20" FontWeight="SemiBold"
+                Margin="0,1,0,0" />
+    </StackPanel>
     <Button x:Name="MarkReadButton" Content="{services:Loc Notifications.MarkAllRead}"
-            HorizontalAlignment="Right" VerticalAlignment="Center" Padding="10,5"
-            Click="MarkAllRead_Click" />
+            Style="{StaticResource GlassTileButton}" HorizontalAlignment="Right" VerticalAlignment="Center"
+            Padding="10,5" Click="MarkAllRead_Click" />
    </Grid>
 
-   <Grid Grid.Row="1" Margin="12,0,12,8">
+   <Border x:Name="WindowsAccessBanner" Grid.Row="1" Style="{StaticResource GlassCard}"
+           Margin="13,0,13,8" Padding="10,8" CornerRadius="12" Visibility="Collapsed">
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="28" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+     <controls:VeliSymbol Symbol="Notification" Width="16" Height="16"
+                          Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+     <TextBlock x:Name="WindowsAccessText" Grid.Column="1" Style="{StaticResource SecondaryText}"
+                FontSize="11" VerticalAlignment="Center" />
+    </Grid>
+   </Border>
+
+   <Grid Grid.Row="2" Margin="11,0,11,5">
     <Grid x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="270">
      <StackPanel>
-      <Border Width="56" Height="56" CornerRadius="28" Background="{DynamicResource AccentSoft}"
-              BorderBrush="{DynamicResource AccentStroke}" BorderThickness="1" HorizontalAlignment="Center">
-       <controls:VeliSymbol Symbol="Notification" Width="25" Height="25" Foreground="{DynamicResource TextPrimary}" />
+      <Border Width="56" Height="56" CornerRadius="28" Background="{DynamicResource GlassControlSurface}"
+              BorderBrush="{DynamicResource GlassCardStroke}" BorderThickness="1" HorizontalAlignment="Center">
+       <controls:VeliSymbol Symbol="Notification" Width="25" Height="25"
+                            Foreground="{DynamicResource TextPrimary}" />
       </Border>
       <TextBlock Text="{services:Loc Notifications.EmptyTitle}" FontSize="17" FontWeight="SemiBold"
-                 HorizontalAlignment="Center" Margin="0,16,0,6" />
-      <TextBlock Text="{services:Loc Notifications.EmptyDescription}" Style="{StaticResource SecondaryText}"
-                 TextAlignment="Center" />
+                 HorizontalAlignment="Center" Margin="0,15,0,6" />
+      <TextBlock x:Name="EmptyDescription" Text="{services:Loc Notifications.EmptyDescription}"
+                 Style="{StaticResource SecondaryText}" TextAlignment="Center" />
      </StackPanel>
     </Grid>
     <ScrollViewer x:Name="NotificationScroller" VerticalScrollBarVisibility="Auto"
@@ -52,11 +73,13 @@
     </ScrollViewer>
    </Grid>
 
-   <Border Grid.Row="2" BorderBrush="{DynamicResource DockInnerStroke}" BorderThickness="0,1,0,0"
-           Padding="14,12">
+   <Grid Grid.Row="3" Margin="14,5,14,13">
+    <Border Height="1" Margin="2,0,2,10" VerticalAlignment="Top"
+            Background="{DynamicResource GlassSeparator}" />
     <Button x:Name="ClearButton" Content="{services:Loc Notifications.ClearAll}"
-            HorizontalAlignment="Stretch" Click="Clear_Click" />
-   </Border>
+            Style="{StaticResource GlassTileButton}" HorizontalAlignment="Right"
+            Padding="12,6" Margin="0,10,0,0" Click="Clear_Click" />
+   </Grid>
   </Grid>
  </Border>
 </Window>

@@ -24,6 +24,8 @@ try
     Test("Startup is opt-in", () => Check(new Settings().Startup == StartupMode.Disabled));
     Test("Update checks default to notify", () => Check(new Settings().Updates == UpdateMode.Notify));
     Test("Taskbar hiding is opt-in", () => Check(!new Settings().HideTaskbar));
+    Test("Desktop-icon hiding is opt-in", () => Check(!new Settings().HideDesktopIcons));
+    Test("VeliShell dock item is visible by default", () => Check(new Settings().ShowVeliShellDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
     Test("Online icons are opt-in", () => Check(new Settings().OnlineIcons == OnlineIconMode.Disabled));
@@ -42,13 +44,45 @@ try
     Test("Normalize empty labels", () => { var s = new Settings { Pins = [new("a", "  ", "a.exe")] }; s.Normalize(); Check(s.Pins[0].Name == "Anwendung"); });
     Test("Limit pins", () => { var s = new Settings { Pins = Enumerable.Range(0, 50).Select(i => new Pin(i.ToString(), "A", "a.exe")).ToList() }; s.Normalize(); Check(s.Pins.Count == Settings.MaximumPins); });
     Test("Empty pins stay empty", () => { var s = new Settings { Pins = [] }; s.Normalize(); Check(s.Pins.Count == 0); });
+    Test("Explorer pin command accepts one exact Unicode path", () =>
+    {
+        Directory.CreateDirectory(temp);
+        var file = Path.Combine(temp, "Über & Leerzeichen.txt");
+        File.WriteAllText(file, "test");
+        Check(ShellPinCommand.TryParse(["--pin-to-dock", file], out var parsed)
+              && string.Equals(parsed, Path.GetFullPath(file), StringComparison.Ordinal));
+    });
+    Test("Explorer pin command accepts a directory and normalizes its ending", () =>
+    {
+        var directory = Path.Combine(temp, "Ordner mit Leerzeichen");
+        Directory.CreateDirectory(directory);
+        Check(ShellPinCommand.TryParse(["--PIN-TO-DOCK", directory + Path.DirectorySeparatorChar], out var parsed)
+              && string.Equals(parsed, directory, StringComparison.Ordinal)
+              && ShellPinCommand.RefersToSameExistingPath(directory, directory + Path.DirectorySeparatorChar));
+    });
+    Test("Explorer pin command rejects extra, relative and missing paths", () =>
+    {
+        var existing = Path.Combine(temp, "Über & Leerzeichen.txt");
+        Check(!ShellPinCommand.TryParse(["--pin-to-dock", existing, "second"], out _));
+        Check(!ShellPinCommand.TryParse(["--pin-to-dock", ".\\relative.txt"], out _));
+        Check(!ShellPinCommand.TryParse(["--pin-to-dock", Path.Combine(temp, "missing.txt")], out _));
+        Check(!ShellPinCommand.TryParse(["--other", existing], out _));
+    });
     Test("Valid online icon survives normalization", () =>
     {
-        var icon = new IconReference("macosicons", new string('c', 64), "api-v1", new string('a', 64));
+        var icon = new IconReference(ItunesSearchApi.ProviderId, new string('c', 64),
+            ItunesSearchApi.CatalogVersion, new string('a', 64));
         var s = new Settings { OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion,
             Pins = [new("a", "Firefox", "firefox.exe", "firefox", icon)] };
         s.Normalize();
         Check(s.SchemaVersion == Settings.CurrentSchemaVersion && s.Pins[0].Icon?.IconId == new string('c', 64));
+    });
+    Test("Legacy macOSicons cache reference survives normalization", () =>
+    {
+        var icon = new IconReference("macosicons", new string('c', 64), "api-v1", new string('a', 64));
+        var s = new Settings { Pins = [new("a", "Firefox", "firefox.exe", "firefox", icon)] };
+        s.Normalize();
+        Check(s.Pins[0].Icon == icon);
     });
     Test("Retired Gallery reference is discarded", () =>
     {
@@ -162,30 +196,54 @@ try
     Test("Recycle Bin empty state", () => Check(RecycleBinState.From(true, 0) == RecycleBinFillState.Empty));
     Test("Recycle Bin full state", () => Check(RecycleBinState.From(true, 1) == RecycleBinFillState.Full));
     Test("Recycle Bin ignores invalid negative count", () => Check(RecycleBinState.From(true, -1) == RecycleBinFillState.Empty));
-    Test("macOSicons API parser keeps creator attribution", () =>
+    Test("iTunes Search parser keeps App Store software metadata", () =>
     {
         var json = Encoding.UTF8.GetBytes("""
-            {"hits":[{"appName":"Safari","lowResPngUrl":"https://cdn.example/icon.png","icnsUrl":"https://cdn.example/icon.icns","iOSUrl":"https://cdn.example/icon@2x.png","category":"Browser","credit":"Elías","uploadedBy":"elias","creditUrl":"https://example.com/elias","downloads":7523}],"query":"Safari","totalHits":1}
+            {"resultCount":1,"results":[{"wrapperType":"software","kind":"mac-software","trackId":462054704,"trackName":"Microsoft Word","artistName":"Microsoft Corporation","sellerName":"Microsoft Corporation","bundleId":"com.microsoft.Word","primaryGenreName":"Productivity","artworkUrl100":"https://is1-ssl.mzstatic.com/icon/100x100bb.png","artworkUrl512":"https://is1-ssl.mzstatic.com/icon/512x512bb.png","trackViewUrl":"https://apps.apple.com/de/app/microsoft-word/id462054704?mt=12"}]}
             """);
-        var hits = MacOsIconsApi.ParseSearchResponse(json);
-        Check(hits.Count == 1 && hits[0].AppName == "Safari" && hits[0].Credit == "Elías" &&
-              hits[0].Downloads == 7523 && hits[0].IosUrl!.EndsWith("@2x.png", StringComparison.Ordinal));
+        var hits = ItunesSearchApi.ParseSearchResponse(json);
+        Check(hits.Count == 1 && hits[0].TrackId == 462054704 && hits[0].TrackName == "Microsoft Word" &&
+              hits[0].DeveloperName == "Microsoft Corporation" && hits[0].BundleId == "com.microsoft.Word" &&
+              hits[0].ArtworkUrl512!.EndsWith("512x512bb.png", StringComparison.Ordinal));
     });
-    Test("macOSicons API parser rejects an array root", () =>
+    Test("iTunes Search parser accepts software kind and prefers seller", () =>
+    {
+        var json = Encoding.UTF8.GetBytes("""
+            {"resultCount":1,"results":[{"wrapperType":"software","kind":"software","trackId":1,"trackName":"Example","artistName":"Artist","sellerName":"Seller LLC","artworkUrl100":"https://is1-ssl.mzstatic.com/icon.jpg","trackViewUrl":"https://apps.apple.com/us/app/example/id1"}]}
+            """);
+        var hit = ItunesSearchApi.ParseSearchResponse(json).Single();
+        Check(hit.DeveloperName == "Seller LLC");
+    });
+    Test("iTunes Search parser rejects an array root", () =>
     {
         try
         {
-            MacOsIconsApi.ParseSearchResponse(Encoding.UTF8.GetBytes("[]"));
+            ItunesSearchApi.ParseSearchResponse(Encoding.UTF8.GetBytes("[]"));
             throw new InvalidOperationException("Expected parser failure.");
         }
         catch (InvalidDataException) { }
     });
-    Test("macOSicons attribution keeps distinct credit and uploader", () =>
-        Check(MacOsIconsApi.FormatCreatorAttribution("Designer", "Uploader", "App") ==
-              "Designer · Uploader"));
-    Test("macOSicons attribution deduplicates creator names", () =>
-        Check(MacOsIconsApi.FormatCreatorAttribution(" Designer ", "designer", "App") ==
-              "Designer"));
+    Test("iTunes Search parser rejects inconsistent result counts", () =>
+    {
+        try
+        {
+            ItunesSearchApi.ParseSearchResponse(Encoding.UTF8.GetBytes("{\"resultCount\":2,\"results\":[]}"));
+            throw new InvalidOperationException("Expected parser failure.");
+        }
+        catch (InvalidDataException) { }
+    });
+    Test("iTunes Search request is bounded HTTPS Mac software without a key", () =>
+    {
+        var uri = ItunesSearchApi.CreateSoftwareSearchUri("Visual Studio Code", "de");
+        Check(uri.Scheme == Uri.UriSchemeHttps && uri.Host == "itunes.apple.com" &&
+              uri.Query.Contains("entity=macSoftware", StringComparison.Ordinal) &&
+              uri.Query.Contains("limit=25", StringComparison.Ordinal) &&
+              uri.Query.Contains("country=DE", StringComparison.Ordinal) &&
+              !uri.Query.Contains("key", StringComparison.OrdinalIgnoreCase));
+    });
+    Test("iTunes Search country falls back safely", () =>
+        Check(ItunesSearchApi.NormalizeCountryCode("de") == "DE" &&
+              ItunesSearchApi.NormalizeCountryCode("../") == "US"));
     Test("Default Explorer maps to Apple Finder", () =>
     {
         var plan = MacOsIconSearchCatalog.CreatePlan(new Pin("files", "Dateien", "explorer.exe", "explorer"));
@@ -235,14 +293,15 @@ try
     Test("Missing settings return defaults", () => Check(store.Load().IconSize == Settings.DefaultIconSize));
     Test("JSON round trip", () =>
     {
-        var icon = new IconReference("macosicons", new string('d', 64), "api-v1", new string('b', 64));
-        store.Save(new Settings { Appearance = Appearance.Dark, Language = UiLanguage.English, Startup = StartupMode.UserLogin, Updates = UpdateMode.AutomaticDownload, IconSize = 61, AutoHide = true, HideTaskbar = true,
+        var icon = new IconReference(ItunesSearchApi.ProviderId, new string('d', 64),
+            ItunesSearchApi.CatalogVersion, new string('b', 64));
+        store.Save(new Settings { Appearance = Appearance.Dark, Language = UiLanguage.English, Startup = StartupMode.UserLogin, Updates = UpdateMode.AutomaticDownload, IconSize = 61, AutoHide = true, HideTaskbar = true, HideDesktopIcons = true, ShowVeliShellDockItem = false, WindowsNotificationsEnabled = true,
             IconStyle = DockIconStyle.Windows, MenuBarEnabled = true, MenuBarAutoHide = true, MenuBarAlwaysOnTop = false,
             OnlineIcons = OnlineIconMode.OnDemand, OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion,
             DockIconOverrides = new Dictionary<string, IconReference> { ["trash-full"] = new("velishell-custom", new string('e', 64), "1", new string('e', 64)) },
             Pins = [new("steam", "Steam", "steam.exe", "steam", icon)] });
         var s = store.Load();
-        Check(s.Appearance == Appearance.Dark && s.Language == UiLanguage.English && s.Startup == StartupMode.UserLogin && s.Updates == UpdateMode.AutomaticDownload && s.IconSize == 61 && s.AutoHide && s.HideTaskbar
+        Check(s.Appearance == Appearance.Dark && s.Language == UiLanguage.English && s.Startup == StartupMode.UserLogin && s.Updates == UpdateMode.AutomaticDownload && s.IconSize == 61 && s.AutoHide && s.HideTaskbar && s.HideDesktopIcons && !s.ShowVeliShellDockItem && s.WindowsNotificationsEnabled
             && s.IconStyle == DockIconStyle.Windows && s.MenuBarEnabled && s.MenuBarAutoHide && !s.MenuBarAlwaysOnTop
             && s.OnlineIcons == OnlineIconMode.OnDemand && s.Pins[0].Icon?.IconId == new string('d', 64)
             && s.GetDockIconOverride("trash-full")?.IconId == new string('e', 64));

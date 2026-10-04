@@ -32,14 +32,18 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Einheitliche App-Icons:** Jedes Symbol belegt exakt dieselbe eingestellte Fläche. Transparente Ränder oder ungewöhnliche Quelldateien verändern die Größe im Dock nicht.
 - **Gemeinsame Rundung:** App-Icon, geladene Icons, Hover-Zustand und Drag-Ghost verwenden dieselbe kontinuierliche Superellipse.
 - **Drag & Drop wie erwartet:** Programme, Dateien und Ordner lassen sich vom Desktop ins Dock ziehen und dort verschieben. Ziehst du einen Eintrag aus dem Dock heraus, wird er nur aus dem Dock entfernt – VeliShell erstellt dabei keine Verknüpfung. Der Ghost sitzt direkt am künftigen Einfügeplatz.
+- **Direkt aus dem Explorer anheften:** Dateien und Ordner erhalten den statischen Kontextmenü-Befehl **„Im Dock anheften“**. Unter Windows 11 kann er im klassischen Bereich **„Weitere Optionen anzeigen“** stehen; VeliShell lädt dafür keinen Erweiterungscode in den Explorer.
+- **Ordner direkt im Dock durchsuchen:** Ein normaler Klick auf einen Ordner-Pin öffnet ein themefähiges Popover mit Zurück-Navigation, Breadcrumbs und „Im Explorer öffnen“. Die asynchrone Ansicht bleibt bewusst begrenzt und folgt keinen Junctions oder symbolischen Ordnerlinks aus dem angehefteten Stamm heraus.
 - **Fenster auf einen Blick:** Laufende Apps erhalten einen einzelnen Punkt. Bei mehreren Fenstern zeigt das Kontextmenü seitlich eine Live-Miniatur des gerade berührten Eintrags.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
 - **Papierkorb im Dock:** Leer- und Vollzustand haben eigene Symbole; der Papierkorb lässt sich direkt über das Dock leeren.
-- **Milchiger Hintergrund:** Helles und dunkles Design, weiche Transparenz und eine zurückhaltende Vergrößerung beim Darüberfahren.
+- **Milchiger Hintergrund:** Helles und dunkles Design, eine bewusst leichtere Glas-Transparenz für Dock und Menüleiste sowie eine zurückhaltende Vergrößerung beim Darüberfahren.
 - **VeliShell-Farbwelt:** Einstellungen, Info und Update-Dialog passen sich mit gut lesbaren Blau-Cyan-Violett-Verläufen, sanftem Glow und eigener Hell-/Dunkelabstimmung an das Markensignet an.
 - **Skalierbar:** Die Icongröße lässt sich von 32 bis 96 DIP einstellen und bleibt auch bei Windows-Skalierung sauber zentriert.
 - **Windows-Taskleiste optional ausblenden:** Nur nach ausdrücklicher Aktivierung. Der freigegebene Arbeitsbereich reicht wirklich bis zum Bildschirmrand – ohne reservierten schwarzen Streifen – und wird beim Einblenden, Beenden oder nach einem unterbrochenen Lauf wiederhergestellt.
-- **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Das lokale Benachrichtigungscenter sammelt VeliShell-Hinweise samt ungelesenem Badge, „Gelesen“-Status und Einzel-/Gesamtlöschung. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
+- **Desktopsymbole optional ausblenden:** Ebenfalls nur nach ausdrücklicher Aktivierung und ausschließlich für die Laufzeit von VeliShell. Es wird keine persistente Explorer- oder Registry-Einstellung verändert; ein Wiederherstellungsjournal schützt den zuvor sichtbaren Zustand nach einem unterbrochenen Lauf.
+- **VeliShell-Symbol ist optional:** Das feste Einstellungssymbol lässt sich über sein Dock-Menü entfernen und unter **Einstellungen → Apps & Symbole** jederzeit wieder hinzufügen.
+- **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Die Mitteilungszentrale sammelt VeliShell-Hinweise und besitzt einen ausdrücklich freizugebenden Adapter für aktuelle Windows-Mitteilungen. Dieser Windows-Zugriff verlangt eine signierte Paketidentität; in der derzeitigen MSI-/Portable-Ausgabe bleibt er deshalb sicher deaktiviert. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
 - **Scharfe Vektorsymbole:** Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen VeliShell-Symbolsatz auf gemeinsamem 24-Punkt-Raster. Er skaliert verlustfrei, übernimmt automatisch das aktive Theme und bündelt keine Apple-SF-Symbol-Dateien.
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
 
@@ -60,6 +64,8 @@ Für einen Test ohne Installation gibt es zusätzlich eine [portable ZIP-Datei](
 |---|---|
 | Einstellungen öffnen | VeliShell-Icon im Dock oder `Strg` + `Alt` + `V` |
 | App anheften | Datei, Ordner oder Verknüpfung auf das Dock ziehen |
+| Aus dem Explorer anheften | Rechtsklick auf Datei oder Ordner → **Im Dock anheften**; unter Windows 11 gegebenenfalls zuerst **Weitere Optionen anzeigen** |
+| Angehefteten Ordner öffnen | Ordner-Symbol anklicken; Unterordner im Popover öffnen oder zum Explorer wechseln |
 | Reihenfolge ändern | Icon im Dock an die gewünschte Position ziehen |
 | Eintrag aus dem Dock entfernen | Dock-Icon aus dem Dock herausziehen |
 | Mehrere Fenster auswählen | Rechtsklick auf die laufende App |
@@ -89,20 +95,22 @@ Der freiwillige Benutzer-Autostart startet das sichtbare Dock nach deiner Window
 
 Im Dock kannst du zwischen zwei Darstellungen wechseln:
 
-- **VeliShell / Mac-inspiriert:** einheitlich skalierte und gerundete Icons, die eigenen VeliShell-Systemillustrationen und auf Wunsch ein ausgewähltes Community-Icon – ohne künstlich erzeugte Farbfläche dahinter;
+- **VeliShell / Mac-inspiriert:** einheitlich skalierte und gerundete Icons, die mitgelieferten VeliShell-Grafiken und auf Wunsch ein selbst ausgewählter App-Store-Treffer – ohne künstlich erzeugte Farbfläche dahinter;
 - **Windows Original:** das lokale Symbol der installierten EXE, Verknüpfung oder Shell-App – sauber skaliert und ohne zusätzlich erzeugte Farbfläche dahinter.
 
 Unabhängig vom globalen Stil lässt sich jedes sichtbare Dock-Element in **Einstellungen → Apps** einzeln anpassen. VeliShell übernimmt lokale Bild- und Icondateien in den eigenen geschützten Datenordner, damit das Dock nicht von einer später verschobenen Quelldatei abhängt. Das VeliShell-Element und aktuell erkannte laufende Apps erhalten eigene Einträge; für den Papierkorb stehen getrennte Auswahlen für **leer** und **voll** bereit. Jede Änderung kann einzeln auf den VeliShell-Standard zurückgesetzt werden.
 
-Wenn lokal kein passendes hochauflösendes Symbol vorhanden ist, kann VeliShell die dokumentierte [macOSicons.com API](https://macosicons.com/developers) durchsuchen. Die Treffer werden **vor der Übernahme als Auswahl** mit Name und Urheberhinweis angezeigt. Dafür trägt jeder Nutzer seinen eigenen API-Schlüssel ein; VeliShell legt ihn im Windows-Anmeldeinformationsspeicher ab und schreibt ihn weder in die Einstellungen noch in Protokolle oder das Repository. Bei einer Suche wird der App-Name an macOSicons.com übertragen.
+Wenn lokal kein passendes hochauflösendes Symbol vorhanden ist, kann VeliShell nach deiner Freigabe die offizielle [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) nach Mac-Software durchsuchen. Dafür ist **kein API-Schlüssel** nötig. Eine Suche läuft nur auf deinen Klick, zeigt mehrere Treffer mit App-Name, Entwickler, Vorschau und direktem App-Store-Link und übernimmt ausschließlich deine ausdrückliche Auswahl. Es gibt keine automatische Hintergrundsuche und keinen stillen Austausch bestehender Symbole.
 
-VeliShell bündelt keine Community-Icons und beansprucht daran keine Rechte. Quelle und Urheber bleiben am ausgewählten Eintrag nachvollziehbar. Apple-App-Store-Grafiken sowie originale macOS-System- und Papierkorb-Icons werden nicht als Dock-Ersatz ausgeliefert: Apples bereitgestellte Store-Grafiken sind für die Bewerbung des jeweiligen Store-Inhalts vorgesehen, nicht als frei weiterverteilbares Icon-Paket. Stattdessen enthält VeliShell eigene, unverwechselbare Systemillustrationen für Leer- und Vollzustände des Papierkorbs. Weitere Angaben stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Der Online-Katalog wird nicht mit VeliShell ausgeliefert. Suchergebnisse bleiben kurz im Arbeitsspeicher; nur das gewählte Bild wird in einem begrenzten lokalen Cache gespeichert. Quelle und App-Store-Link bleiben in den Einstellungen beziehungsweise am Eintrag erreichbar. App-Store-Artwork bleibt Eigentum der jeweiligen Rechteinhaber und unterliegt Apples Bedingungen für Promo-Inhalte – es ist kein frei weiterverteilbares Icon-Paket. Die neuen Leer-/Vollgrafiken des Papierkorbs wurden eigenständig für VeliShell gestaltet und verwenden keine Apple-Vorlagen. Weitere Angaben stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## 🔐 Datenschutz und Sicherheit
 
 - keine Telemetrie und kein Werbe-Tracking;
+- Taskleiste und Desktopsymbole werden nur temporär und nach ausdrücklichem Opt-in verändert; VeliShell schreibt dafür keine dauerhafte Explorer-Konfiguration;
 - Einstellungen und Icon-Cache bleiben lokal auf dem Rechner;
-- App-Namen werden nur bei einer von dir ausgelösten Online-Icon-Suche an macOSicons.com gesendet; Fensterinhalte und Dateiinhalte werden nicht übertragen;
+- App-Namen werden nur bei einer von dir ausgelösten Online-Icon-Suche an `itunes.apple.com` gesendet; Vorschauen kommen von Apples `mzstatic.com`-CDN. Fensterinhalte und Dateiinhalte werden nicht übertragen;
+- Wo eine signierte paketierte Ausgabe den Windows-Zugriff unterstützt, werden Mitteilungen nur nach der Windows-Freigabe lokal gelesen, nie übertragen und nicht in Diagnoseprotokolle geschrieben. Das Entfernen in VeliShell löscht ausschließlich die ausdrücklich angezeigte Mitteilung anhand ihrer Windows-ID. MSI und Portable besitzen aktuell keine Paketidentität und lassen den Zugriff daher deaktiviert;
 - Update-Metadaten kommen ausschließlich aus dem offiziellen VeliShell-Repository;
 - die Windows-Shell, Systemdateien und Sicherheitsfunktionen werden nicht ersetzt oder deaktiviert.
 
@@ -132,7 +140,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.5.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.6.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

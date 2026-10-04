@@ -14,24 +14,19 @@ public partial class App : Application
         string.Format(LocalizationService.Current.ActiveCulture, L(key), args);
     private Mutex? _mutex;
     private bool _ownsMutex;
+    private SingleInstancePinBridge? _pinBridge;
     private DispatcherTimer? _saveTimer;
     private DispatcherTimer? _updateTimer;
     private PreferencesWindow? _preferencesWindow;
     private MenuBarWindow? _menuBarWindow;
     private bool _saveErrorShown;
     private readonly CancellationTokenSource _shutdown = new();
-    private readonly SemaphoreSlim _iconScanGate = new(1, 1);
     private readonly SemaphoreSlim _updateCheckGate = new(1, 1);
     private readonly SemaphoreSlim _shellLayoutGate = new(1, 1);
     private int _emergencyRestoreRequests;
     private readonly GitHubReleaseUpdateService _updates = new();
     private UpdateWindow? _updateWindow;
     private SemanticVersion? _lastOfferedVersion;
-    private readonly object _runningIconGate = new();
-    private readonly Dictionary<string, IconReference> _runningOnlineIcons = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _runningIconAttempts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTimeOffset> _runningIconRetryAfter = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly TimeSpan RunningIconRetryDelay = TimeSpan.FromMinutes(5);
     public static string DataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VeliShell");
@@ -43,6 +38,7 @@ public partial class App : Application
     public ThemeService Themes { get; private set; } = null!;
     public DockWindow Dock { get; private set; } = null!;
     internal TaskbarVisibilityService Taskbars { get; } = new();
+    internal DesktopIconVisibilityService DesktopIcons { get; } = new();
     public string HotkeyStatus { get; set; } = LocalizationService.Current.Get("App.HotkeyPending");
     internal UpdateUiState UpdateState { get; private set; } = UpdateUiState.NotChecked;
     internal SemanticVersion? AvailableUpdateVersion { get; private set; }
@@ -52,15 +48,31 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var pinInvocationRequested = e.Args.Any(argument =>
+            string.Equals(argument, ShellPinCommand.Option, StringComparison.OrdinalIgnoreCase));
+        var hasPinCommand = ShellPinCommand.TryParse(e.Args, out var pendingPinPath);
+        if (pinInvocationRequested && !hasPinCommand)
+        {
+            Log("Rejected an invalid Explorer pin command.");
+            Shutdown(2);
+            return;
+        }
+
         _mutex = new Mutex(true, @"Local\Zumbyte.VeliShell.0.3", out _ownsMutex);
         if (!_ownsMutex)
         {
-            MessageBox.Show(L("App.AlreadyRunning"), L("Common.ErrorTitle"));
+            if (!hasPinCommand || !SingleInstancePinBridge.ForwardAsync(
+                    pendingPinPath, TimeSpan.FromSeconds(5)).GetAwaiter().GetResult())
+                MessageBox.Show(L("App.AlreadyRunning"), L("Common.ErrorTitle"));
             Shutdown(); return;
         }
+        _pinBridge = new SingleInstancePinBridge(QueuePinFromShell);
+        _pinBridge.Start();
         // A second rejected process must never touch the active owner's shell
         // state. Recover non-persistent work areas only after mutex ownership.
         Taskbars.RecoverWorkAreasAfterOwnershipConfirmed();
+        if (!DesktopIcons.RecoverAfterOwnershipConfirmed())
+            Log(DesktopIcons.LastStatus);
         DispatcherUnhandledException += (_, args) =>
         {
             Log("Unhandled UI exception", args.Exception);
@@ -72,6 +84,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             Taskbars.Restore();
+            DesktopIcons.Restore();
             Log("Unhandled exception", args.ExceptionObject as Exception);
         };
         MigrateLegacySettings();
@@ -86,6 +99,34 @@ public partial class App : Application
         Dock = new DockWindow(this);
         MainWindow = Dock;
         Dock.Show();
+        if (Preferences.WindowsNotificationsEnabled &&
+            NotificationCenterService.Current.WindowsAccess.State ==
+            WindowsNotificationAccessState.Unsupported)
+        {
+            // A setting carried over from a packaged build must not appear as
+            // active in an unpackaged MSI/portable build that cannot declare
+            // the Windows capability.
+            Preferences.WindowsNotificationsEnabled = false;
+            SaveNow();
+        }
+        // A saved opt-in may resume an already granted listener, but this path
+        // never opens the Windows privacy prompt. Only the explicit Settings
+        // toggle calls RequestAccessAsync.
+        _ = NotificationCenterService.Current.ConfigureWindowsNotificationsAsync(
+            Preferences.WindowsNotificationsEnabled);
+        if (Preferences.HideDesktopIcons)
+            SetDesktopIconsHidden(true, showError: false);
+        if (hasPinCommand) AddShellPin(pendingPinPath);
+        try
+        {
+            if (Environment.ProcessPath is { } executablePath)
+                ShellVerbRegistrationService.EnsureRegisteredForCurrentUser(executablePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                                          or System.Security.SecurityException)
+        {
+            Log("Could not register the Explorer pin command for the current user", exception);
+        }
         if (!SyncMenuBar())
         {
             Preferences.MenuBarEnabled = false;
@@ -100,10 +141,6 @@ public partial class App : Application
                 await CheckForUpdatesAsync(userInitiated: false, Dock);
         };
         _updateTimer.Start();
-        if (Preferences.IconStyle == DockIconStyle.Mac &&
-            Preferences.OnlineIconConsentVersion >= Settings.CurrentOnlineIconConsentVersion &&
-            Preferences.OnlineIcons == OnlineIconMode.AutomaticExactMatches)
-            _ = ApplyAutomaticIconsAsync(Preferences.Pins);
         if (!Preferences.FirstRunCompleted)
         {
             ShowPreferences();
@@ -113,6 +150,23 @@ public partial class App : Application
         if (Preferences.Updates != UpdateMode.Manual)
             _ = CheckForUpdatesAsync(userInitiated: false, Dock);
         Log($"VeliShell {GitHubReleaseUpdateService.InstalledVersion} started. Windows {Environment.OSVersion.Version}");
+    }
+
+    private bool QueuePinFromShell(string path)
+    {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return false;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (!_exiting && Dock is not null) AddShellPin(path);
+        });
+        return true;
+    }
+
+    private void AddShellPin(string path)
+    {
+        var alreadyPinned = Preferences.Pins.Any(pin =>
+            ShellPinCommand.RefersToSameExistingPath(pin.Target, path));
+        if (!alreadyPinned) Dock.AddPaths([path]);
     }
 
     private static void MigrateLegacySettings()
@@ -363,6 +417,25 @@ public partial class App : Application
         return success;
     }
 
+    public bool SetDesktopIconsHidden(bool hidden, bool showError = true)
+    {
+        var success = hidden ? DesktopIcons.Hide() : DesktopIcons.Restore();
+        var applied = ShouldPersistDesktopIconHidePreference(hidden, success, DesktopIcons.IsHidden);
+        if (Preferences.HideDesktopIcons != applied)
+            UpdatePreferences(settings => settings.HideDesktopIcons = applied);
+        else
+            PreferencesChanged?.Invoke();
+
+        if (!success)
+        {
+            Log(DesktopIcons.LastStatus);
+            if (showError)
+                MessageBox.Show(DesktopIcons.LastStatus, L("Common.ErrorTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        return success;
+    }
+
     internal async Task<bool> SetMenuBarEnabledAsync(bool enabled, bool showError = true)
     {
         var gateEntered = false;
@@ -492,199 +565,50 @@ public partial class App : Application
         }
     }
 
-    internal async Task<IconScanSummary> FindAndApplyOnlineIconsAsync(IEnumerable<Pin> candidates)
-    {
-        if (Preferences.IconStyle != DockIconStyle.Mac)
-            return new IconScanSummary(0, 0, 0, L("Apps.OnlineRequiresMacStyle"));
-        if (Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion)
-            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsNotApproved"));
-
-        // Only eligible application names are sent to the documented,
-        // authenticated provider endpoint. Documents and folders stay local.
-        var pins = candidates
-            .Where(MacOsIconGalleryService.IsEligibleAppPin)
-            .DistinctBy(pin => pin.Id, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (pins.Count == 0)
-            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsNoPins"));
-
-        await _iconScanGate.WaitAsync(_shutdown.Token);
-        try
-        {
-            var results = await MacOsIconGalleryService.FindAndDownloadExactMatchesAsync(pins, _shutdown.Token);
-            var replacements = results.Where(result => result.Icon is not null)
-                .ToDictionary(result => result.PinId, result => result.Icon!, StringComparer.OrdinalIgnoreCase);
-            var applied = 0;
-            if (replacements.Count > 0)
-            {
-                UpdatePreferences(settings =>
-                {
-                    for (var index = 0; index < settings.Pins.Count; index++)
-                    {
-                        var pin = settings.Pins[index];
-                        if (!replacements.TryGetValue(pin.Id, out var icon)) continue;
-                        settings.Pins[index] = pin with { Icon = icon };
-                        applied++;
-                    }
-                });
-            }
-            var failed = results.Count(result => result.Error is not null);
-            var noMatch = results.Count(result => result.Icon is null && result.Error is null);
-            return new IconScanSummary(applied, noMatch, failed,
-                failed > 0 ? results.First(result => result.Error is not null).Error : null);
-        }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
-        {
-            return new IconScanSummary(0, 0, 0, L("App.OnlineIconsCanceled"));
-        }
-        catch (Exception ex)
-        {
-            Log("macOSicons.com search failed", ex);
-            var message = ex is MacOsIconGalleryServiceException known
-                ? known.Message
-                : L("App.OnlineIconsUnavailable");
-            return new IconScanSummary(0, 0, 1, message);
-        }
-        finally
-        {
-            _iconScanGate.Release();
-        }
-    }
-
-    internal async Task ApplyAutomaticIconsAsync(IEnumerable<Pin> pins)
-    {
-        if (Preferences.IconStyle != DockIconStyle.Mac ||
-            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
-            Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
-        try
-        {
-            var result = await FindAndApplyOnlineIconsAsync(pins);
-            if (result.Failed > 0) Log("Automatic macOSicons.com scan: " + result.Message);
-        }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-        catch (Exception ex) { Log("Automatic macOSicons.com scan failed", ex); }
-    }
-
-    internal IconReference? GetRunningOnlineIcon(string runningId)
-    {
-        if (Preferences.IconStyle != DockIconStyle.Mac ||
-            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
-            Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return null;
-        lock (_runningIconGate)
-            return _runningOnlineIcons.GetValueOrDefault(runningId);
-    }
-
-    internal void QueueAutomaticRunningIcons(IEnumerable<Pin> candidates)
-    {
-        if (Preferences.IconStyle != DockIconStyle.Mac ||
-            Preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
-            Preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
-
-        List<Pin> pending;
-        lock (_runningIconGate)
-        {
-            var now = DateTimeOffset.UtcNow;
-            pending = candidates
-                .Where(MacOsIconGalleryService.IsEligibleAppPin)
-                .DistinctBy(pin => pin.Id, StringComparer.OrdinalIgnoreCase)
-                .Where(pin => !_runningOnlineIcons.ContainsKey(pin.Id) &&
-                              !_runningIconAttempts.Contains(pin.Id) &&
-                              (!_runningIconRetryAfter.TryGetValue(pin.Id, out var retryAfter) || retryAfter <= now))
-                .Take(Settings.MaximumPins)
-                .ToList();
-            foreach (var pin in pending)
-            {
-                _runningIconAttempts.Add(pin.Id);
-                _runningIconRetryAfter.Remove(pin.Id);
-            }
-        }
-        if (pending.Count > 0) _ = ApplyAutomaticRunningIconsAsync(pending);
-    }
-
-    private async Task ApplyAutomaticRunningIconsAsync(IReadOnlyList<Pin> candidates)
-    {
-        var gateEntered = false;
-        try
-        {
-            await _iconScanGate.WaitAsync(_shutdown.Token);
-            gateEntered = true;
-            var results = await MacOsIconGalleryService.FindAndDownloadExactMatchesAsync(candidates, _shutdown.Token);
-            var changed = false;
-            lock (_runningIconGate)
-            {
-                foreach (var result in results)
-                {
-                    if (result.Icon is not null)
-                    {
-                        _runningOnlineIcons[result.PinId] = result.Icon;
-                        _runningIconRetryAfter.Remove(result.PinId);
-                        changed = true;
-                    }
-                    else if (result.Error is not null)
-                    {
-                        _runningIconAttempts.Remove(result.PinId);
-                        _runningIconRetryAfter[result.PinId] = DateTimeOffset.UtcNow + RunningIconRetryDelay;
-                    }
-                    // A definitive exact-name miss remains attempted for this
-                    // process session; only transient failures are retried.
-                }
-            }
-            if (changed && !_shutdown.IsCancellationRequested)
-                await Dispatcher.InvokeAsync(() => Dock.RefreshOnlineIcons());
-            var failure = results.FirstOrDefault(result => result.Error is not null)?.Error;
-            if (failure is not null) Log("Automatic running-app macOSicons.com scan: " + failure);
-        }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-        catch (Exception ex)
-        {
-            lock (_runningIconGate)
-            {
-                var retryAfter = DateTimeOffset.UtcNow + RunningIconRetryDelay;
-                foreach (var pin in candidates)
-                {
-                    _runningIconAttempts.Remove(pin.Id);
-                    _runningIconRetryAfter[pin.Id] = retryAfter;
-                }
-            }
-            Log("Automatic running-app macOSicons.com scan failed", ex);
-        }
-        finally
-        {
-            if (gateEntered) _iconScanGate.Release();
-        }
-    }
-
     private bool _exiting;
     public async void RequestExit(int exitCode = 0, bool forceAfterRestoreFailure = false)
     {
         if (_exiting) return;
         _exiting = true;
-        var restored = false;
+        var taskbarRestored = false;
+        var desktopIconsRestored = false;
         try
         {
-            restored = await Taskbars.RestoreAsync();
+            taskbarRestored = await Taskbars.RestoreAsync();
         }
         catch (Exception ex)
         {
             Log("Taskbar restoration during shutdown failed", ex);
         }
 
-        if (ShouldPostponeShutdown(restored, Taskbars.IsHidden, forceAfterRestoreFailure))
+        try
+        {
+            desktopIconsRestored = DesktopIcons.Restore();
+        }
+        catch (Exception ex)
+        {
+            Log("Desktop-icon restoration during shutdown failed", ex);
+        }
+
+        var restored = taskbarRestored && desktopIconsRestored;
+        var shellElementStillHidden = Taskbars.IsHidden || DesktopIcons.IsHidden;
+        var restorationStatus = Taskbars.IsHidden ? Taskbars.LastStatus : DesktopIcons.LastStatus;
+        if (ShouldPostponeShutdown(restored, shellElementStillHidden, forceAfterRestoreFailure))
         {
             _exiting = false;
-            Log("Shutdown postponed because taskbar restoration is not confirmed. " + Taskbars.LastStatus);
+            Log("Shutdown postponed because shell restoration is not confirmed. " + restorationStatus);
             try { ShowPreferences(); }
             catch (Exception ex) { Log("Could not show recovery controls", ex); }
             MessageBox.Show(
-                LF("App.ShutdownBlocked", Taskbars.LastStatus),
+                LF("App.ShutdownBlocked", restorationStatus),
                 L("App.ShutdownBlockedTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
-        if (!restored && Taskbars.IsHidden)
-            Log("Forced shutdown continues without confirmed taskbar restoration. " + Taskbars.LastStatus);
+        if (!restored && shellElementStillHidden)
+            Log("Forced shutdown continues without confirmed shell restoration. " + restorationStatus);
         Shutdown(exitCode);
     }
 
@@ -701,6 +625,14 @@ public partial class App : Application
         hideRequested
             ? operationConfirmed || taskbarStillHidden
             : !operationConfirmed && taskbarStillHidden;
+
+    private static bool ShouldPersistDesktopIconHidePreference(
+        bool hideRequested,
+        bool operationConfirmed,
+        bool desktopIconsStillHiddenByThisSession) =>
+        hideRequested
+            ? operationConfirmed || desktopIconsStillHiddenByThisSession
+            : !operationConfirmed && desktopIconsStillHiddenByThisSession;
 
     private void SaveNow()
     {
@@ -742,17 +674,20 @@ public partial class App : Application
         _updateTimer?.Stop();
         _shutdown.Cancel();
         Taskbars.Restore();
+        DesktopIcons.Restore();
         if (Preferences is not null) SaveNow();
         Themes?.Dispose();
         Taskbars.Dispose();
+        DesktopIcons.Dispose();
+        NotificationCenterService.Current.Dispose();
         _updates.Dispose();
+        _pinBridge?.Dispose();
         if (_ownsMutex) _mutex?.ReleaseMutex();
         _mutex?.Dispose();
         base.OnExit(e);
     }
 }
 
-internal sealed record IconScanSummary(int Applied, int NoMatch, int Failed, string? Message);
 
 internal enum UpdateUiState
 {

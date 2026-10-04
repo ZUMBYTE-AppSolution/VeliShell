@@ -28,6 +28,59 @@
    <Setter.Value><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="16" ShadowDepth="3" Opacity="0.24" /></Setter.Value>
   </Setter>
  </Style>
+ <Style x:Key="GlassCard" TargetType="Border">
+  <Setter Property="Background" Value="{DynamicResource GlassCardSurface}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassCardStroke}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="CornerRadius" Value="16" />
+  <Setter Property="Padding" Value="14" />
+ </Style>
+ <Style x:Key="GlassTileButton" TargetType="Button">
+  <Setter Property="Background" Value="{DynamicResource GlassCardSurface}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassCardStroke}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="Padding" Value="12" />
+  <Setter Property="Cursor" Value="Hand" />
+  <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Body" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+           BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="16" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter TargetName="Body" Property="Background" Value="{DynamicResource GlassControlHover}" />
+     <Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource GlassHighlight}" />
+    </Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.72" /></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentStroke}" /></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.42" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="GlassCircleButton" TargetType="Button" BasedOn="{StaticResource GlassTileButton}">
+  <Setter Property="Width" Value="36" />
+  <Setter Property="Height" Value="36" />
+  <Setter Property="Padding" Value="8" />
+  <Setter Property="HorizontalContentAlignment" Value="Center" />
+  <Setter Property="VerticalContentAlignment" Value="Center" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Body" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+           BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter TargetName="Body" Property="Background" Value="{DynamicResource GlassControlHover}" />
+     <Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource GlassHighlight}" />
+    </Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.72" /></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentStroke}" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType="Button">
   <Setter Property="Background" Value="{DynamicResource ControlSurfaceGradient}" />
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
@@ -100,12 +153,12 @@
   <Setter Property="Cursor" Value="Hand" />
   <Setter Property="FocusVisualStyle" Value="{x:Null}" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="6"
+   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="7"
            Padding="{TemplateBinding Padding}">
     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
    </Border>
    <ControlTemplate.Triggers>
-    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Body" Property="Background" Value="{DynamicResource DockHover}" /></Trigger>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Body" Property="Background" Value="{DynamicResource GlassControlHover}" /></Trigger>
     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.65" /></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>

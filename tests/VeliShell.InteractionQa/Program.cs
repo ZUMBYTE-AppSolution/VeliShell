@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -28,6 +29,8 @@ internal static class Program
         {
             Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
         });
+        if (args.Contains("--render-shell-panels", StringComparer.OrdinalIgnoreCase))
+            return RenderShellPanels(application);
 
         var anchor = new Border
         {
@@ -84,26 +87,33 @@ internal static class Program
             TestThumbnail(owner, source, anchor);
             TestGhostAndMask(owner, anchor);
             TestDockPinDragOutPolicy();
+            TestExplorerPinVerbContract();
             TestDockTileHoverMask();
             TestVeliShellAssetSurface();
             TestDockIconCustomizationContract();
+            TestFolderPopoverAndDesktopIconContracts();
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
             TestMenuBarCenters();
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
             RenderIconSurfaceContactSheet(iconSurfacesPath);
+            var trashSurfacesPath = Path.Combine(AppContext.BaseDirectory, "trash-surfaces.png");
+            RenderTrashSurfaceContactSheet(trashSurfacesPath);
             Console.WriteLine("PASS: DWM thumbnail registered, hidden and released cleanly across 12 cycles.");
             Console.WriteLine("PASS: Drag ghost snapped/followed/disposed at 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock drag-out carries no FileDrop/shortcut payload; feedback, drop and removal share the visible dock-plate boundary while internal reorder/external file-drop inputs remain available.");
+            Console.WriteLine("PASS: Explorer static verbs quote one Unicode path and the same-user single-instance bridge forwards it without loading code into Explorer.");
             Console.WriteLine("PASS: Different source safe zones normalize to the same fixed 32, 58 and 96 DIP icons without a generated backdrop; source pixels cannot resize the artwork and common 1.42x hover scale is preserved.");
             Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed icon and uses the same p=4.37 contour without an accent plate.");
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
+            Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
-            Console.WriteLine("PASS: Menu-bar Control Center and local Notification Center expose bounded, reversible and privacy-preserving contracts.");
+            Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
+            Console.WriteLine($"PASS: Rendered aligned freeform empty/full Recycle Bin surfaces to {trashSurfacesPath}");
             return 0;
         }
         catch (Exception exception)
@@ -671,6 +681,53 @@ internal static class Program
             "External file drops into the dock are no longer available.");
     }
 
+    private static void TestExplorerPinVerbContract()
+    {
+        var registrationType = RequireType("VeliShell.Desktop.Services.ShellVerbRegistrationService");
+        var buildCommand = RequireMethod(registrationType, "BuildCommand");
+        const string executable = @"C:\Program Files\VeliShell\VeliShell.exe";
+        var command = (string)buildCommand.Invoke(null, [executable])!;
+        Require(command == "\"C:\\Program Files\\VeliShell\\VeliShell.exe\" --pin-to-dock \"%1\"",
+            "The Explorer verb command no longer quotes both the executable and the Shell-supplied path.");
+
+        var verbKeys = (string[])(registrationType.GetField(
+            "VerbKeys", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+            ?? throw new MissingFieldException(registrationType.FullName, "VerbKeys"));
+        Require(verbKeys.SequenceEqual([
+                @"Software\Classes\*\shell\VeliShell.PinToDock",
+                @"Software\Classes\Directory\shell\VeliShell.PinToDock"
+            ]),
+            "The Explorer verb no longer covers exactly files/programs and file-system directories.");
+
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), "VeliShell-IpcQa-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryDirectory);
+        var path = Path.Combine(temporaryDirectory, "Über & Leerzeichen.txt");
+        File.WriteAllText(path, "qa");
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bridgeType = RequireType("VeliShell.Desktop.Services.SingleInstancePinBridge");
+        var bridge = (IDisposable)(Activator.CreateInstance(
+            bridgeType,
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            args: [new Func<string, bool>(value => { received.TrySetResult(value); return true; })],
+            culture: null) ?? throw new InvalidOperationException("The pin bridge could not be created."));
+        try
+        {
+            RequireMethod(bridgeType, "Start").Invoke(bridge, null);
+            var forward = (Task<bool>)RequireMethod(bridgeType, "ForwardAsync")
+                .Invoke(null, [path, TimeSpan.FromSeconds(5)])!;
+            Require(forward.GetAwaiter().GetResult(), "The running-instance bridge rejected a valid path.");
+            Require(string.Equals(received.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(),
+                    Path.GetFullPath(path), StringComparison.Ordinal),
+                "The running-instance bridge did not preserve the exact Unicode path.");
+        }
+        finally
+        {
+            bridge.Dispose();
+            Directory.Delete(temporaryDirectory, recursive: true);
+        }
+    }
+
     private static void TestVeliShellAssetSurface()
     {
         var iconServiceType = RequireType("VeliShell.Desktop.Services.IconService");
@@ -778,6 +835,8 @@ internal static class Program
         foreach (var field in new[] { "SystemIconList", "RunningIconList", "PinList" })
             Require(RequireField(preferences, field) is not null,
                 $"Settings no longer exposes the {field} icon-management surface.");
+        Require(preferences.GetField("IconApiKeyInput", BindingFlags.Instance | BindingFlags.NonPublic) is null,
+            "The App Store icon picker must not ask for an API key.");
         foreach (var method in new[]
                  {
                      "ChooseLocalIconForPin", "ChooseLocalIconForDockElement", "ResetPinIcon",
@@ -791,15 +850,23 @@ internal static class Program
         Require(dock.GetMethod("GetConfigurableRunningApps", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
             "Running dock elements are not available to icon settings.");
 
-        var gallery = RequireType("VeliShell.Desktop.Services.MacOsIconGalleryService");
+        var gallery = RequireType("VeliShell.Desktop.Services.AppStoreIconService");
+        int Constant(string name) => (int)(gallery.GetField(
+            name,
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetRawConstantValue()
+            ?? throw new MissingFieldException(gallery.FullName, name));
+        Require(Constant("MaximumSearchBytes") == 1024 * 1024 &&
+                Constant("MaximumImageBytes") == 5 * 1024 * 1024 &&
+                Constant("MaximumCacheEntries") == 64,
+            "The Apple icon provider no longer has the expected bounded response and cache limits.");
         var memoryType = gallery.GetNestedType("MemoryImage", BindingFlags.NonPublic)
                          ?? throw new TypeLoadException("MemoryImage");
-        var attributionType = RequireType("VeliShell.Desktop.Services.MacOsIconAttribution");
+        var attributionType = RequireType("VeliShell.Desktop.Services.AppStoreIconAttribution");
         var attribution = Activator.CreateInstance(
             attributionType,
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
             binder: null,
-            args: ["macOSicons.com · QA", "https://macosicons.com/"],
+            args: ["App Store · QA", "https://apps.apple.com/us/app/example/id123"],
             culture: null)!;
         var onlineBitmap = (BitmapSource)CreateAlphaPlateImage(0, 0, 255, 255);
         var memory = Activator.CreateInstance(
@@ -813,10 +880,15 @@ internal static class Program
         var cacheItem = cache.GetType().GetProperty("Item")
                         ?? throw new MissingMemberException(cache.GetType().FullName, "Item");
         var hash = new string('a', 64);
-        cacheItem.SetValue(cache, memory, [hash + ":" + hash]);
+        cacheItem.SetValue(cache, memory,
+            [VeliShell.Core.ItunesSearchApi.ProviderId + ":" + hash + ":" + hash]);
         try
         {
-            var reference = new VeliShell.Core.IconReference("macosicons", hash, "api-v1", hash);
+            var reference = new VeliShell.Core.IconReference(
+                VeliShell.Core.ItunesSearchApi.ProviderId,
+                hash,
+                VeliShell.Core.ItunesSearchApi.CatalogVersion,
+                hash);
             var rendered = (ImageSource)RequireMethod(
                     RequireType("VeliShell.Desktop.Services.IconService"), "For")
                 .Invoke(null, ["velishell", "", reference])!;
@@ -826,6 +898,143 @@ internal static class Program
         finally
         {
             cache.GetType().GetMethod("Clear", Type.EmptyTypes)!.Invoke(cache, null);
+        }
+    }
+
+    private static void TestFolderPopoverAndDesktopIconContracts()
+    {
+        var browserType = RequireType("VeliShell.Desktop.Services.FolderBrowserService");
+        var tryCreateRoot = RequireMethod(browserType, "TryCreateRoot");
+        var tryResolveLocation = RequireMethod(browserType, "TryResolveLocation");
+        var isWithinRoot = RequireMethod(browserType, "IsWithinRoot");
+        var enumerateAsync = RequireMethod(browserType, "EnumerateAsync");
+        var canOpenEntry = RequireMethod(browserType, "CanOpenEntry");
+        var maximumEntries = (int)(browserType.GetField(
+            "MaximumEntries", BindingFlags.Static | BindingFlags.NonPublic)?.GetRawConstantValue()
+            ?? throw new MissingFieldException(browserType.FullName, "MaximumEntries"));
+        var maximumDepth = (int)(browserType.GetField(
+            "MaximumDepth", BindingFlags.Static | BindingFlags.NonPublic)?.GetRawConstantValue()
+            ?? throw new MissingFieldException(browserType.FullName, "MaximumDepth"));
+        Require(maximumEntries == 120 && maximumDepth == 16,
+            "Pinned-folder enumeration no longer has the expected strict entry/depth bounds.");
+
+        var temporary = Path.Combine(Path.GetTempPath(), $"VeliShellFolderQa-{Guid.NewGuid():N}");
+        var root = Path.Combine(temporary, "root");
+        var child = Path.Combine(root, "child");
+        var outside = Path.Combine(temporary, "outside");
+        try
+        {
+            Directory.CreateDirectory(child);
+            Directory.CreateDirectory(outside);
+            for (var index = 0; index < maximumEntries + 12; index++)
+                File.WriteAllText(Path.Combine(root, $"item-{index:000}.txt"), "qa");
+
+            var rootArguments = new object?[] { root, null };
+            Require((bool)tryCreateRoot.Invoke(null, rootArguments)! &&
+                    string.Equals(rootArguments[1] as string, root, StringComparison.OrdinalIgnoreCase),
+                "A normal local folder can no longer become a safe popover root.");
+            Require((bool)isWithinRoot.Invoke(null, [root, child])! &&
+                    !(bool)isWithinRoot.Invoke(null, [root, outside])!,
+                "Folder-popover root confinement accepts a sibling-path escape.");
+
+            var resolveChild = new object?[] { root, child, null };
+            var resolveOutside = new object?[] { root, outside, null };
+            Require((bool)tryResolveLocation.Invoke(null, resolveChild)! &&
+                    !(bool)tryResolveLocation.Invoke(null, resolveOutside)!,
+                "Folder navigation no longer accepts only existing descendants of its pinned root.");
+
+            var deep = root;
+            for (var depth = 0; depth <= maximumDepth; depth++)
+            {
+                deep = Path.Combine(deep, $"d{depth}");
+                Directory.CreateDirectory(deep);
+            }
+            var resolveDeep = new object?[] { root, deep, null };
+            Require(!(bool)tryResolveLocation.Invoke(null, resolveDeep)!,
+                "Folder navigation exceeded its maximum descendant depth.");
+
+            var enumerationTask = (Task)enumerateAsync.Invoke(null,
+                [root, root, CancellationToken.None])!;
+            enumerationTask.GetAwaiter().GetResult();
+            var result = enumerationTask.GetType().GetProperty("Result")!.GetValue(enumerationTask)!;
+            var entries = ((System.Collections.IEnumerable)result.GetType().GetProperty("Entries")!
+                    .GetValue(result)!).Cast<object>().ToList();
+            Require(entries.Count == maximumEntries &&
+                    (bool)result.GetType().GetProperty("IsTruncated")!.GetValue(result)!,
+                "Folder enumeration is no longer capped with an explicit truncated result.");
+            Require(entries.Count > 0 && (bool)canOpenEntry.Invoke(null, [root, root, entries[0]])!,
+                "A freshly enumerated root-confined entry failed its click-time revalidation.");
+
+            var popoverType = RequireType("VeliShell.Desktop.Views.FolderPopoverWindow");
+            Require(popoverType.GetMethod("CanOpen", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                    popoverType.GetMethod("NavigateAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                    popoverType.GetMethod("OpenExplorer_Click", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "The pinned-folder popover lost its guarded navigation or Explorer escape hatch.");
+            var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
+            Require(dockType.GetField("_folderPopover", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                    dockType.GetMethod("ShowFolderPopover", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "The dock no longer owns a single closeable folder-popover lifecycle.");
+
+            var desktopType = RequireType("VeliShell.Desktop.Services.DesktopIconVisibilityService");
+            foreach (var method in new[]
+                     {
+                         "RecoverAfterOwnershipConfirmed", "Hide", "ReconcileHidden", "Restore",
+                         "TryFindDesktopView", "TryWriteRecovery"
+                     })
+                Require(desktopType.GetMethod(method,
+                            BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic) is not null,
+                    $"Desktop-icon safety contract is missing {method}.");
+
+            // A rejected second process reaches App.OnExit without ever
+            // owning the Explorer view. Its fresh service instance must leave
+            // the primary process' crash-recovery journal untouched.
+            var foreignRecoveryPath = Path.Combine(temporary, "desktop-icons-recovery.json");
+            File.WriteAllText(foreignRecoveryPath, "owned-by-primary-instance");
+            var nonOwnerDesktopService = Activator.CreateInstance(
+                desktopType,
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                args: [foreignRecoveryPath],
+                culture: null) ?? throw new InvalidOperationException(
+                "Could not create desktop-icon recovery service.");
+            Require((bool)RequireMethod(desktopType, "Restore")
+                        .Invoke(nonOwnerDesktopService, null)! &&
+                    File.Exists(foreignRecoveryPath),
+                "A non-owner restore removed another instance's desktop-icon recovery journal.");
+            ((IDisposable)nonOwnerDesktopService).Dispose();
+            Require(File.Exists(foreignRecoveryPath),
+                "A non-owner dispose removed another instance's desktop-icon recovery journal.");
+            var nativeType = RequireType("VeliShell.Desktop.Native.NativeMethods");
+            Require(nativeType.GetMethod("FindWindowEx", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                    nativeType.GetMethod("ShowWindow", BindingFlags.Static | BindingFlags.NonPublic) is not null,
+                "Temporary desktop-view control lost its narrow native window primitives.");
+
+            var persist = typeof(VeliShell.Desktop.App).GetMethod(
+                "ShouldPersistDesktopIconHidePreference",
+                BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException(typeof(VeliShell.Desktop.App).FullName,
+                    "ShouldPersistDesktopIconHidePreference");
+            bool Persist(bool requested, bool confirmed, bool stillHidden) =>
+                (bool)persist.Invoke(null, [requested, confirmed, stillHidden])!;
+            Require(Persist(true, true, false) && Persist(true, false, true) &&
+                    !Persist(false, true, false) && Persist(false, false, true),
+                "Desktop-icon preference persistence can forget an unconfirmed hidden view.");
+
+            var preferencesType = RequireType("VeliShell.Desktop.Views.PreferencesWindow");
+            Require(RequireField(preferencesType, "DesktopIconsSwitch") is not null &&
+                    RequireField(preferencesType, "DesktopIconsStatus") is not null &&
+                    preferencesType.GetMethod("RestoreDesktopIcons_Click",
+                        BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+                "Settings no longer exposes desktop-icon opt-in and explicit restore controls.");
+            Require(typeof(VeliShell.Core.Settings).GetProperty("ShowVeliShellDockItem") is not null &&
+                    typeof(VeliShell.Core.Settings).GetProperty("HideDesktopIcons") is not null,
+                "Reversible desktop and fixed dock-item preferences are missing from Settings.");
+        }
+        finally
+        {
+            try { Directory.Delete(temporary, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -1052,6 +1261,55 @@ internal static class Program
             "Mark-all-read did not clear the local unread count.");
         clear.Invoke(current, null);
 
+        var windowsSnapshotType = RequireType("VeliShell.Desktop.Services.WindowsNotificationSnapshot");
+        var windowsSourceType = RequireType("VeliShell.Desktop.Services.VeliShellNotificationSource");
+        var applyWindowsSnapshot = RequireMethod(notificationType, "ApplyWindowsSnapshot");
+        var snapshotListType = typeof(List<>).MakeGenericType(windowsSnapshotType);
+        var windowsSnapshots = (System.Collections.IList)Activator.CreateInstance(snapshotListType)!;
+        var createdAt = new DateTimeOffset(2026, 10, 4, 18, 30, 0, TimeSpan.FromHours(2));
+        var logo = new byte[] { 1, 2, 3, 4 };
+        windowsSnapshots.Add(Activator.CreateInstance(
+            windowsSnapshotType,
+            [42u, "Mail", "Neue Nachricht", "Hallo", createdAt, logo])!);
+        applyWindowsSnapshot.Invoke(current, [windowsSnapshots]);
+        var combined = ((System.Collections.IEnumerable)snapshot.Invoke(current, null)!).Cast<object>().ToList();
+        Require(combined.Count == 1 &&
+                string.Equals(combined[0].GetType().GetProperty("AppDisplayName")!.GetValue(combined[0]) as string,
+                    "Mail", StringComparison.Ordinal) &&
+                Equals(combined[0].GetType().GetProperty("Source")!.GetValue(combined[0]),
+                    Enum.Parse(windowsSourceType, "Windows")) &&
+                Equals(combined[0].GetType().GetProperty("WindowsPlatformId")!.GetValue(combined[0]), 42u) &&
+                ReferenceEquals(combined[0].GetType().GetProperty("AppLogo")!.GetValue(combined[0]), logo),
+            "The combined notification snapshot lost Windows source/app/logo identity.");
+        var emptyWindowsSnapshots = (System.Collections.IList)Activator.CreateInstance(snapshotListType)!;
+        applyWindowsSnapshot.Invoke(current, [emptyWindowsSnapshots]);
+        Require(!((System.Collections.IEnumerable)snapshot.Invoke(current, null)!).Cast<object>().Any(),
+            "A Windows toast removed by the platform remained in the combined snapshot.");
+
+        Require(notificationType.GetProperty("WindowsAccess", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                notificationType.GetEvent("WindowsAccessChanged", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                notificationType.GetMethod("RequestWindowsAccessAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                notificationType.GetMethod("ConfigureWindowsNotificationsAsync", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                notificationType.GetMethod("DisableWindowsNotifications", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The Windows notification consent/status lifecycle is incomplete.");
+        var bridgeType = RequireType("VeliShell.Desktop.Services.WindowsNotificationListenerBridge");
+        Require(bridgeType.GetMethod("Remove", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                bridgeType.GetMethod("ClearNotifications", BindingFlags.Instance | BindingFlags.NonPublic) is null,
+            "Windows notifications must be removed only by explicit displayed IDs, never through a broad hidden clear wrapper.");
+        var hasPackageIdentity = (bool)(bridgeType.GetProperty(
+                "HasPackageIdentity", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+            ?? throw new MissingMemberException(bridgeType.FullName, "HasPackageIdentity"));
+        if (!hasPackageIdentity)
+        {
+            var tryCreateArguments = new object?[] { null, null };
+            var tryCreate = bridgeType.GetMethod("TryCreate", BindingFlags.Static | BindingFlags.NonPublic)
+                            ?? throw new MissingMethodException(bridgeType.FullName, "TryCreate");
+            Require(!(bool)tryCreate.Invoke(null, tryCreateArguments)! &&
+                    tryCreateArguments[0] is null &&
+                    tryCreateArguments[1] is string { Length: > 0 },
+                "The unpackaged MSI/portable build exposed a capability-gated notification listener.");
+        }
+
         var menuType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
         Require(menuType.GetField("_controlCenter", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
                 menuType.GetField("_notificationCenter", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
@@ -1099,6 +1357,277 @@ internal static class Program
         var volume = status.GetType().GetProperty("MasterVolume")!.GetValue(status) as double?;
         Require(volume is null or >= 0 and <= 100,
             "The read-only system-volume probe returned a value outside 0–100 percent.");
+    }
+
+    private static int RenderShellPanels(Application application)
+    {
+        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "shell-panel-renders");
+        Directory.CreateDirectory(outputDirectory);
+
+        try
+        {
+            PopulateSyntheticNotifications();
+            foreach (var dark in new[] { false, true })
+            {
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri(
+                        $"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                var suffix = dark ? "dark" : "light";
+
+                var controlType = RequireType("VeliShell.Desktop.Views.ControlCenterWindow");
+                var control = (Window)(Activator.CreateInstance(controlType, nonPublic: true)
+                              ?? throw new InvalidOperationException("Could not create Control Center."));
+                RequireMethod(controlType, "RefreshStatus").Invoke(control, null);
+                RenderShellPanel(control, Path.Combine(outputDirectory, $"control-center-{suffix}.png"), dark);
+
+                var notificationServiceType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
+                var notificationService = notificationServiceType
+                                              .GetProperty("Current", BindingFlags.Static | BindingFlags.NonPublic)!
+                                              .GetValue(null)
+                                          ?? throw new InvalidOperationException("Notification center singleton is unavailable.");
+                var notificationType = RequireType("VeliShell.Desktop.Views.NotificationCenterWindow");
+                var notification = (Window)(Activator.CreateInstance(
+                    notificationType,
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    binder: null,
+                    args: [notificationService],
+                    culture: null) ?? throw new InvalidOperationException("Could not create Notification Center."));
+                ((TextBlock)RequireField(notificationType, "DateLabel").GetValue(notification)!).Text =
+                    "Sonntag, 4. Oktober";
+                RequireMethod(notificationType, "RefreshItems").Invoke(notification, null);
+                RenderShellPanel(
+                    notification,
+                    Path.Combine(outputDirectory, $"notification-center-{suffix}.png"),
+                    dark);
+
+                var chrome = new Window
+                {
+                    Width = 720,
+                    Height = 320,
+                    Content = CreateShellChromePreview()
+                };
+                RenderShellPanel(
+                    chrome,
+                    Path.Combine(outputDirectory, $"dock-menu-material-{suffix}.png"),
+                    dark);
+            }
+
+            Console.WriteLine($"PASS: Rendered Light/Dark shell centers plus Dock/Menu Bar glass materials to {outputDirectory}");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            var notificationType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
+            var notificationService = notificationType
+                                          .GetProperty("Current", BindingFlags.Static | BindingFlags.NonPublic)!
+                                          .GetValue(null);
+            notificationType.GetMethod("Clear", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.Invoke(notificationService, null);
+            application.Shutdown();
+        }
+    }
+
+    private static void PopulateSyntheticNotifications()
+    {
+        var serviceType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
+        var kindType = RequireType("VeliShell.Desktop.Services.VeliShellNotificationKind");
+        var service = serviceType.GetProperty("Current", BindingFlags.Static | BindingFlags.NonPublic)!
+                          .GetValue(null)
+                      ?? throw new InvalidOperationException("Notification center singleton is unavailable.");
+        RequireMethod(serviceType, "Clear").Invoke(service, null);
+        RequireMethod(serviceType, "Publish").Invoke(service,
+        [
+            "render-update",
+            "VeliShell ist aktuell",
+            "Version 0.6.0 wurde erfolgreich geprüft.",
+            Enum.Parse(kindType, "Success")
+        ]);
+
+        var snapshotType = RequireType("VeliShell.Desktop.Services.WindowsNotificationSnapshot");
+        var snapshotListType = typeof(List<>).MakeGenericType(snapshotType);
+        var snapshots = (System.Collections.IList)Activator.CreateInstance(snapshotListType)!;
+        snapshots.Add(Activator.CreateInstance(snapshotType,
+        [
+            7001u,
+            "Mail",
+            "Neue Nachricht",
+            "Dein Entwurf wurde gespeichert und ist bereit zur weiteren Bearbeitung.",
+            DateTimeOffset.Now.AddMinutes(-4),
+            null
+        ])!);
+        snapshots.Add(Activator.CreateInstance(snapshotType,
+        [
+            7002u,
+            "Kalender",
+            "Design-Abstimmung",
+            "Heute um 18:30 Uhr",
+            DateTimeOffset.Now.AddMinutes(-18),
+            null
+        ])!);
+        RequireMethod(serviceType, "ApplyWindowsSnapshot").Invoke(service, [snapshots]);
+    }
+
+    private static FrameworkElement CreateShellChromePreview()
+    {
+        Brush ResourceBrush(string key) =>
+            Application.Current.TryFindResource(key) as Brush
+            ?? throw new InvalidOperationException($"Missing render brush '{key}'.");
+
+        var root = new Grid { Background = Brushes.Transparent };
+        var menu = new Border
+        {
+            Height = 30,
+            Margin = new Thickness(18, 14, 18, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = ResourceBrush("MenuBarSurface"),
+            BorderBrush = ResourceBrush("GlassPanelStroke"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = new Grid
+            {
+                Margin = new Thickness(12, 0, 12, 0),
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "VeliShell     Datei     Fenster",
+                        FontWeight = FontWeights.SemiBold,
+                        VerticalAlignment = VerticalAlignment.Center
+                    },
+                    new TextBlock
+                    {
+                        Text = "◉   ◌   20:26",
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                }
+            }
+        };
+        root.Children.Add(menu);
+
+        var iconRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        foreach (var color in new[]
+                 {
+                     Color.FromRgb(56, 151, 255), Color.FromRgb(70, 211, 126),
+                     Color.FromRgb(255, 187, 55), Color.FromRgb(177, 104, 255),
+                     Color.FromRgb(236, 92, 116)
+                 })
+        {
+            iconRow.Children.Add(new Border
+            {
+                Width = 48,
+                Height = 48,
+                Margin = new Thickness(7, 0, 7, 0),
+                CornerRadius = new CornerRadius(12),
+                Background = new SolidColorBrush(color),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)),
+                BorderThickness = new Thickness(1)
+            });
+        }
+
+        var dockContent = new Grid();
+        dockContent.Children.Add(new Border
+        {
+            Margin = new Thickness(1),
+            CornerRadius = new CornerRadius(23),
+            Background = ResourceBrush("DockMilkOverlay")
+        });
+        dockContent.Children.Add(iconRow);
+        var dock = new Border
+        {
+            Width = 390,
+            Height = 80,
+            Margin = new Thickness(0, 0, 0, 24),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            CornerRadius = new CornerRadius(24),
+            Background = ResourceBrush("DockSurfaceGradient"),
+            BorderBrush = ResourceBrush("DockStroke"),
+            BorderThickness = new Thickness(1),
+            Child = dockContent,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 30,
+                ShadowDepth = 8,
+                Opacity = 0.32
+            }
+        };
+        root.Children.Add(dock);
+        return root;
+    }
+
+    private static void RenderShellPanel(Window window, string path, bool dark)
+    {
+        const int outerPadding = 30;
+        var panelWidth = (int)Math.Ceiling(window.Width);
+        var panelHeight = (int)Math.Ceiling(window.Height);
+        var content = window.Content as FrameworkElement
+                      ?? throw new InvalidOperationException($"{window.GetType().Name} has no renderable content.");
+        window.Content = null;
+        content.Width = panelWidth;
+        content.Height = panelHeight;
+
+        var wallpaper = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(1, 1)
+        };
+        if (dark)
+        {
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(12, 23, 54), 0));
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(18, 47, 77), 0.48));
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(58, 21, 73), 1));
+        }
+        else
+        {
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(196, 232, 255), 0));
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(226, 224, 255), 0.52));
+            wallpaper.GradientStops.Add(new GradientStop(Color.FromRgb(255, 211, 239), 1));
+        }
+
+        var surface = new Grid
+        {
+            Width = panelWidth + outerPadding * 2,
+            Height = panelHeight + outerPadding * 2,
+            Background = wallpaper
+        };
+        TextElement.SetForeground(surface, (Brush)applicationResource("TextPrimary"));
+        content.HorizontalAlignment = HorizontalAlignment.Center;
+        content.VerticalAlignment = VerticalAlignment.Center;
+        surface.Children.Add(content);
+        surface.Measure(new Size(surface.Width, surface.Height));
+        surface.Arrange(new Rect(0, 0, surface.Width, surface.Height));
+        surface.UpdateLayout();
+        DrainDispatcher();
+
+        var bitmap = new RenderTargetBitmap(
+            (int)surface.Width,
+            (int)surface.Height,
+            96,
+            96,
+            PixelFormats.Pbgra32);
+        bitmap.Render(surface);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var stream = File.Create(path)) encoder.Save(stream);
+
+        surface.Children.Remove(content);
+        window.Close();
+
+        object applicationResource(string key) =>
+            Application.Current.TryFindResource(key)
+            ?? throw new InvalidOperationException($"Missing render resource '{key}'.");
     }
 
     private static void TestMenuBarReservationPolicy()
@@ -1326,6 +1855,59 @@ internal static class Program
             Height = height,
             Background = new SolidColorBrush(Color.FromRgb(18, 19, 24)),
             Children = { dock }
+        };
+        canvas.Measure(new Size(width, height));
+        canvas.Arrange(new Rect(0, 0, width, height));
+        canvas.UpdateLayout();
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(canvas);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(path);
+        encoder.Save(stream);
+    }
+
+    private static void RenderTrashSurfaceContactSheet(string path)
+    {
+        const int width = 220;
+        const int height = 116;
+        const double iconSide = 82;
+        var iconServiceType = RequireType("VeliShell.Desktop.Services.IconService");
+        var surfaceType = RequireType("VeliShell.Desktop.Controls.AppIconSurface");
+        var iconFor = RequireMethod(iconServiceType, "For");
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        foreach (var id in new[] { "trash", "trash-full" })
+        {
+            var source = (ImageSource)iconFor.Invoke(null, [id, "", null])!;
+            var surface = (FrameworkElement)Activator.CreateInstance(
+                surfaceType,
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                args: [source, iconSide, true],
+                culture: null)!;
+            surface.Margin = new Thickness(10, 0, 10, 0);
+            row.Children.Add(surface);
+            var plate = (FrameworkElement)RequireProperty(surfaceType, "PlateElement").GetValue(surface)!;
+            Require(plate.Clip is null,
+                $"The bundled {id} artwork was forced through the rounded app-tile mask.");
+        }
+
+        var canvas = new Grid
+        {
+            Width = width,
+            Height = height,
+            Background = new LinearGradientBrush(
+                Color.FromRgb(55, 57, 66),
+                Color.FromRgb(24, 25, 31),
+                90),
+            Children = { row }
         };
         canvas.Measure(new Size(width, height));
         canvas.Arrange(new Rect(0, 0, width, height));

@@ -45,6 +45,7 @@ public partial class DockWindow : Window
     private string _cachedDragPinId = "";
     private IReadOnlyList<string> _cachedDragPaths = Array.Empty<string>();
     private WindowThumbnailPreview? _windowPreview;
+    private FolderPopoverWindow? _folderPopover;
     private FrameworkElement? _dropPlaceholder;
     private int _dropPlaceholderInsertionIndex = -1;
     private string? _dropPlaceholderKey;
@@ -64,7 +65,8 @@ public partial class DockWindow : Window
         _hideTimer.Tick += (_, _) =>
         {
             _hideTimer.Stop();
-            if (_app.Preferences.AutoHide && !_dragInProgress && !IsMouseOver && _menu?.IsOpen != true) SetHidden(true);
+            if (_app.Preferences.AutoHide && !_dragInProgress && !IsMouseOver &&
+                _menu?.IsOpen != true && _folderPopover?.IsVisible != true) SetHidden(true);
         };
         Closed += (_, _) =>
         {
@@ -75,6 +77,7 @@ public partial class DockWindow : Window
             ClearDropSlot();
             CloseDragGhost();
             CloseWindowPreview();
+            CloseFolderPopover();
             NativeMethods.UnregisterHotKey(_handle, 1);
             NativeMethods.UnregisterHotKey(_handle, 2);
             NativeMethods.UnregisterHotKey(_handle, 3);
@@ -124,6 +127,7 @@ public partial class DockWindow : Window
             {
                 if (_closed) return;
                 if (_app.Preferences.HideTaskbar) _app.Taskbars.Reconcile();
+                if (_app.Preferences.HideDesktopIcons) _app.DesktopIcons.ReconcileHidden();
                 Rebuild();
                 PositionDock();
             }));
@@ -136,7 +140,7 @@ public partial class DockWindow : Window
         Topmost = _app.Preferences.AlwaysOnTop;
         Rebuild();
         SetHidden(false);
-        if (_app.Preferences.AutoHide) _hideTimer.Start();
+        if (_app.Preferences.AutoHide && _folderPopover?.IsVisible != true) _hideTimer.Start();
     }
 
     private async Task RefreshWindows()
@@ -148,8 +152,8 @@ public partial class DockWindow : Window
             var windows = await Task.Run(WindowCatalog.Read);
             if (_closed || _dragInProgress || _dragPayloadCached) return;
             _windows = windows;
-            QueueRunningIconScan();
             if (_app.Preferences.HideTaskbar) _app.Taskbars.Reconcile();
+            if (_app.Preferences.HideDesktopIcons) _app.DesktopIcons.ReconcileHidden();
             Rebuild();
             var fullscreen = WindowCatalog.ForegroundIsFullscreenOnPrimary();
             Visibility = fullscreen ? Visibility.Hidden : Visibility.Visible;
@@ -167,7 +171,7 @@ public partial class DockWindow : Window
         var items = new List<DockItem>();
         foreach (var pin in preferences.Pins)
             items.Add(new DockItem { Key = "pin:" + pin.Id, Name = LocalizationService.Current.DisplayPinName(pin), Target = pin.Target,
-                IconId = pin.Id, Icon = pin.Icon, Attribution = MacOsIconGalleryService.TryGetAttribution(pin.Icon)?.Text,
+                IconId = pin.Id, Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
                 Pin = pin, Windows = _windows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
         if (preferences.ShowRunningApps)
         {
@@ -178,29 +182,30 @@ public partial class DockWindow : Window
             {
                 var first = group.First();
                 var runningId = Settings.RunningDockIconKey(first.Executable, first.ProcessName);
-                var onlineIcon = preferences.GetDockIconOverride(runningId) ??
-                                 _app.GetRunningOnlineIcon(runningId);
+                var onlineIcon = preferences.GetDockIconOverride(runningId);
                 items.Add(new DockItem { Key = runningId,
                     Name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal) ? first.Title : first.ProcessName,
                     Target = first.Executable,
                     Icon = onlineIcon,
-                    Attribution = MacOsIconGalleryService.TryGetAttribution(onlineIcon)?.Text,
+                    Attribution = OnlineIconService.TryGetAttribution(onlineIcon)?.Text,
                     Windows = group.ToList() });
             }
         }
         var monitor = NativeMethods.PrimaryMonitor();
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var capacity = DockMath.VisibleCapacity((monitor.Work.Right - monitor.Work.Left) / dpi, preferences.IconSize);
-        if (items.Count + 2 > capacity)
+        var utilityCount = (preferences.ShowVeliShellDockItem ? 1 : 0) + 1; // settings + Recycle Bin
+        if (items.Count + utilityCount > capacity)
         {
-            var keep = Math.Max(0, capacity - 3);
+            var keep = Math.Max(0, capacity - utilityCount - 1); // reserve one slot for overflow
             var overflow = items.Skip(keep).ToList();
             items = items.Take(keep).ToList();
             items.Add(new DockItem { Key = "overflow", Name = L("Dock.MoreApps"), IconId = "overflow",
                 Icon = preferences.GetDockIconOverride("overflow"), Overflow = overflow });
         }
-        items.Add(new DockItem { Key = "velishell", Name = L("Dock.Settings"), IconId = "velishell",
-            Icon = preferences.GetDockIconOverride("velishell") });
+        if (preferences.ShowVeliShellDockItem)
+            items.Add(new DockItem { Key = "velishell", Name = L("Dock.Settings"), IconId = "velishell",
+                Icon = preferences.GetDockIconOverride("velishell") });
         var recycle = RecycleBinService.Query();
         var recycleName = recycle.Available
             ? recycle.ItemCount == 0 ? L("Dock.RecycleEmpty") : LF("Dock.RecycleCount", recycle.ItemCount)
@@ -270,38 +275,11 @@ public partial class DockWindow : Window
                     name,
                     first.Executable,
                     first.ProcessName,
-                    preferences.GetDockIconOverride(iconKey) ?? _app.GetRunningOnlineIcon(iconKey));
+                    preferences.GetDockIconOverride(iconKey));
             })
             .OrderBy(pin => pin.Name, StringComparer.CurrentCultureIgnoreCase)
             .Take(Settings.MaximumPins)
             .ToList();
-    }
-
-    private void QueueRunningIconScan()
-    {
-        var preferences = _app.Preferences;
-        if (!preferences.ShowRunningApps ||
-            preferences.IconStyle != DockIconStyle.Mac ||
-            preferences.OnlineIconConsentVersion < Settings.CurrentOnlineIconConsentVersion ||
-            preferences.OnlineIcons != OnlineIconMode.AutomaticExactMatches) return;
-
-        var candidates = _windows
-            .Where(window => !preferences.Pins.Any(pin => WindowCatalog.Matches(window, pin)))
-            .GroupBy(window => string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable,
-                StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
-            {
-                var first = group.First();
-                var name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
-                    ? first.Title
-                    : first.ProcessName;
-                return new Pin(
-                    Settings.RunningDockIconKey(first.Executable, first.ProcessName),
-                    name,
-                    first.Executable,
-                    first.ProcessName);
-            });
-        _app.QueueAutomaticRunningIcons(candidates);
     }
 
     private void PositionDock()
@@ -321,6 +299,11 @@ public partial class DockWindow : Window
     {
         if (item.Key == "velishell") { _app.ShowPreferences(); return; }
         if (item.Key == "overflow") { ShowOverflow(item, anchor); return; }
+        if (item.Pin is not null && FolderPopoverWindow.CanOpen(item.Target))
+        {
+            ShowFolderPopover(item.Target, anchor);
+            return;
+        }
         var windows = item.Windows.Where(w => NativeMethods.IsWindow(w.Handle)).ToList();
         if (windows.Count > 0)
         {
@@ -383,11 +366,6 @@ public partial class DockWindow : Window
             {
                 AddMenuItem(menu, L("Dock.MoveLeft"), () => MovePin(pin.Id, -1));
                 AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
-                if (MacOsIconGalleryService.TryGetAttribution(pin.Icon) is { } attribution)
-                    AddMenuItem(menu, attribution.Text, () => LaunchService.Open(
-                        Uri.TryCreate(attribution.SourceUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
-                            ? uri.AbsoluteUri
-                            : "https://macosicons.com/"));
                 AddMenuItem(menu, L("Dock.Remove"), () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
             }
             else if (File.Exists(item.Target))
@@ -404,8 +382,53 @@ public partial class DockWindow : Window
             empty.IsEnabled = recycle.Available && recycle.ItemCount > 0;
             menu.Items.Add(new Separator());
         }
+        else if (item.Key == "velishell")
+        {
+            AddMenuItem(menu, L("Dock.RemoveVeliShell"), () =>
+                _app.UpdatePreferences(settings => settings.ShowVeliShellDockItem = false));
+            menu.Items.Add(new Separator());
+        }
+        if (OnlineIconService.TryGetAttribution(item.Icon) is { } attribution)
+        {
+            AddMenuItem(menu, attribution.Text, () => LaunchService.Open(
+                Uri.TryCreate(attribution.SourceUrl, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps
+                    ? uri.AbsoluteUri
+                    : "https://apps.apple.com/"));
+            menu.Items.Add(new Separator());
+        }
         AddCommonMenu(menu);
         OpenMenu(menu, tile);
+    }
+
+    private void ShowFolderPopover(string path, FrameworkElement anchor)
+    {
+        CloseFolderPopover();
+        try
+        {
+            var popover = new FolderPopoverWindow(path);
+            _folderPopover = popover;
+            popover.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_folderPopover, popover)) _folderPopover = null;
+                if (_app.Preferences.AutoHide && !IsMouseOver) _hideTimer.Start();
+            };
+            _hideTimer.Stop();
+            SetHidden(false);
+            popover.ShowRelativeTo(anchor, this, _app.Preferences.AlwaysOnTop);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            App.Log("Could not open the pinned-folder popover", exception);
+            LaunchService.Open(path);
+        }
+    }
+
+    private void CloseFolderPopover()
+    {
+        var popover = _folderPopover;
+        _folderPopover = null;
+        popover?.Close();
     }
 
     private void ShowWindowPreview(NativeWindow window, FrameworkElement anchor, DockItem item)
@@ -505,7 +528,6 @@ public partial class DockWindow : Window
 
         var pins = boundedPaths.Select(LaunchService.PinFromPath).OfType<Pin>().ToList();
         if (pins.Count == 0) return;
-        var added = new List<Pin>();
         var skippedAtLimit = 0;
         _app.UpdatePreferences(s =>
         {
@@ -519,10 +541,8 @@ public partial class DockWindow : Window
                     continue;
                 }
                 s.Pins.Insert(next++, pin);
-                added.Add(pin);
             }
         });
-        if (added.Count > 0) _ = _app.ApplyAutomaticIconsAsync(added);
         if (skippedAtLimit > 0 || inputTruncated)
             MessageBox.Show(this,
                 LF("Dock.PinLimit", Settings.MaximumPins,

@@ -187,6 +187,24 @@ public sealed class VeliSymbol : Control
             case VeliSymbolKind.ChevronRight:
                 Arc(dc, pen, "M 8.5 4.5 L 16 12 L 8.5 19.5");
                 break;
+            case VeliSymbolKind.ArrowLeft:
+                Arc(dc, pen, "M 10 5 L 3 12 L 10 19");
+                Line(dc, pen, 3.5, 12, 21, 12);
+                break;
+            case VeliSymbolKind.Folder:
+                Arc(dc, pen, "M 2.5 7.5 L 2.5 18.5 C 2.5 20 3.5 21 5 21 L 19 21 C 20.5 21 21.5 20 21.5 18.5 L 21.5 8.5 C 21.5 7 20.5 6 19 6 L 12 6 L 9.5 3.5 L 5 3.5 C 3.5 3.5 2.5 4.5 2.5 6 Z");
+                break;
+            case VeliSymbolKind.Document:
+                Arc(dc, pen, "M 5 2.5 L 14 2.5 L 19 7.5 L 19 21.5 L 5 21.5 Z");
+                Arc(dc, pen, "M 14 2.8 L 14 8 L 18.7 8");
+                Line(dc, pen, 8, 12, 16, 12);
+                Line(dc, pen, 8, 16, 16, 16);
+                break;
+            case VeliSymbolKind.External:
+                RoundedRect(dc, pen, 3, 7, 14, 14, 2.2);
+                Arc(dc, pen, "M 11 4 L 20 4 L 20 13");
+                Line(dc, pen, 19.5, 4.5, 10, 14);
+                break;
         }
     }
 
@@ -223,5 +241,9 @@ public enum VeliSymbolKind
     Search,
     Power,
     Close,
-    ChevronRight
+    ChevronRight,
+    ArrowLeft,
+    Folder,
+    Document,
+    External
 }

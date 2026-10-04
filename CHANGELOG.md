@@ -9,6 +9,40 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 ### Geplant
 
 - Signierte Windows-Pakete, sobald ein dauerhaftes Zumbyte.de-Codesigning-Zertifikat bereitsteht.
+- Eine signierte Paketidentität für den von Windows geschützten Zugriff auf Mitteilungen anderer Apps.
+
+## [0.6.0] - 2026-10-04
+
+### Neu
+
+- Dateien und Ordner erhalten den statischen Explorer-Kontextmenübefehl „Im Dock anheften“. Er startet ausschließlich die normale VeliShell-EXE; in Explorer wird kein Erweiterungscode geladen.
+- Angeheftete Ordner öffnen beim normalen Klick ein Hell-/Dunkel-fähiges Dock-Popover mit begrenzter asynchroner Dateiliste, sicherer Unterordnernavigation, Breadcrumbs, Zurück und „Im Explorer öffnen“.
+- Desktopsymbole lassen sich ausdrücklich und nur vorübergehend für die VeliShell-Laufzeit ausblenden; ein eng gebundenes Wiederherstellungsjournal schützt den vorher sichtbaren Explorer-Zustand bei einem unterbrochenen Lauf.
+- Die Mitteilungszentrale kann VeliShell- und Windows-Mitteilungen in einer gemeinsamen, begrenzten Ansicht zusammenführen, einzelne angezeigte Windows-IDs entfernen und fragt den geschützten Zugriff ausschließlich nach einem ausdrücklichen Klick an.
+
+### Geändert
+
+- Die manuelle Online-Symbolsuche nutzt Apples offizielle iTunes Search API für Mac-Software. Sie benötigt keinen API-Schlüssel, zeigt mehrere Treffer samt Entwickler und direktem App-Store-Link und übernimmt niemals automatisch einen Treffer.
+- Die eigenständig für VeliShell gestalteten neuen Papierkorb-Grafiken werden als freie transparente Objekte ohne App-Superellipse dargestellt; Leer- und Vollzustand behalten exakt dieselbe Dock-Fläche.
+- Dock und Menüleiste verwenden in Hell und Dunkel eine etwas leichtere Glas-Transparenz. Center-Panels behalten ihre bisherige Lesbarkeit.
+- Das feste VeliShell-Einstellungssymbol kann aus dem Dock entfernt und über die App-Einstellungen jederzeit wieder hinzugefügt werden.
+- Bereits lokal gespeicherte macOSicons.com-Dateien bleiben lesbar, aber VeliShell stellt keine neuen Verbindungen zu diesem Anbieter her und verwaltet keinen API-Schlüssel mehr.
+
+### Behoben
+
+- Ein abgewiesener Zweitstart kann den Wiederherstellungsmarker einer laufenden VeliShell-Instanz mit ausgeblendeten Desktopsymbolen nicht mehr löschen.
+- Windows-Mitteilungen werden nach Einzel- oder Gesamtlöschung erst nach einer abschließenden Plattform-Synchronisierung aus der kombinierten Ansicht entfernt.
+
+### Sicherheit
+
+- Das Ordner-Popover zeigt höchstens 120 Einträge und 16 Ebenen, bleibt innerhalb des angehefteten Stammordners und folgt keinen Reparse-/Junction-Zielen.
+- Das Ausblenden der Desktopsymbole verändert keine Registry-, Gruppenrichtlinien- oder persistente Explorer-Einstellung und stellt ausschließlich eine zuvor sichtbare, exakt wiedererkannte Desktopansicht wieder her.
+- App-Store-Suche und Bildabruf sind auf Apples dokumentierte HTTPS-Endpunkte, öffentliche Zieladressen, begrenzte Antwortgrößen und geprüfte PNG-/JPEG-Abmessungen eingeschränkt; der lokale Cache ist in Größe, Anzahl und Alter begrenzt.
+- Der Windows-Mitteilungsadapter gibt in der MSI-/Portable-Ausgabe ohne Paketidentität ausdrücklich „nicht unterstützt“ zurück, statt eine nicht gewährbare Berechtigung vorzutäuschen. Microsoft verlangt dafür eine deklarierte `userNotificationListener`-Capability in einem paketierten Build.
+
+### Bekannte Einschränkungen
+
+- Die aktuelle MSI-/Portable-Ausgabe besitzt noch keine signierte Paketidentität. VeliShell-Mitteilungen funktionieren, das Mitlesen fremder Windows-Mitteilungen bleibt in diesen Paketen jedoch deaktiviert.
 
 ## [0.5.0] - 2026-10-04
 
@@ -106,7 +140,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0
 [0.3.1]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.3.1

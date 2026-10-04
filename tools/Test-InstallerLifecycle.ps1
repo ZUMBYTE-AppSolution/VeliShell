@@ -60,6 +60,10 @@ $legacyPayloadDirectory = Join-Path $installDirectory 'UpdateService'
 $legacyProgramDataDirectory = Join-Path $env:ProgramData 'VeliShell'
 $commonPrograms = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonPrograms)
 $startMenuDirectory = Join-Path $commonPrograms 'VeliShell'
+$shellVerbRegistryKeys = @(
+    'Registry::HKEY_CURRENT_USER\Software\Classes\*\shell\VeliShell.PinToDock',
+    'Registry::HKEY_CURRENT_USER\Software\Classes\Directory\shell\VeliShell.PinToDock'
+)
 $tempDirectory = Join-Path ([IO.Path]::GetTempPath()) ('VeliShell-InstallerLifecycle-' + [Guid]::NewGuid().ToString('N'))
 $officialLegacyMsi = Join-Path $tempDirectory $legacyMsiName
 $legacyChecksums = Join-Path $tempDirectory 'SHA256SUMS.txt'
@@ -397,6 +401,19 @@ function Assert-CurrentPayloadPresent {
     if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) {
         throw "The installed Start menu shortcut is missing: $shortcut"
     }
+    $expectedCommand = '"' + $executable + '" --pin-to-dock "%1"'
+    foreach ($verbPath in $shellVerbRegistryKeys) {
+        if (-not (Test-Path -LiteralPath $verbPath)) {
+            throw "The current-user Explorer pin verb is missing: $verbPath"
+        }
+        $verb = Get-Item -LiteralPath $verbPath
+        $command = Get-Item -LiteralPath (Join-Path $verbPath 'command')
+        if ($verb.GetValue('') -ne 'Im Dock anheften' -or
+            $verb.GetValue('MultiSelectModel') -ne 'Single' -or
+            $command.GetValue('') -ne $expectedCommand) {
+            throw "The current-user Explorer pin verb has unexpected values: $verbPath"
+        }
+    }
 }
 
 function Assert-LegacyArtifactsAbsent {
@@ -416,6 +433,10 @@ function Assert-InstallRemoved {
         "The install directory remains after uninstall: $installDirectory"
     Wait-Condition { -not (Test-Path -LiteralPath $startMenuDirectory) } `
         "The Start menu directory remains after uninstall: $startMenuDirectory"
+    foreach ($verbPath in $shellVerbRegistryKeys) {
+        Wait-Condition { -not (Test-Path -LiteralPath $verbPath) } `
+            "The current-user Explorer pin verb remains after uninstall: $verbPath"
+    }
 }
 
 function Uninstall-ProductIfPresent([string]$ProductCode, [string]$LogName) {
@@ -458,6 +479,11 @@ try {
     foreach ($path in @($installDirectory, $legacyProgramDataDirectory, $startMenuDirectory)) {
         if (Test-Path -LiteralPath $path) {
             throw "The test requires a clean machine, but this path already exists: $path"
+        }
+    }
+    foreach ($verbPath in $shellVerbRegistryKeys) {
+        if (Test-Path -LiteralPath $verbPath) {
+            throw "The test requires a clean user profile, but this Explorer pin verb already exists: $verbPath"
         }
     }
     if ($null -ne (Get-Process -Name 'VeliShell' -ErrorAction SilentlyContinue)) {

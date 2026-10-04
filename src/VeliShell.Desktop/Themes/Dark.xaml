@@ -64,9 +64,9 @@
   <SolidColorBrush x:Key="DockSurface" Color="#E535353D" />
   <SolidColorBrush x:Key="DockStroke" Color="#78A8A8B1" />
   <LinearGradientBrush x:Key="DockSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#ED4A4A54" Offset="0" />
-    <GradientStop Color="#E735353D" Offset="0.48" />
-    <GradientStop Color="#E622232A" Offset="1" />
+    <GradientStop Color="#D74A4A54" Offset="0" />
+    <GradientStop Color="#D035353D" Offset="0.48" />
+    <GradientStop Color="#CD22232A" Offset="1" />
   </LinearGradientBrush>
   <RadialGradientBrush x:Key="DockMilkOverlay" Center="0.42,0.04" GradientOrigin="0.42,-0.2" RadiusX="0.8" RadiusY="0.98">
     <GradientStop Color="#34FFFFFF" Offset="0" />
@@ -79,5 +79,36 @@
   <SolidColorBrush x:Key="DockDropMarker" Color="#FF0A84FF" />
   <SolidColorBrush x:Key="DockIndicator" Color="#ECECF1" />
   <SolidColorBrush x:Key="MenuSurface" Color="#303036" />
+  <LinearGradientBrush x:Key="MenuBarSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#DA3B3B40" Offset="0" />
+    <GradientStop Color="#D233343A" Offset="0.48" />
+    <GradientStop Color="#CE292930" Offset="1" />
+  </LinearGradientBrush>
   <SolidColorBrush x:Key="SwitchOff" Color="#606068" />
+  <!-- Transient shell surfaces use a neutral, luminous material so the
+       contents stay legible while the desktop colour can still influence the
+       panel. The artwork is native VeliShell XAML, not copied platform assets. -->
+  <LinearGradientBrush x:Key="GlassPanelSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#F03B3B40" Offset="0" />
+    <GradientStop Color="#E833343A" Offset="0.48" />
+    <GradientStop Color="#E5292930" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="GlassPanelStroke" Color="#70FFFFFF" />
+  <LinearGradientBrush x:Key="GlassCardSurface" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#42FFFFFF" Offset="0" />
+    <GradientStop Color="#25FFFFFF" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="GlassCardStroke" Color="#3DFFFFFF" />
+  <SolidColorBrush x:Key="GlassControlSurface" Color="#2FFFFFFF" />
+  <SolidColorBrush x:Key="GlassControlHover" Color="#48FFFFFF" />
+  <LinearGradientBrush x:Key="GlassActiveSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#FF0B84FF" Offset="0" />
+    <GradientStop Color="#FF6967E9" Offset="0.62" />
+    <GradientStop Color="#FFA14CE0" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="GlassHighlight" Color="#6AFFFFFF" />
+  <SolidColorBrush x:Key="GlassSeparator" Color="#32FFFFFF" />
+  <SolidColorBrush x:Key="GlassIconSurface" Color="#EAF7F8FC" />
+  <SolidColorBrush x:Key="GlassIconForeground" Color="#FF202127" />
+  <Color x:Key="GlassShadowColor">#E0000000</Color>
 </ResourceDictionary>

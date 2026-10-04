@@ -5,14 +5,16 @@ using System.Windows.Media;
 namespace VeliShell.Desktop.Controls;
 
 /// <summary>
-/// Keeps the actual artwork centered, exactly sized, and continuously rounded.
-/// Source alpha bounds normalize transparent safe zones; VeliShell deliberately
-/// draws no generated color, gradient, tile, or backdrop behind the icon.
+/// Keeps app artwork centered, exactly sized, and continuously rounded. Source
+/// alpha bounds normalize transparent safe zones; VeliShell deliberately draws
+/// no generated color, gradient, tile, or backdrop behind the icon. Explicit
+/// freeform utility art (currently the Recycle Bin) preserves its source canvas.
 /// </summary>
 internal sealed class AppIconSurface : Grid
 {
     private readonly Canvas _plate;
     private AppIconAppearance _appearance;
+    private bool _freeform;
 
     internal Image IconImage { get; }
     internal FrameworkElement PlateElement => _plate;
@@ -21,7 +23,11 @@ internal sealed class AppIconSurface : Grid
     // more accurate name. These are source crop bounds, not output plate bounds.
     internal Rect NormalizedPlateBounds => NormalizedArtworkBounds;
 
-    internal AppIconSurface(ImageSource? source, double side)
+    internal AppIconSurface(ImageSource? source, double side) : this(source, side, freeform: false)
+    {
+    }
+
+    internal AppIconSurface(ImageSource? source, double side, bool freeform)
     {
         side = Math.Clamp(side, 1, 512);
         Width = side;
@@ -33,6 +39,7 @@ internal sealed class AppIconSurface : Grid
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
 
+        _freeform = freeform;
         _appearance = source is null ? AppIconAppearance.Empty() : AppIconAppearance.For(source);
         _plate = new Canvas
         {
@@ -62,14 +69,15 @@ internal sealed class AppIconSurface : Grid
         {
             var actualPlateSide = Math.Min(args.NewSize.Width, args.NewSize.Height);
             if (double.IsFinite(actualPlateSide) && actualPlateSide > 0)
-                _plate.Clip = AppIconMask.Create(actualPlateSide);
+                _plate.Clip = _freeform ? null : AppIconMask.Create(actualPlateSide);
         };
         Children.Add(_plate);
         ApplyLayout(side);
     }
 
-    internal void UpdateSource(ImageSource source)
+    internal void UpdateSource(ImageSource source, bool freeform = false)
     {
+        _freeform = freeform;
         _appearance = AppIconAppearance.For(source);
         IconImage.Source = source;
         IconImage.Visibility = Visibility.Visible;
@@ -91,7 +99,20 @@ internal sealed class AppIconSurface : Grid
         _plate.Width = side;
         _plate.Height = side;
         _plate.Margin = new Thickness(0);
-        _plate.Clip = AppIconMask.Create(side);
+        _plate.Clip = _freeform ? null : AppIconMask.Create(side);
+
+        // macOS-style utility artwork such as the Recycle Bin is intentionally
+        // a transparent freeform object rather than a rounded-square app tile.
+        // Preserve the shared square source canvas so empty/full states keep
+        // exactly the same can size and only the contents change.
+        if (_freeform)
+        {
+            IconImage.Width = side;
+            IconImage.Height = side;
+            Canvas.SetLeft(IconImage, 0);
+            Canvas.SetTop(IconImage, 0);
+            return;
+        }
 
         var normalized = _appearance.NormalizedArtworkBounds;
         var normalizedSide = Math.Clamp(Math.Max(normalized.Width, normalized.Height), 1d / 256, 1);

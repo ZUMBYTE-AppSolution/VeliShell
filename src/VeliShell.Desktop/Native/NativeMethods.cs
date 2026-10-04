@@ -18,6 +18,8 @@ internal static class NativeMethods
     internal const uint AbeTop = 1;
     internal const int AbnPosChanged = 1;
     internal const uint SmtoBlock = 0x0001, SmtoAbortIfHung = 0x0002;
+    internal const int ShcneAssocChanged = 0x08000000;
+    internal const uint ShcnfIdList = 0x0000, ShcnfFlushNoWait = 0x2000;
     internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModNoRepeat = 0x4000;
     internal delegate bool EnumWindowsCallback(nint hwnd, nint parameter);
     internal delegate bool MonitorEnumCallback(nint monitor, nint deviceContext, ref Rect bounds, nint parameter);
@@ -120,11 +122,14 @@ internal static class NativeMethods
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsZoomed(nint hwnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd, StringBuilder text, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetClassName(nint hwnd, StringBuilder text, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "FindWindowExW")]
+    internal static extern nint FindWindowEx(nint parent, nint childAfter, string? className, string? windowName);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd, out uint processId);
     [DllImport("user32.dll")] internal static extern nint GetWindow(nint hwnd, uint command);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] internal static extern nint GetWindowLongPtr(nint hwnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] internal static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ShowWindowAsync(nint hwnd, int command);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern nint GetShellWindow();
@@ -143,6 +148,8 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint virtualKey);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool UnregisterHotKey(nint hwnd, int id);
+    [DllImport("shell32.dll")]
+    internal static extern void SHChangeNotify(int eventId, uint flags, nint item1, nint item2);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW", SetLastError = true)]
     internal static extern nint SendMessageTimeout(
         nint hwnd,
