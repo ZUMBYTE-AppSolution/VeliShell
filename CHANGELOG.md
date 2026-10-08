@@ -6,19 +6,28 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-09
+
 ### Neu
 
+- Ein geführter erster Start führt in fünf Schritten durch sämtliche Einstellungsbereiche. Er gilt erst nach „Fertigstellen“ als abgeschlossen; freiwillige Windows-Eingriffe bleiben zunächst deaktiviert.
+- Eine Sofortsuche findet Dock-Pins und Startmenü-Programme während der Eingabe. Webtreffer öffnen erst nach Auswahl den Browser. Win + Leertaste wird versucht; Strg + Alt + Leertaste sowie Menü und Einstellungen dienen als Alternativen.
+- Ein optionales Windows-Start-Symbol öffnet das reguläre Startmenü links vor den App-Pins, mit eigener Trennlinie und individuell wählbarem Icon.
+- App-Symbole im Dock hüpfen beim Start kurz und respektieren die Einstellung „Bewegung reduzieren“.
 - Ein eigener reproduzierbarer MSIX-Build bereitet VeliShell für den Microsoft Store vor. Nach erfolgreicher Store-Zertifizierung signiert Microsoft das ausgelieferte Paket.
 - Das Store-Paket deklariert die geschützte Windows-Berechtigung für die Mitteilungszentrale und eine optionale, vom Benutzer kontrollierte Autostart-Aufgabe.
 - Die GitHub-Automatisierung baut und prüft das MSIX vor jeder Einreichung und kann spätere Versionen über die Microsoft Store Developer CLI übermitteln.
 
 ### Geändert
 
+- Das Dock hat einen kleineren Eckradius und eine zurückhaltendere Glasfläche; Dock und Menüleiste sind in Hell und Dunkel etwas durchscheinender.
 - In der Store-Version übernimmt Microsoft Store die Aktualisierung; die separate GitHub-Aktualisierung wird dort nicht parallel ausgeführt. MSI und Portable behalten die bisherige wählbare Aktualisierungssuche.
 - Die klassische Explorer-Registry-Verknüpfung „Im Dock anheften“ wird nur in MSI/Portable registriert. Für MSIX wäre dafür eine eigene paketierte Explorer-COM-Erweiterung erforderlich.
 
 ### Bekannte Einschränkungen
 
+- Die Suche verwendet derzeit Dock-Pins und Startmenü-Verknüpfungen; eine vollständige Windows-Dateiindizierung oder Live-Webtreffer sind noch nicht enthalten. Win + Leertaste kann durch Windows bereits belegt sein.
+- Die Glasoptik ist eine transparente, themenabhängige WPF-Darstellung und garantiert keinen echten Hintergrund-Weichzeichner oder pixelgenaue Übereinstimmung mit macOS.
 - Die erste Store-Einreichung muss im Partner Center angelegt werden. Automatische Paketaktualisierungen sind erst für eine bereits veröffentlichte und aktive Store-App verfügbar.
 
 ## [0.6.0] - 2026-10-04
@@ -150,7 +159,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.4.0

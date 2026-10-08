@@ -1,0 +1,47 @@
+<controls:VeliShellWindow x:Class="VeliShell.Desktop.Views.SearchWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
+ xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ Title="{services:Loc Search.Title}" Width="650" Height="520" MinWidth="520" MinHeight="360"
+ WindowStartupLocation="Manual" ShowInTaskbar="False" Topmost="True"
+ KeyDown="Window_KeyDown">
+ <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="14"
+         BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
+  <Grid ClipToBounds="True">
+   <Grid.RowDefinitions>
+    <RowDefinition Height="50" />
+    <RowDefinition Height="Auto" />
+    <RowDefinition Height="*" />
+    <RowDefinition Height="Auto" />
+   </Grid.RowDefinitions>
+   <Ellipse Grid.RowSpan="4" Width="420" Height="420" HorizontalAlignment="Right"
+            VerticalAlignment="Top" Margin="0,-280,-215,0"
+            Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.1" IsHitTestVisible="False">
+    <Ellipse.Effect><BlurEffect Radius="38" /></Ellipse.Effect>
+   </Ellipse>
+   <controls:TrafficLights HorizontalAlignment="Left" VerticalAlignment="Center" Margin="13,0,0,0" />
+   <TextBlock Grid.Row="0" Text="{services:Loc Search.Title}" FontSize="14" FontWeight="SemiBold"
+              HorizontalAlignment="Center" VerticalAlignment="Center" />
+   <Border Grid.Row="1" Margin="24,12,24,15" Padding="14,8" CornerRadius="13"
+           Background="{DynamicResource ControlSurfaceGradient}" BorderBrush="{DynamicResource CardStroke}"
+           BorderThickness="1">
+    <DockPanel>
+     <controls:VeliSymbol Symbol="Search" Width="21" Height="21" Foreground="{DynamicResource TextSecondary}"
+                          VerticalAlignment="Center" Margin="0,0,10,0" DockPanel.Dock="Left" />
+     <TextBox x:Name="QueryBox" FontSize="20" BorderThickness="0" Background="Transparent"
+              VerticalContentAlignment="Center" TextChanged="QueryBox_TextChanged"
+              PreviewKeyDown="QueryBox_PreviewKeyDown" AutomationProperties.Name="{services:Loc Search.Query}" />
+    </DockPanel>
+   </Border>
+   <ScrollViewer Grid.Row="2" Margin="24,0,24,0" VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Disabled">
+    <StackPanel x:Name="ResultsPanel" />
+   </ScrollViewer>
+   <Border Grid.Row="3" BorderBrush="{DynamicResource CardStroke}" BorderThickness="0,1,0,0"
+           Padding="24,13">
+    <TextBlock x:Name="Footer" Style="{StaticResource SecondaryText}" />
+   </Border>
+  </Grid>
+ </Border>
+</controls:VeliShellWindow>

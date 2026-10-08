@@ -64,13 +64,13 @@
   <SolidColorBrush x:Key="DockSurface" Color="#ECF4F6FA" />
   <SolidColorBrush x:Key="DockStroke" Color="#D8FFFFFF" />
   <LinearGradientBrush x:Key="DockSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#E0FFFFFF" Offset="0" />
-    <GradientStop Color="#D7F5F6FA" Offset="0.46" />
-    <GradientStop Color="#D0DEE3EB" Offset="1" />
+    <GradientStop Color="#CDFFFFFF" Offset="0" />
+    <GradientStop Color="#C3F5F6FA" Offset="0.46" />
+    <GradientStop Color="#B9DEE3EB" Offset="1" />
   </LinearGradientBrush>
   <RadialGradientBrush x:Key="DockMilkOverlay" Center="0.42,0.05" GradientOrigin="0.42,-0.18" RadiusX="0.78" RadiusY="0.95">
-    <GradientStop Color="#5CFFFFFF" Offset="0" />
-    <GradientStop Color="#22FFFFFF" Offset="0.58" />
+    <GradientStop Color="#42FFFFFF" Offset="0" />
+    <GradientStop Color="#14FFFFFF" Offset="0.58" />
     <GradientStop Color="#0AE8EDF4" Offset="1" />
   </RadialGradientBrush>
   <SolidColorBrush x:Key="DockInnerStroke" Color="#8AFFFFFF" />
@@ -80,9 +80,9 @@
   <SolidColorBrush x:Key="DockIndicator" Color="#4B4B50" />
   <SolidColorBrush x:Key="MenuSurface" Color="#F9F9FB" />
   <LinearGradientBrush x:Key="MenuBarSurface" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#DEFFFFFF" Offset="0" />
-    <GradientStop Color="#D7EFF2F8" Offset="0.5" />
-    <GradientStop Color="#D1E3E7F0" Offset="1" />
+    <GradientStop Color="#CFFFFFFF" Offset="0" />
+    <GradientStop Color="#C5EFF2F8" Offset="0.5" />
+    <GradientStop Color="#BCE3E7F0" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="SwitchOff" Color="#CBCBD0" />
   <!-- Transient shell surfaces use a neutral, luminous material so the

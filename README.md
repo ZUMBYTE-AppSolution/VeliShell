@@ -35,6 +35,9 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Direkt aus dem Explorer anheften:** Dateien und Ordner erhalten den statischen Kontextmenü-Befehl **„Im Dock anheften“**. Unter Windows 11 kann er im klassischen Bereich **„Weitere Optionen anzeigen“** stehen; VeliShell lädt dafür keinen Erweiterungscode in den Explorer.
 - **Ordner direkt im Dock durchsuchen:** Ein normaler Klick auf einen Ordner-Pin öffnet ein themefähiges Popover mit Zurück-Navigation, Breadcrumbs und „Im Explorer öffnen“. Die asynchrone Ansicht bleibt bewusst begrenzt und folgt keinen Junctions oder symbolischen Ordnerlinks aus dem angehefteten Stamm heraus.
 - **Fenster auf einen Blick:** Laufende Apps erhalten einen einzelnen Punkt. Bei mehreren Fenstern zeigt das Kontextmenü seitlich eine Live-Miniatur des gerade berührten Eintrags.
+- **Suche ohne Umweg:** VeliShell findet angeheftete Apps und Programme aus dem Windows-Startmenü schon beim Tippen. Eine Websuche öffnet den Browser erst, wenn du den entsprechenden Treffer anklickst.
+- **Optionales Start-Symbol:** Links vor den Apps kann ein Windows-Start-Symbol mit eigener Trennlinie stehen. Es öffnet das normale Windows-Startmenü und lässt sich jederzeit wieder entfernen.
+- **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
 - **Papierkorb im Dock:** Leer- und Vollzustand haben eigene Symbole; der Papierkorb lässt sich direkt über das Dock leeren.
 - **Milchiger Hintergrund:** Helles und dunkles Design, eine bewusst leichtere Glas-Transparenz für Dock und Menüleiste sowie eine zurückhaltende Vergrößerung beim Darüberfahren.
@@ -46,14 +49,17 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Die Mitteilungszentrale sammelt VeliShell-Hinweise und besitzt einen ausdrücklich freizugebenden Adapter für aktuelle Windows-Mitteilungen. Dieser Windows-Zugriff verlangt eine signierte Paketidentität; in der derzeitigen MSI-/Portable-Ausgabe bleibt er deshalb sicher deaktiviert. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
 - **Scharfe Vektorsymbole:** Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen VeliShell-Symbolsatz auf gemeinsamem 24-Punkt-Raster. Er skaliert verlustfrei, übernimmt automatisch das aktive Theme und bündelt keine Apple-SF-Symbol-Dateien.
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
+- **Geführter erster Start:** Fünf erklärende Schritte führen durch Design, Dock, Symbole, Windows-Optionen und Updates. Freiwillige Systemeingriffe bleiben zunächst aus; erst „Fertigstellen“ schließt die Ersteinrichtung ab.
 
 ## 🚀 Installation
 
 1. Den [aktuellen VeliShell-Installer](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest/download/VeliShell-Setup-win-x64.msi) herunterladen.
 2. Die MSI-Datei öffnen, die Windows-Administratorabfrage bestätigen und den gebrandeten VeliShell-Dialogen folgen.
-3. VeliShell über das Startmenü starten und das Dock nach Wunsch einrichten.
+3. VeliShell über das Startmenü starten und die fünf Schritte der Ersteinrichtung durchgehen. Alle Optionen bleiben danach in den Einstellungen erreichbar.
 
 Für einen Test ohne Installation gibt es zusätzlich eine [portable ZIP-Datei](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest/download/VeliShell-Portable-win-x64.zip). Sie muss vollständig entpackt werden; die EXE allein reicht nicht aus.
+
+Die erste Microsoft-Store-Ausgabe wird als MSIX im Partner Center eingereicht. Das MSIX auf der GitHub-Release-Seite ist nur für diese Einreichung bestimmt und nicht für eine direkte Installation signiert. Erst nach erfolgreicher Zertifizierung stellt Microsoft die signierte Store-Version bereit; der MSI-Installer und die portable ZIP bleiben unabhängig davon auf GitHub verfügbar.
 
 > [!IMPORTANT]
 > Die ersten Releases können noch ohne kostenpflichtiges Herausgeberzertifikat erstellt sein. Windows SmartScreen kann deshalb warnen. Die Release-Seite enthält SHA-256-Prüfsummen und eine von GitHub erzeugte Build-Herkunftsbestätigung. Sicherheitsfunktionen von Windows müssen dafür nicht abgeschaltet werden.
@@ -63,6 +69,8 @@ Für einen Test ohne Installation gibt es zusätzlich eine [portable ZIP-Datei](
 | Aktion | Bedienung |
 |---|---|
 | Einstellungen öffnen | VeliShell-Icon im Dock oder `Strg` + `Alt` + `V` |
+| Programme suchen | `Win` + `Leertaste`, sofern Windows das Kürzel freigibt; sonst `Strg` + `Alt` + `Leertaste` oder das Dock-/Menüleisten-Menü |
+| Windows-Startmenü öffnen | Optionales Start-Symbol links im Dock; aktivierbar unter **Einstellungen → Apps & Symbole** |
 | App anheften | Datei, Ordner oder Verknüpfung auf das Dock ziehen |
 | Aus dem Explorer anheften | Rechtsklick auf Datei oder Ordner → **Im Dock anheften**; unter Windows 11 gegebenenfalls zuerst **Weitere Optionen anzeigen** |
 | Angehefteten Ordner öffnen | Ordner-Symbol anklicken; Unterordner im Popover öffnen oder zum Explorer wechseln |
@@ -140,7 +148,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.6.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.7.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

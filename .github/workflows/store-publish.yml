@@ -46,6 +46,7 @@ jobs:
       STORE_IDENTITY_NAME: ${{ vars.MICROSOFT_STORE_PACKAGE_IDENTITY_NAME }}
       STORE_PUBLISHER: ${{ vars.MICROSOFT_STORE_PUBLISHER }}
       STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME }}
+      STORE_FIRST_PUBLICATION_DONE: ${{ vars.MICROSOFT_STORE_FIRST_PUBLICATION_DONE }}
 
     steps:
       - name: Check out tagged source
@@ -71,6 +72,9 @@ jobs:
             throw "Only stable SemVer tags can be submitted, got '$env:RELEASE_TAG'."
           }
           $version = $Matches.version
+          if ($env:STORE_FIRST_PUBLICATION_DONE -ne 'true') {
+            throw 'The first Store publication must be completed in Partner Center before CLI updates are enabled.'
+          }
           [xml]$props = Get-Content -LiteralPath Directory.Build.props -Raw
           if ([string]$props.Project.PropertyGroup.Version -ne $version) {
             throw "Tag $env:RELEASE_TAG does not match Directory.Build.props."
@@ -106,7 +110,7 @@ jobs:
         run: |
           $publisherDisplayName = $env:STORE_PUBLISHER_DISPLAY_NAME
           if ([string]::IsNullOrWhiteSpace($publisherDisplayName)) {
-            $publisherDisplayName = 'Zumbyte AppSolution'
+            $publisherDisplayName = 'Zumbyte - AppSolution'
           }
           ./tools/Build-StoreMsix.ps1 `
             -Version '${{ steps.package.outputs.version }}' `

@@ -13,13 +13,13 @@
    <Grid.RenderTransform><TranslateTransform x:Name="Slide" /></Grid.RenderTransform>
    <Border x:Name="DockPlate" VerticalAlignment="Bottom" Height="80" Margin="0,0,0,4"
    Background="{DynamicResource DockSurfaceGradient}" BorderBrush="{DynamicResource DockStroke}"
-    BorderThickness="1" CornerRadius="23">
-    <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.32" /></Border.Effect>
+    BorderThickness="1" CornerRadius="11">
+    <Border.Effect><DropShadowEffect BlurRadius="19" ShadowDepth="4" Opacity="0.22" /></Border.Effect>
     <Grid ClipToBounds="True">
      <Border Margin="1" Background="{DynamicResource DockMilkOverlay}"
-      CornerRadius="21.5" IsHitTestVisible="False" />
+      CornerRadius="9.5" IsHitTestVisible="False" />
      <Border Margin="1" BorderBrush="{DynamicResource DockInnerStroke}" BorderThickness="1"
-      CornerRadius="21.5" IsHitTestVisible="False" />
+      CornerRadius="9.5" IsHitTestVisible="False" />
      <Border Height="1" Margin="25,1,25,0" VerticalAlignment="Top"
       Background="{DynamicResource DockHighlight}" CornerRadius="0.5" IsHitTestVisible="False" />
     </Grid>

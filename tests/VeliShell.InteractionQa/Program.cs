@@ -608,7 +608,10 @@ internal static class Program
             Require(surfaceType.IsInstanceOfType(tileSurface),
                 $"Dock tile at {size} DIP does not use the shared AppIconSurface.");
             Invoke(tileType, tile, "SetScale", 1.42d, false);
-            Require(tileSurface.RenderTransform is ScaleTransform scale
+            Require(tileSurface.RenderTransform is TransformGroup transformGroup
+                    && transformGroup.Children.Count == 2
+                    && transformGroup.Children[0] is ScaleTransform scale
+                    && transformGroup.Children[1] is TranslateTransform
                     && Math.Abs(scale.ScaleX - 1.42) < 0.001
                     && Math.Abs(scale.ScaleY - 1.42) < 0.001,
                 $"Dock tile at {size} DIP did not scale the common app-icon surface as one unit.");
@@ -703,19 +706,20 @@ internal static class Program
         Directory.CreateDirectory(temporaryDirectory);
         var path = Path.Combine(temporaryDirectory, "Über & Leerzeichen.txt");
         File.WriteAllText(path, "qa");
+        var pipeName = "Zumbyte.VeliShell.PinToDock.Qa." + Guid.NewGuid().ToString("N");
         var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var bridgeType = RequireType("VeliShell.Desktop.Services.SingleInstancePinBridge");
         var bridge = (IDisposable)(Activator.CreateInstance(
             bridgeType,
             BindingFlags.Instance | BindingFlags.NonPublic,
             binder: null,
-            args: [new Func<string, bool>(value => { received.TrySetResult(value); return true; })],
+            args: [new Func<string, bool>(value => { received.TrySetResult(value); return true; }), pipeName],
             culture: null) ?? throw new InvalidOperationException("The pin bridge could not be created."));
         try
         {
             RequireMethod(bridgeType, "Start").Invoke(bridge, null);
             var forward = (Task<bool>)RequireMethod(bridgeType, "ForwardAsync")
-                .Invoke(null, [path, TimeSpan.FromSeconds(5)])!;
+                .Invoke(null, [path, TimeSpan.FromSeconds(5), pipeName])!;
             Require(forward.GetAwaiter().GetResult(), "The running-instance bridge rejected a valid path.");
             Require(string.Equals(received.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult(),
                     Path.GetFullPath(path), StringComparison.Ordinal),
@@ -1540,8 +1544,15 @@ internal static class Program
         dockContent.Children.Add(new Border
         {
             Margin = new Thickness(1),
-            CornerRadius = new CornerRadius(23),
+            CornerRadius = new CornerRadius(9.5),
             Background = ResourceBrush("DockMilkOverlay")
+        });
+        dockContent.Children.Add(new Border
+        {
+            Margin = new Thickness(1),
+            CornerRadius = new CornerRadius(9.5),
+            BorderBrush = ResourceBrush("DockInnerStroke"),
+            BorderThickness = new Thickness(1)
         });
         dockContent.Children.Add(iconRow);
         var dock = new Border
@@ -1551,16 +1562,16 @@ internal static class Program
             Margin = new Thickness(0, 0, 0, 24),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
-            CornerRadius = new CornerRadius(24),
+            CornerRadius = new CornerRadius(11),
             Background = ResourceBrush("DockSurfaceGradient"),
             BorderBrush = ResourceBrush("DockStroke"),
             BorderThickness = new Thickness(1),
             Child = dockContent,
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
-                BlurRadius = 30,
-                ShadowDepth = 8,
-                Opacity = 0.32
+                BlurRadius = 19,
+                ShadowDepth = 4,
+                Opacity = 0.22
             }
         };
         root.Children.Add(dock);

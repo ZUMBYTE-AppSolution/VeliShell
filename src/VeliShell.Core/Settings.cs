@@ -52,6 +52,7 @@ public sealed class Settings
     public bool HideTaskbar { get; set; }
     public bool HideDesktopIcons { get; set; }
     public bool ShowVeliShellDockItem { get; set; } = true;
+    public bool ShowWindowsStartDockItem { get; set; }
     public bool WindowsNotificationsEnabled { get; set; }
     public DockIconStyle IconStyle { get; set; } = DockIconStyle.Mac;
     public bool MenuBarEnabled { get; set; }
@@ -149,7 +150,7 @@ public sealed class Settings
     private static string? NormalizeDockIconKey(string? key)
     {
         key = key?.Trim().ToLowerInvariant();
-        if (key is "velishell" or "overflow" or "trash-empty" or "trash-full") return key;
+        if (key is "start" or "velishell" or "overflow" or "trash-empty" or "trash-full") return key;
         if (key is not { Length: 72 } || !key.StartsWith("running-", StringComparison.Ordinal)) return null;
         return key[8..].All(Uri.IsHexDigit) ? key : null;
     }

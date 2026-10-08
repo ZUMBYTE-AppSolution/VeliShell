@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [string]$PortableDirectory,
-    [string]$InstallerPath
+    [string]$InstallerPath,
+    [string]$StoreMsixPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +32,7 @@ if (-not $PortableDirectory) { $PortableDirectory = Join-Path $out 'portable' }
 if (-not $InstallerPath) { $InstallerPath = Join-Path $out "installer\VeliShell-$Version-win-x64.msi" }
 $PortableDirectory = [IO.Path]::GetFullPath($PortableDirectory)
 $InstallerPath = [IO.Path]::GetFullPath($InstallerPath)
+if ($StoreMsixPath) { $StoreMsixPath = [IO.Path]::GetFullPath($StoreMsixPath) }
 if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
     throw "Release version must be stable SemVer, got '$Version'."
 }
@@ -41,6 +43,9 @@ if (Test-Path -LiteralPath (Join-Path $PortableDirectory 'UpdateService')) {
     throw 'The portable payload still contains the removed Windows service. Run tools\Build.ps1 -Portable before creating release artifacts.'
 }
 if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) { throw "Installer not found: $InstallerPath" }
+if ($StoreMsixPath -and -not (Test-Path -LiteralPath $StoreMsixPath -PathType Leaf)) {
+    throw "Store MSIX not found: $StoreMsixPath"
+}
 $requiredLegalFiles = @(
     'LICENSE',
     'THIRD-PARTY-NOTICES.md',
@@ -132,6 +137,12 @@ try {
     Copy-Item -LiteralPath $zipPath -Destination $stableZip -Force
     Copy-Item -LiteralPath $releaseInstaller -Destination $stableInstaller -Force
     $artifacts = @($zipPath, $releaseInstaller, $stableZip, $stableInstaller)
+    if ($StoreMsixPath) {
+        $storeMsixName = "VeliShell-$Version-win-x64-Store.msix"
+        $releaseStoreMsix = Join-Path $releaseDirectory $storeMsixName
+        Copy-Item -LiteralPath $StoreMsixPath -Destination $releaseStoreMsix -Force
+        $artifacts += $releaseStoreMsix
+    }
     $checksumLines = foreach ($artifact in $artifacts) {
         $hash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $([IO.Path]::GetFileName($artifact))"
@@ -150,6 +161,9 @@ try {
         $signatureDescription,
         'Verify package hashes with SHA256SUMS.txt before manual installation.'
     )
+    if ($StoreMsixPath) {
+        $releaseInfo += 'Store MSIX: unsigned submission package for Partner Center only; Microsoft signs it after certification.'
+    }
     [IO.File]::WriteAllLines((Join-Path $releaseDirectory 'RELEASE-INFO.txt'), $releaseInfo, [Text.UTF8Encoding]::new($false))
 }
 finally {

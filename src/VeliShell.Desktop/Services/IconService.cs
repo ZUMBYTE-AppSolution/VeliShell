@@ -26,7 +26,7 @@ internal static class IconService
         {
             if (OnlineIconService.TryLoad(icon) is { } online) return online;
             if (id == "velishell") return VeliShellAsset();
-            if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow")
+            if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow" or "start")
                 return id switch
                 {
                     "trash" => BundledAsset("trash", "/VeliShell;component/Assets/SystemIcons/RecycleBinEmpty.png"),
@@ -38,7 +38,7 @@ internal static class IconService
         {
             return VeliShellAsset();
         }
-        else if (id == "overflow")
+        else if (id is "overflow" or "start")
         {
             return BuiltIn(id);
         }
@@ -271,6 +271,7 @@ internal static class IconService
                 "velishell" => ("#85C9FF", "#356BF1"),
                 "trash" or "trash-full" => ("#F6F8FA", "#D2D9E2"),
                 "overflow" => ("#EBECF0", "#ADB5C2"),
+                "start" => ("#68C8FF", "#1870DF"),
                 _ => ("#9A9CFC", "#6655D8")
             };
             var gradient = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(palette.Item1), (Color)ColorConverter.ConvertFromString(palette.Item2), 90);
@@ -339,6 +340,10 @@ internal static class IconService
                     break;
                 case "overflow":
                     for (var x=20; x<=44; x+=12) d.DrawEllipse(Brush("#3D4959"),null,new Point(x,32),3,3);
+                    break;
+                case "start":
+                    d.DrawGeometry(Brush("#F8FDFF"), null,
+                        Geometry.Parse("M 15,18 L 30,16 L 30,30 L 15,30 Z M 34,15 L 49,13 L 49,30 L 34,30 Z M 15,34 L 30,34 L 30,48 L 15,46 Z M 34,34 L 49,34 L 49,51 L 34,49 Z"));
                     break;
                 default:
                     d.DrawRoundedRectangle(null, Pen("#FFFFFF", 2.5), new Rect(15,17,34,30), 4,4);

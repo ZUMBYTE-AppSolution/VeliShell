@@ -35,6 +35,10 @@
     <Button Grid.Column="2" Style="{StaticResource MenuBarButton}" Click="WindowsMenu_Click"
             Content="{services:Loc MenuBar.Windows}" AutomationProperties.Name="{services:Loc MenuBar.Windows}" />
     <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+     <Button Style="{StaticResource MenuBarButton}" Click="Search_Click"
+             ToolTip="{services:Loc Search.Open}" AutomationProperties.Name="{services:Loc Search.Open}">
+      <controls:VeliSymbol Symbol="Search" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
+     </Button>
      <Button x:Name="NetworkButton" Style="{StaticResource MenuBarButton}" Click="Network_Click"
              ToolTip="{services:Loc MenuBar.Network}" AutomationProperties.Name="{services:Loc MenuBar.Network}">
       <controls:VeliSymbol Symbol="Network" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />

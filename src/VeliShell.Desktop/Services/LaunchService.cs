@@ -7,12 +7,13 @@ namespace VeliShell.Desktop.Services;
 
 internal static class LaunchService
 {
-    internal static void Open(string target)
+    internal static bool Open(string target)
     {
         try
         {
             // ShellExecute is intentional. No command line, shell script or elevation is injected.
             Process.Start(new ProcessStartInfo(Environment.ExpandEnvironmentVariables(target)) { UseShellExecute = true });
+            return true;
         }
         catch (Exception ex)
         {
@@ -20,6 +21,7 @@ internal static class LaunchService
             MessageBox.Show(string.Format(LocalizationService.Current.ActiveCulture,
                     LocalizationService.Current.Get("Launch.Failed"), target, ex.Message),
                 LocalizationService.Current.Get("Common.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
         }
     }
 

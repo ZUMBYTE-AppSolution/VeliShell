@@ -241,6 +241,7 @@ public partial class MenuBarWindow : Window
     private void AppMenu_Click(object sender, RoutedEventArgs e)
     {
         var menu = NewMenu(AppMenuButton);
+        Add(menu, L("Search.Open"), _app.ShowSearch);
         Add(menu, L("MenuBar.Settings"), _app.ShowPreferences);
         Add(menu, L("MenuBar.CheckUpdates"), () => _ = _app.CheckForUpdatesAsync(true, this));
         menu.Items.Add(new Separator());
@@ -250,6 +251,8 @@ public partial class MenuBarWindow : Window
         Add(menu, L("MenuBar.Quit"), () => _app.RequestExit());
         menu.IsOpen = true;
     }
+
+    private void Search_Click(object sender, RoutedEventArgs e) => _app.ShowSearch();
 
     private void ActiveApp_Click(object sender, RoutedEventArgs e)
     {

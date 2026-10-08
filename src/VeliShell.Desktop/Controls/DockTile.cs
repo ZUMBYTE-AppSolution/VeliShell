@@ -12,6 +12,7 @@ namespace VeliShell.Desktop.Controls;
 internal sealed class DockTile : Button
 {
     private readonly ScaleTransform _scale = new(1, 1);
+    private readonly TranslateTransform _launchOffset = new();
     private readonly AppIconSurface _iconSurface;
     private readonly Ellipse _indicator;
     internal DockItem Item { get; set; }
@@ -34,9 +35,12 @@ internal sealed class DockTile : Button
         UpdateAutomationStatus(item);
         var grid = new Grid { Width = size + 22, Height = size + 22, ClipToBounds = false };
         var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
+        var iconTransforms = new TransformGroup();
+        iconTransforms.Children.Add(_scale);
+        iconTransforms.Children.Add(_launchOffset);
         _iconSurface = new AppIconSurface(iconSource, size, UsesFreeformArtwork(item))
         {
-            RenderTransformOrigin = new Point(0.5, 1), RenderTransform = _scale
+            RenderTransformOrigin = new Point(0.5, 1), RenderTransform = iconTransforms
         };
         grid.Children.Add(_iconSurface);
         _indicator = new Ellipse
@@ -94,5 +98,32 @@ internal sealed class DockTile : Button
             _scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
             _scale.ScaleX = _scale.ScaleY = value;
         }
+    }
+
+    internal void StartLaunchBounce(bool reducedMotion)
+    {
+        StopLaunchBounce();
+        if (reducedMotion) return;
+        var animation = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(620),
+            RepeatBehavior = RepeatBehavior.Forever
+        };
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(-Math.Max(9, IconSize * 0.22), KeyTime.FromPercent(0.26),
+            new CubicEase { EasingMode = EasingMode.EaseOut }));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(0.52),
+            new CubicEase { EasingMode = EasingMode.EaseIn }));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(-Math.Max(4, IconSize * 0.1), KeyTime.FromPercent(0.72),
+            new CubicEase { EasingMode = EasingMode.EaseOut }));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromPercent(1),
+            new CubicEase { EasingMode = EasingMode.EaseIn }));
+        _launchOffset.BeginAnimation(TranslateTransform.YProperty, animation);
+    }
+
+    internal void StopLaunchBounce()
+    {
+        _launchOffset.BeginAnimation(TranslateTransform.YProperty, null);
+        _launchOffset.Y = 0;
     }
 }

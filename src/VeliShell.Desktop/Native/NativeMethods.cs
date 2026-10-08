@@ -20,7 +20,8 @@ internal static class NativeMethods
     internal const uint SmtoBlock = 0x0001, SmtoAbortIfHung = 0x0002;
     internal const int ShcneAssocChanged = 0x08000000;
     internal const uint ShcnfIdList = 0x0000, ShcnfFlushNoWait = 0x2000;
-    internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModNoRepeat = 0x4000;
+    internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModWin = 0x0008, ModNoRepeat = 0x4000;
+    internal const uint KeyEventKeyUp = 0x0002;
     internal delegate bool EnumWindowsCallback(nint hwnd, nint parameter);
     internal delegate bool MonitorEnumCallback(nint monitor, nint deviceContext, ref Rect bounds, nint parameter);
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; }
@@ -54,6 +55,23 @@ internal static class NativeMethods
     {
         public int Size;
         public nint Data;
+    }
+    [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public nint ExtraInfo;
+    }
+    [StructLayout(LayoutKind.Explicit, Size = 32)] internal struct InputUnion
+    {
+        [FieldOffset(0)] public KeyboardInput Keyboard;
+    }
+    [StructLayout(LayoutKind.Sequential)] internal struct Input
+    {
+        public uint Type;
+        public InputUnion Data;
     }
     [StructLayout(LayoutKind.Sequential)] internal struct AppBarData
     {
@@ -148,6 +166,8 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint virtualKey);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool UnregisterHotKey(nint hwnd, int id);
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint SendInput(uint count, [In] Input[] inputs, int size);
     [DllImport("shell32.dll")]
     internal static extern void SHChangeNotify(int eventId, uint flags, nint item1, nint item2);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW", SetLastError = true)]

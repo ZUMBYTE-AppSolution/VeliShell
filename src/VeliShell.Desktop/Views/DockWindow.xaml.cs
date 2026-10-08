@@ -29,6 +29,7 @@ public partial class DockWindow : Window
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(900) };
     private readonly List<DockTile> _tiles = [];
+    private readonly Dictionary<string, long> _launchDeadlines = new(StringComparer.Ordinal);
     private List<NativeWindow> _windows = [];
     private HwndSource? _source;
     private nint _handle;
@@ -81,6 +82,8 @@ public partial class DockWindow : Window
             NativeMethods.UnregisterHotKey(_handle, 1);
             NativeMethods.UnregisterHotKey(_handle, 2);
             NativeMethods.UnregisterHotKey(_handle, 3);
+            NativeMethods.UnregisterHotKey(_handle, 4);
+            NativeMethods.UnregisterHotKey(_handle, 5);
             _app.RequestExit();
         };
     }
@@ -95,6 +98,11 @@ public partial class DockWindow : Window
         var open = NativeMethods.RegisterHotKey(_handle, 1, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModNoRepeat, 0x56);
         var exit = NativeMethods.RegisterHotKey(_handle, 2, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModShift | NativeMethods.ModNoRepeat, 0x51);
         TaskbarRecoveryHotkeyAvailable = NativeMethods.RegisterHotKey(_handle, 3, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModShift | NativeMethods.ModNoRepeat, 0x7A);
+        var winSpace = NativeMethods.RegisterHotKey(_handle, 4, NativeMethods.ModWin | NativeMethods.ModNoRepeat, 0x20);
+        var fallbackSearch = NativeMethods.RegisterHotKey(_handle, 5,
+            NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModNoRepeat, 0x20);
+        _app.SearchHotkeyStatus = L(winSpace ? "Search.WinSpaceReady" : fallbackSearch
+            ? "Search.FallbackReady" : "Search.HotkeyUnavailable");
         _app.HotkeyStatus = open && exit && TaskbarRecoveryHotkeyAvailable
             ? L("Dock.HotkeysReady")
             : L("Dock.HotkeysUnavailable");
@@ -120,6 +128,7 @@ public partial class DockWindow : Window
             if (wParam == 1) _app.ShowPreferences();
             if (wParam == 2) _app.RequestExit();
             if (wParam == 3) _app.RestoreTaskbarFromEmergencyHotkey();
+            if (wParam is 4 or 5) _app.ShowSearch();
             handled = true;
         }
         if (message is 0x007E or 0x02E0 or 0x001A)
@@ -155,6 +164,7 @@ public partial class DockWindow : Window
             if (_app.Preferences.HideTaskbar) _app.Taskbars.Reconcile();
             if (_app.Preferences.HideDesktopIcons) _app.DesktopIcons.ReconcileHidden();
             Rebuild();
+            StopCompletedLaunches();
             var fullscreen = WindowCatalog.ForegroundIsFullscreenOnPrimary();
             Visibility = fullscreen ? Visibility.Hidden : Visibility.Visible;
             PositionDock();
@@ -194,7 +204,8 @@ public partial class DockWindow : Window
         var monitor = NativeMethods.PrimaryMonitor();
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var capacity = DockMath.VisibleCapacity((monitor.Work.Right - monitor.Work.Left) / dpi, preferences.IconSize);
-        var utilityCount = (preferences.ShowVeliShellDockItem ? 1 : 0) + 1; // settings + Recycle Bin
+        var utilityCount = (preferences.ShowVeliShellDockItem ? 1 : 0) +
+                           (preferences.ShowWindowsStartDockItem ? 1 : 0) + 1;
         if (items.Count + utilityCount > capacity)
         {
             var keep = Math.Max(0, capacity - utilityCount - 1); // reserve one slot for overflow
@@ -203,6 +214,9 @@ public partial class DockWindow : Window
             items.Add(new DockItem { Key = "overflow", Name = L("Dock.MoreApps"), IconId = "overflow",
                 Icon = preferences.GetDockIconOverride("overflow"), Overflow = overflow });
         }
+        if (preferences.ShowWindowsStartDockItem)
+            items.Insert(0, new DockItem { Key = "start", Name = L("Dock.WindowsStart"), IconId = "start",
+                Icon = preferences.GetDockIconOverride("start") });
         if (preferences.ShowVeliShellDockItem)
             items.Add(new DockItem { Key = "velishell", Name = L("Dock.Settings"), IconId = "velishell",
                 Icon = preferences.GetDockIconOverride("velishell") });
@@ -219,13 +233,16 @@ public partial class DockWindow : Window
             && _tiles.All(t => Math.Abs(t.IconSize - preferences.IconSize) < 0.01))
         {
             for (var i = 0; i < items.Count; i++) _tiles[i].UpdateItem(items[i]);
+            StopCompletedLaunches();
             return;
         }
+        foreach (var tile in _tiles) tile.StopLaunchBounce();
         ItemsPanel.Children.Clear();
         _tiles.Clear();
+        var previousKey = "";
         foreach (var item in items)
         {
-            if (item.Key == "velishell")
+            if (item.Key == "velishell" || previousKey == "start")
             {
                 var divider = new Border { Width = 1, Height = preferences.IconSize - 8, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(7,0,7,16) };
                 divider.SetResourceReference(Border.BackgroundProperty, "Divider");
@@ -243,8 +260,13 @@ public partial class DockWindow : Window
             tile.PreviewMouseRightButtonUp += (_, e) => { ShowItemMenu(tile); e.Handled = true; };
             ItemsPanel.Children.Add(tile);
             _tiles.Add(tile);
+            if (_launchDeadlines.TryGetValue(item.Key, out var deadline) &&
+                Environment.TickCount64 < deadline && item.Windows.Count == 0)
+                tile.StartLaunchBounce(preferences.ReducedMotion);
+            previousKey = item.Key;
         }
-        _baseDockWidth = items.Count * (preferences.IconSize + 22) + 78;
+        _baseDockWidth = items.Count * (preferences.IconSize + 22) + 78 +
+                         (preferences.ShowWindowsStartDockItem ? 16 : 0);
         Width = _baseDockWidth + (_dropPlaceholderAddsWidth ? preferences.IconSize + 22 : 0);
         Height = preferences.IconSize * 1.62 + 62;
         DockPlate.Height = preferences.IconSize + 32;
@@ -297,6 +319,7 @@ public partial class DockWindow : Window
 
     private void ActivateItem(DockItem item, FrameworkElement anchor)
     {
+        if (item.Key == "start") { WindowsStartService.Open(); return; }
         if (item.Key == "velishell") { _app.ShowPreferences(); return; }
         if (item.Key == "overflow") { ShowOverflow(item, anchor); return; }
         if (item.Pin is not null && FolderPopoverWindow.CanOpen(item.Target))
@@ -313,7 +336,28 @@ public partial class DockWindow : Window
             var next = windows[(index + 1) % windows.Count];
             if (!WindowCatalog.Activate(next.Handle)) App.Log("Windows declined foreground activation.");
         }
-        else if (!string.IsNullOrEmpty(item.Target)) LaunchService.Open(item.Target);
+        else if (!string.IsNullOrEmpty(item.Target) && LaunchService.Open(item.Target) &&
+                 anchor is DockTile tile && item.Pin is not null)
+        {
+            _launchDeadlines[item.Key] = Environment.TickCount64 + 8000;
+            tile.StartLaunchBounce(_app.Preferences.ReducedMotion);
+        }
+    }
+
+    private void StopCompletedLaunches()
+    {
+        foreach (var tile in _tiles)
+        {
+            if (!_launchDeadlines.TryGetValue(tile.Item.Key, out var deadline)) continue;
+            if (Environment.TickCount64 < deadline && tile.Item.Windows.Count == 0 &&
+                !_app.Preferences.ReducedMotion) continue;
+            tile.StopLaunchBounce();
+            _launchDeadlines.Remove(tile.Item.Key);
+        }
+        foreach (var key in _launchDeadlines
+                     .Where(entry => Environment.TickCount64 >= entry.Value)
+                     .Select(entry => entry.Key).ToArray())
+            _launchDeadlines.Remove(key);
     }
 
     private static MenuItem AddMenuItem(ContextMenu menu, string text, Action action)
@@ -386,6 +430,13 @@ public partial class DockWindow : Window
         {
             AddMenuItem(menu, L("Dock.RemoveVeliShell"), () =>
                 _app.UpdatePreferences(settings => settings.ShowVeliShellDockItem = false));
+            menu.Items.Add(new Separator());
+        }
+        else if (item.Key == "start")
+        {
+            AddMenuItem(menu, L("Dock.WindowsStart"), () => WindowsStartService.Open());
+            AddMenuItem(menu, L("Dock.HideWindowsStart"), () =>
+                _app.UpdatePreferences(settings => settings.ShowWindowsStartDockItem = false));
             menu.Items.Add(new Separator());
         }
         if (OnlineIconService.TryGetAttribution(item.Icon) is { } attribution)
@@ -486,6 +537,7 @@ public partial class DockWindow : Window
     {
         AddMenuItem(menu, L("Dock.PinProgram"), AddPrograms);
         AddMenuItem(menu, L("Dock.PinFolder"), AddFolder);
+        AddMenuItem(menu, L("Search.Open"), _app.ShowSearch);
         AddMenuItem(menu, L("Dock.Settings"), _app.ShowPreferences);
         menu.Items.Add(new Separator());
         AddMenuItem(menu, L("Dock.Quit"), () => _app.RequestExit());

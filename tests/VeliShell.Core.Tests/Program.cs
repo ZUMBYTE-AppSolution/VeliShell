@@ -26,6 +26,10 @@ try
     Test("Taskbar hiding is opt-in", () => Check(!new Settings().HideTaskbar));
     Test("Desktop-icon hiding is opt-in", () => Check(!new Settings().HideDesktopIcons));
     Test("VeliShell dock item is visible by default", () => Check(new Settings().ShowVeliShellDockItem));
+    Test("Onboarding is required only until completion", () =>
+        Check(!new Settings().FirstRunCompleted));
+    Test("Windows Start dock item is opt-in", () =>
+        Check(!new Settings().ShowWindowsStartDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
     Test("Online icons are opt-in", () => Check(new Settings().OnlineIcons == OnlineIconMode.Disabled));
@@ -117,13 +121,15 @@ try
             DockIconOverrides = new Dictionary<string, IconReference>
             {
                 ["trash-empty"] = icon,
+                ["start"] = icon,
                 [running.ToUpperInvariant()] = icon,
                 ["unknown-internal-element"] = icon
             }
         };
         s.Normalize();
         Check(running == sameRunning && s.GetDockIconOverride("trash-empty") == icon &&
-              s.GetDockIconOverride(running) == icon && s.DockIconOverrides.Count == 2);
+              s.GetDockIconOverride("start") == icon &&
+              s.GetDockIconOverride(running) == icon && s.DockIconOverrides.Count == 3);
     });
     Test("Old online consent disables provider", () =>
     {

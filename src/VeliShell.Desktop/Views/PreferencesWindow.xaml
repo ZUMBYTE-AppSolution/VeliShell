@@ -10,8 +10,8 @@
  <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="12" BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
   <Grid ClipToBounds="True">
    <Grid.ColumnDefinitions><ColumnDefinition Width="218" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-   <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-   <Border Grid.RowSpan="2" Background="{DynamicResource SidebarGradient}" CornerRadius="12,0,0,12" />
+   <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+   <Border Grid.RowSpan="3" Background="{DynamicResource SidebarGradient}" CornerRadius="12,0,0,12" />
    <Ellipse Grid.Column="1" Grid.RowSpan="2" Width="460" Height="460" HorizontalAlignment="Right" VerticalAlignment="Top"
             Margin="0,-270,-230,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.11" IsHitTestVisible="False">
     <Ellipse.Effect><BlurEffect Radius="42" /></Ellipse.Effect>
@@ -25,7 +25,7 @@
    <Border Grid.Column="1" Height="1" VerticalAlignment="Bottom" Background="{DynamicResource AccentGradient}" Opacity="0.34" />
    <Grid Grid.Row="1" Margin="12,8,12,16">
     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-    <StackPanel>
+    <StackPanel x:Name="NavigationPanel">
      <Grid Margin="8,0,0,27">
       <Grid.ColumnDefinitions><ColumnDefinition Width="45" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
       <Image x:Name="BrandIcon" Width="37" Height="37" HorizontalAlignment="Left"
@@ -137,6 +137,12 @@
        <CheckBox x:Name="AutoHideSwitch" Content="{services:Loc Dock.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="AutoHide_Click" />
        <CheckBox x:Name="TopmostSwitch" Content="{services:Loc Dock.Topmost}" Style="{StaticResource ToggleSwitch}" Click="Topmost_Click" />
        <TextBlock Text="{services:Loc Dock.BehaviorHint}" Style="{StaticResource SecondaryText}" Margin="0,10,0,0" />
+      </StackPanel></Border>
+      <TextBlock Text="{services:Loc Search.Title}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <Button Content="{services:Loc Search.Open}" Style="{StaticResource PrimaryButton}"
+               HorizontalAlignment="Left" Click="OpenSearch_Click" />
+       <TextBlock Text="{services:Loc Search.SettingsHint}" Style="{StaticResource SecondaryText}" Margin="0,10,0,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Dock.DragSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
@@ -322,6 +328,7 @@
        <TextBlock x:Name="Hotkeys" Style="{StaticResource SecondaryText}" Margin="0,12,0,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Info.Hotkeys}" Style="{StaticResource SecondaryText}" Margin="2,16,0,18" />
+      <TextBlock Text="{services:Loc Info.SearchHotkey}" Style="{StaticResource SecondaryText}" Margin="2,0,0,18" />
       <WrapPanel>
        <Button Content="{services:Loc Info.OpenLogs}" Click="OpenLogs_Click" Margin="0,0,8,8" />
        <Button Content="{services:Loc Info.SaveDiagnostics}" Click="SaveDiagnostics_Click" Margin="0,0,0,8" />
@@ -331,6 +338,24 @@
      </StackPanel>
     </Grid>
    </ScrollViewer>
+   <Border x:Name="OnboardingPanel" Grid.Row="2" Grid.ColumnSpan="2" Visibility="Collapsed"
+           Background="{DynamicResource SidebarGradient}" BorderBrush="{DynamicResource CardStroke}"
+           BorderThickness="0,1,0,0" Padding="20,12">
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+     <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+      <TextBlock x:Name="OnboardingStep" FontWeight="SemiBold" />
+      <TextBlock x:Name="OnboardingExplanation" Style="{StaticResource SecondaryText}"
+                 TextWrapping="Wrap" Margin="0,4,0,0" />
+     </StackPanel>
+     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+      <Button x:Name="OnboardingBack" Content="{services:Loc Onboarding.Back}"
+              Click="OnboardingBack_Click" MinWidth="90" Margin="0,0,8,0" />
+      <Button x:Name="OnboardingNext" Content="{services:Loc Onboarding.Next}"
+              Style="{StaticResource PrimaryButton}" Click="OnboardingNext_Click" MinWidth="110" />
+     </StackPanel>
+    </Grid>
+   </Border>
   </Grid>
  </Border>
 </controls:VeliShellWindow>

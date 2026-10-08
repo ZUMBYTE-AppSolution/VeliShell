@@ -18,6 +18,7 @@ public partial class App : Application
     private DispatcherTimer? _saveTimer;
     private DispatcherTimer? _updateTimer;
     private PreferencesWindow? _preferencesWindow;
+    private SearchWindow? _searchWindow;
     private MenuBarWindow? _menuBarWindow;
     private bool _saveErrorShown;
     private readonly CancellationTokenSource _shutdown = new();
@@ -40,6 +41,7 @@ public partial class App : Application
     internal TaskbarVisibilityService Taskbars { get; } = new();
     internal DesktopIconVisibilityService DesktopIcons { get; } = new();
     public string HotkeyStatus { get; set; } = LocalizationService.Current.Get("App.HotkeyPending");
+    public string SearchHotkeyStatus { get; set; } = LocalizationService.Current.Get("App.HotkeyPending");
     internal UpdateUiState UpdateState { get; private set; } = UpdateUiState.NotChecked;
     internal SemanticVersion? AvailableUpdateVersion { get; private set; }
     public event Action? PreferencesChanged;
@@ -143,18 +145,13 @@ public partial class App : Application
             _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(6) };
             _updateTimer.Tick += async (_, _) =>
             {
-                if (Preferences.Updates != UpdateMode.Manual && _updateWindow is null)
+                if (Preferences.FirstRunCompleted && Preferences.Updates != UpdateMode.Manual && _updateWindow is null)
                     await CheckForUpdatesAsync(userInitiated: false, Dock);
             };
             _updateTimer.Start();
         }
-        if (!Preferences.FirstRunCompleted)
-        {
-            ShowPreferences();
-            Preferences.FirstRunCompleted = true;
-            SaveNow();
-        }
-        if (!PackageIdentityService.HasIdentity && Preferences.Updates != UpdateMode.Manual)
+        if (!Preferences.FirstRunCompleted) ShowPreferences();
+        if (Preferences.FirstRunCompleted && !PackageIdentityService.HasIdentity && Preferences.Updates != UpdateMode.Manual)
             _ = CheckForUpdatesAsync(userInitiated: false, Dock);
         Log($"VeliShell {GitHubReleaseUpdateService.InstalledVersion} started. Windows {Environment.OSVersion.Version}");
     }
@@ -215,12 +212,31 @@ public partial class App : Application
     {
         if (_preferencesWindow is null)
         {
-            _preferencesWindow = new PreferencesWindow(this);
+            _preferencesWindow = new PreferencesWindow(this, onboarding: !Preferences.FirstRunCompleted);
             _preferencesWindow.Closed += (_, _) => _preferencesWindow = null;
         }
         _preferencesWindow.Show();
         if (_preferencesWindow.WindowState == WindowState.Minimized) _preferencesWindow.WindowState = WindowState.Normal;
         _preferencesWindow.Activate();
+    }
+
+    public void ShowSearch()
+    {
+        if (_searchWindow is null)
+        {
+            _searchWindow = new SearchWindow(this);
+            _searchWindow.Closed += (_, _) => _searchWindow = null;
+        }
+        _searchWindow.FocusQuery();
+    }
+
+    internal void CompleteOnboarding()
+    {
+        if (Preferences.FirstRunCompleted) return;
+        UpdatePreferences(settings => settings.FirstRunCompleted = true);
+        SaveNow();
+        if (!PackageIdentityService.HasIdentity && Preferences.Updates != UpdateMode.Manual)
+            _ = CheckForUpdatesAsync(userInitiated: false, Dock);
     }
 
     private bool SyncMenuBar()

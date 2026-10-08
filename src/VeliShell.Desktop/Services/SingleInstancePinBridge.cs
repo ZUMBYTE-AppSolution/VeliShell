@@ -15,23 +15,28 @@ internal sealed class SingleInstancePinBridge : IDisposable
 {
     private const int MaximumMessageBytes = ShellPinCommand.MaximumPathLength * 4;
     private readonly Func<string, bool> _queuePin;
+    private readonly string _pipeName;
     private readonly CancellationTokenSource _shutdown = new();
     private Task? _serverTask;
 
-    internal SingleInstancePinBridge(Func<string, bool> queuePin) => _queuePin = queuePin;
+    internal SingleInstancePinBridge(Func<string, bool> queuePin, string? pipeName = null)
+    {
+        _queuePin = queuePin;
+        _pipeName = pipeName ?? PipeName;
+    }
 
     internal static string PipeName => $"Zumbyte.VeliShell.PinToDock.v1.{Process.GetCurrentProcess().SessionId}";
 
     internal void Start() => _serverTask ??= RunServerLoopAsync(_shutdown.Token);
 
-    internal static async Task<bool> ForwardAsync(string path, TimeSpan timeout)
+    internal static async Task<bool> ForwardAsync(string path, TimeSpan timeout, string? pipeName = null)
     {
         if (!ShellPinCommand.TryNormalizeExistingPath(path, out var normalized)) return false;
         using var cancellation = new CancellationTokenSource(timeout);
         try
         {
             await using var client = new NamedPipeClientStream(
-                ".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                ".", pipeName ?? PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync(cancellation.Token).ConfigureAwait(false);
             await WritePathAsync(client, normalized, cancellation.Token).ConfigureAwait(false);
             var response = new byte[1];
@@ -53,7 +58,7 @@ internal sealed class SingleInstancePinBridge : IDisposable
             try
             {
                 await using var server = new NamedPipeServerStream(
-                    PipeName,
+                    _pipeName,
                     PipeDirection.InOut,
                     1,
                     PipeTransmissionMode.Byte,
@@ -78,6 +83,8 @@ internal sealed class SingleInstancePinBridge : IDisposable
                                               or OperationCanceledException)
             {
                 App.Log("Explorer pin-command bridge rejected a request", exception);
+                try { await Task.Delay(250, cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
             }
         }
     }

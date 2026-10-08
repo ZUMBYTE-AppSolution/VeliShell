@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true, ParameterSetName = 'Store')][string]$IdentityName,
     [Parameter(Mandatory = $true, ParameterSetName = 'Store')][string]$Publisher,
-    [Parameter(ParameterSetName = 'Store')][string]$PublisherDisplayName = 'Zumbyte AppSolution',
+    [Parameter(ParameterSetName = 'Store')][string]$PublisherDisplayName = 'Zumbyte - AppSolution',
     [Parameter(Mandatory = $true, ParameterSetName = 'Development')][switch]$DevelopmentIdentity,
     [string]$PublishDirectory,
     [string]$OutputPath

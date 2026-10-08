@@ -14,5 +14,5 @@ internal sealed class DockItem
     public Pin? Pin { get; init; }
     public List<NativeWindow> Windows { get; set; } = [];
     public List<DockItem> Overflow { get; init; } = [];
-    public bool IsUtility => Key is "velishell" or "trash" or "overflow";
+    public bool IsUtility => Key is "start" or "velishell" or "trash" or "overflow";
 }

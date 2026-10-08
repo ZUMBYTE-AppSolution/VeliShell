@@ -18,10 +18,12 @@ public partial class PreferencesWindow : VeliShellWindow
     private bool _loading = true;
     private bool _iconSearchBusy;
     private int _currentPage;
+    private readonly bool _onboarding;
     private static string L(string key) => LocalizationService.Current.Get(key);
-    public PreferencesWindow(App app)
+    public PreferencesWindow(App app, bool onboarding = false)
     {
         _app = app;
+        _onboarding = onboarding;
         LocalizationService.Current.Apply(_app.Preferences.Language);
         InitializeComponent();
         _app.PreferencesChanged += SyncUi;
@@ -37,6 +39,14 @@ public partial class PreferencesWindow : VeliShellWindow
             NotificationCenterService.Current.WindowsAccessChanged -= WindowsNotificationAccessChanged;
         };
         SyncUi();
+        if (_onboarding)
+        {
+            Height = 720;
+            OnboardingPanel.Visibility = Visibility.Visible;
+            NavigationPanel.IsHitTestVisible = false;
+            foreach (var nav in NavigationPanel.Children.OfType<RadioButton>())
+                nav.IsTabStop = false;
+        }
         ShowPage(0);
     }
 
@@ -100,6 +110,11 @@ public partial class PreferencesWindow : VeliShellWindow
     private void ShowPage(int page)
     {
         _currentPage = page;
+        var wasLoading = _loading;
+        _loading = true;
+        foreach (var nav in NavigationPanel.Children.OfType<RadioButton>())
+            nav.IsChecked = nav.Tag is string tag && tag == page.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _loading = wasLoading;
         AppearancePage.Visibility = page == 0 ? Visibility.Visible : Visibility.Collapsed;
         DockPage.Visibility = page == 1 ? Visibility.Visible : Visibility.Collapsed;
         AppsPage.Visibility = page == 2 ? Visibility.Visible : Visibility.Collapsed;
@@ -116,6 +131,27 @@ public partial class PreferencesWindow : VeliShellWindow
         PageScroll.ScrollToTop();
         if (page == 2) RenderRunningIcons();
         if (page == 4) UpdateDiagnostics();
+        if (_onboarding) UpdateOnboardingStep();
+    }
+    private void UpdateOnboardingStep()
+    {
+        OnboardingStep.Text = string.Format(LocalizationService.Current.ActiveCulture,
+            L("Onboarding.Step"), _currentPage + 1, 5, PageTitle.Text);
+        OnboardingExplanation.Text = L($"Onboarding.Explain{_currentPage}");
+        OnboardingBack.IsEnabled = _currentPage > 0;
+        OnboardingNext.Content = L(_currentPage == 4 ? "Onboarding.Finish" : "Onboarding.Next");
+    }
+
+    private void OnboardingBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPage > 0) ShowPage(_currentPage - 1);
+    }
+
+    private void OnboardingNext_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPage < 4) { ShowPage(_currentPage + 1); return; }
+        _app.CompleteOnboarding();
+        Close();
     }
     private void Navigation_Checked(object sender, RoutedEventArgs e)
     {
@@ -171,6 +207,7 @@ public partial class PreferencesWindow : VeliShellWindow
     private void Running_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.ShowRunningApps = RunningSwitch.IsChecked == true);
     private void AutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AutoHide = AutoHideSwitch.IsChecked == true);
     private void Topmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AlwaysOnTop = TopmostSwitch.IsChecked == true);
+    private void OpenSearch_Click(object sender, RoutedEventArgs e) => _app.ShowSearch();
     private async void MenuBar_Click(object sender, RoutedEventArgs e)
     {
         MenuBarSwitch.IsEnabled = false;
@@ -539,6 +576,14 @@ public partial class PreferencesWindow : VeliShellWindow
     {
         if (SystemIconList is null) return;
         SystemIconList.Children.Clear();
+        AddSystemIconRow(
+            "start", L("Apps.WindowsStartDockIcon"), "start", "", null,
+            buttons => AddTextButton(buttons,
+                L(_app.Preferences.ShowWindowsStartDockItem
+                    ? "Apps.HideWindowsStartDockItem" : "Apps.ShowWindowsStartDockItem"),
+                L("Apps.WindowsStartDockIcon"),
+                () => _app.UpdatePreferences(settings =>
+                    settings.ShowWindowsStartDockItem = !settings.ShowWindowsStartDockItem)));
         AddSystemIconRow(
             "velishell",
             L("Apps.VeliShellDockIcon"),
