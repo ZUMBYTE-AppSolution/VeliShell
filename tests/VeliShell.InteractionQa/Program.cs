@@ -208,40 +208,50 @@ internal static class Program
                     Path.Combine(outputDirectory, $"start-launcher-{(dark ? "dark" : "light")}.png"), dark);
             }
 
-            var anchor = new Border { Width = 52, Height = 52, Background = Brushes.SteelBlue,
-                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(80, 0, 0, 10) };
-            var owner = new Window { Width = 600, Height = 90, Left = 100,
-                Top = Math.Max(20, SystemParameters.WorkArea.Bottom - 110),
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                ShowInTaskbar = false, Content = new Grid { Children = { anchor } } };
-            Window? positioned = null;
-            try
+            // Hosted runners render WPF off-screen but have no reliable visible
+            // desktop/work area for a PointToScreen assertion. The default QA
+            // mode tests CalculateBounds on ordinary and compact monitors.
+            var interactiveDesktop = !string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true",
+                StringComparison.OrdinalIgnoreCase);
+            if (interactiveDesktop)
             {
-                owner.Show();
-                owner.UpdateLayout();
-                positioned = (Window)(Activator.CreateInstance(
-                    launcherType, BindingFlags.Instance | BindingFlags.NonPublic,
-                    binder: null, args: [application], culture: null)
-                    ?? throw new InvalidOperationException("Could not create positioned Start launcher."));
-                RequireMethod(launcherType, "ShowAbove").Invoke(positioned, [anchor, owner, false]);
-                DrainDispatcher();
-                var anchorScreen = anchor.PointToScreen(new Point(0, 0));
-                var transform = PresentationSource.FromVisual(anchor)!.CompositionTarget!.TransformFromDevice;
-                var anchorDip = transform.Transform(anchorScreen);
-                Require(positioned.IsVisible && positioned.Top + positioned.Height < anchorDip.Y,
-                    "The real Start launcher did not open directly above its dock button.");
-                Require(positioned.Left >= SystemParameters.WorkArea.Left - 1 &&
-                        positioned.Left + positioned.Width <= SystemParameters.WorkArea.Right + 1,
-                    "The real Start launcher extends beyond the monitor work area.");
-            }
-            finally
-            {
-                positioned?.Close();
-                owner.Close();
+                var anchor = new Border { Width = 52, Height = 52, Background = Brushes.SteelBlue,
+                    HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(80, 0, 0, 10) };
+                var owner = new Window { Width = 600, Height = 90, Left = 100,
+                    Top = Math.Max(20, SystemParameters.WorkArea.Bottom - 110),
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    ShowInTaskbar = false, Content = new Grid { Children = { anchor } } };
+                Window? positioned = null;
+                try
+                {
+                    owner.Show();
+                    owner.UpdateLayout();
+                    positioned = (Window)(Activator.CreateInstance(
+                        launcherType, BindingFlags.Instance | BindingFlags.NonPublic,
+                        binder: null, args: [application], culture: null)
+                        ?? throw new InvalidOperationException("Could not create positioned Start launcher."));
+                    RequireMethod(launcherType, "ShowAbove").Invoke(positioned, [anchor, owner, false]);
+                    DrainDispatcher();
+                    var anchorScreen = anchor.PointToScreen(new Point(0, 0));
+                    var transform = PresentationSource.FromVisual(anchor)!.CompositionTarget!.TransformFromDevice;
+                    var anchorDip = transform.Transform(anchorScreen);
+                    Require(positioned.IsVisible && positioned.Top + positioned.Height < anchorDip.Y,
+                        "The real Start launcher did not open directly above its dock button.");
+                    Require(positioned.Left >= SystemParameters.WorkArea.Left - 1 &&
+                            positioned.Left + positioned.Width <= SystemParameters.WorkArea.Right + 1,
+                        "The real Start launcher extends beyond the monitor work area.");
+                }
+                finally
+                {
+                    positioned?.Close();
+                    owner.Close();
+                }
             }
 
-            Console.WriteLine($"PASS: Real Start launcher rendered in both themes and opened above its dock anchor: {outputDirectory}");
+            Console.WriteLine(interactiveDesktop
+                ? $"PASS: Real Start launcher rendered in both themes and opened above its dock anchor: {outputDirectory}"
+                : $"PASS: Real Start launcher rendered in both themes; hosted-runner anchor geometry was checked by the default QA mode: {outputDirectory}");
             return 0;
         }
         catch (Exception exception)
