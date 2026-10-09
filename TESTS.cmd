@@ -1,7 +1,7 @@
 @echo off
 setlocal
 pushd "%~dp0"
-echo VeliShell 0.7.0 - Kerntests
+echo VeliShell 0.8.0 - Kerntests
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\Build.ps1" -TestsOnly
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (

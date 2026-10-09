@@ -30,12 +30,12 @@
 VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, das sich vertraut anfühlt und trotzdem Windows respektiert.
 
 - **Einheitliche App-Icons:** Jedes Symbol belegt exakt dieselbe eingestellte Fläche. Transparente Ränder oder ungewöhnliche Quelldateien verändern die Größe im Dock nicht.
-- **Gemeinsame Rundung:** App-Icon, geladene Icons, Hover-Zustand und Drag-Ghost verwenden dieselbe kontinuierliche Superellipse.
+- **Gemeinsame Rundung für Apps:** App-Icon, geladene App-Symbole, Hover-Zustand und Drag-Ghost verwenden dieselbe kontinuierliche Superellipse. Ordner und Papierkorb behalten dagegen ihre Originalform.
 - **Drag & Drop wie erwartet:** Programme, Dateien und Ordner lassen sich vom Desktop ins Dock ziehen und dort verschieben. Ziehst du einen Eintrag aus dem Dock heraus, wird er nur aus dem Dock entfernt – VeliShell erstellt dabei keine Verknüpfung. Der Ghost sitzt direkt am künftigen Einfügeplatz.
 - **Direkt aus dem Explorer anheften:** Dateien und Ordner erhalten den statischen Kontextmenü-Befehl **„Im Dock anheften“**. Unter Windows 11 kann er im klassischen Bereich **„Weitere Optionen anzeigen“** stehen; VeliShell lädt dafür keinen Erweiterungscode in den Explorer.
 - **Ordner direkt im Dock durchsuchen:** Ein normaler Klick auf einen Ordner-Pin öffnet ein themefähiges Popover mit Zurück-Navigation, Breadcrumbs und „Im Explorer öffnen“. Die asynchrone Ansicht bleibt bewusst begrenzt und folgt keinen Junctions oder symbolischen Ordnerlinks aus dem angehefteten Stamm heraus.
 - **Fenster auf einen Blick:** Laufende Apps erhalten einen einzelnen Punkt. Bei mehreren Fenstern zeigt das Kontextmenü seitlich eine Live-Miniatur des gerade berührten Eintrags.
-- **Suche ohne Umweg:** VeliShell findet angeheftete Apps und Programme aus dem Windows-Startmenü schon beim Tippen. Eine Websuche öffnet den Browser erst, wenn du den entsprechenden Treffer anklickst.
+- **Suche ohne Umweg:** VeliShell findet Dock-Apps, Startmenü-Einträge, registrierte Programme und geöffnete Anwendungen schon beim Tippen. Mit deinem eigenen Brave-Search-Schlüssel erscheinen auch Live-Webtreffer; ohne Schlüssel bleibt die Websuche per Klick im Browser.
 - **Optionales Start-Symbol:** Links vor den Apps kann ein Windows-Start-Symbol mit eigener Trennlinie stehen. Es öffnet das normale Windows-Startmenü und lässt sich jederzeit wieder entfernen.
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
@@ -49,13 +49,13 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Die Mitteilungszentrale sammelt VeliShell-Hinweise und besitzt einen ausdrücklich freizugebenden Adapter für aktuelle Windows-Mitteilungen. Dieser Windows-Zugriff verlangt eine signierte Paketidentität; in der derzeitigen MSI-/Portable-Ausgabe bleibt er deshalb sicher deaktiviert. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
 - **Scharfe Vektorsymbole:** Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen VeliShell-Symbolsatz auf gemeinsamem 24-Punkt-Raster. Er skaliert verlustfrei, übernimmt automatisch das aktive Theme und bündelt keine Apple-SF-Symbol-Dateien.
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
-- **Geführter erster Start:** Fünf erklärende Schritte führen durch Design, Dock, Symbole, Windows-Optionen und Updates. Freiwillige Systemeingriffe bleiben zunächst aus; erst „Fertigstellen“ schließt die Ersteinrichtung ab.
+- **Geführter erster Start:** Sechs erklärende Schritte führen durch Design, Dock, Symbole, Online-Dienste, Windows-Optionen und Updates. Für die optionalen Brave- und macOSicons-Schlüssel gibt es direkte Anleitungen und geschützte Eingabefelder; freiwillige Systemeingriffe bleiben zunächst aus.
 
 ## 🚀 Installation
 
 1. Den [aktuellen VeliShell-Installer](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest/download/VeliShell-Setup-win-x64.msi) herunterladen.
 2. Die MSI-Datei öffnen, die Windows-Administratorabfrage bestätigen und den gebrandeten VeliShell-Dialogen folgen.
-3. VeliShell über das Startmenü starten und die fünf Schritte der Ersteinrichtung durchgehen. Alle Optionen bleiben danach in den Einstellungen erreichbar.
+3. VeliShell über das Startmenü starten und die sechs Schritte der Ersteinrichtung durchgehen. Alle Optionen bleiben danach in den Einstellungen erreichbar.
 
 Für einen Test ohne Installation gibt es zusätzlich eine [portable ZIP-Datei](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest/download/VeliShell-Portable-win-x64.zip). Sie muss vollständig entpackt werden; die EXE allein reicht nicht aus.
 
@@ -91,6 +91,7 @@ Ist das an die öffentliche IP gebundene GitHub-API-Limit ausgeschöpft, wechsel
 - keine unbeaufsichtigte Installation;
 - Größen- und SHA-256-Prüfung vor dem Start des Installers;
 - deutlicher Hinweis, wenn ein Paket noch keine gültige Windows-Herausgebersignatur besitzt;
+- nach dem Download eine eigene Bestätigung vor der Installation und automatischer VeliShell-Neustart nach dem MSI;
 - jederzeit auch manuell über **Einstellungen → Info → Nach Updates suchen**.
 
 Die Versionshistorie steht in [CHANGELOG.md](CHANGELOG.md). Jede stabile Version erhält zusätzlich einen eigenen Eintrag unter [GitHub Releases](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases).
@@ -108,16 +109,19 @@ Im Dock kannst du zwischen zwei Darstellungen wechseln:
 
 Unabhängig vom globalen Stil lässt sich jedes sichtbare Dock-Element in **Einstellungen → Apps** einzeln anpassen. VeliShell übernimmt lokale Bild- und Icondateien in den eigenen geschützten Datenordner, damit das Dock nicht von einer später verschobenen Quelldatei abhängt. Das VeliShell-Element und aktuell erkannte laufende Apps erhalten eigene Einträge; für den Papierkorb stehen getrennte Auswahlen für **leer** und **voll** bereit. Jede Änderung kann einzeln auf den VeliShell-Standard zurückgesetzt werden.
 
-Wenn lokal kein passendes hochauflösendes Symbol vorhanden ist, kann VeliShell nach deiner Freigabe die offizielle [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) nach Mac-Software durchsuchen. Dafür ist **kein API-Schlüssel** nötig. Eine Suche läuft nur auf deinen Klick, zeigt mehrere Treffer mit App-Name, Entwickler, Vorschau und direktem App-Store-Link und übernimmt ausschließlich deine ausdrückliche Auswahl. Es gibt keine automatische Hintergrundsuche und keinen stillen Austausch bestehender Symbole.
+Wenn lokal kein passendes hochauflösendes Symbol vorhanden ist, kann VeliShell nach deiner Freigabe die offizielle [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) nach Mac-Software durchsuchen. Dafür ist **kein API-Schlüssel** nötig. Zusätzlich kann [macOSicons.com](https://macosicons.com/developers) mit deinem eigenen API-Schlüssel durchsucht werden. VeliShell sucht anhand von Programmdatei, Fenstertitel und Verknüpfungsnamen, zeigt Treffer beider Quellen mit Vorschau und Urheberangaben und lässt dich für jede App auswählen oder zur nächsten springen. Es gibt keine automatische Hintergrundsuche und keinen stillen Austausch bestehender Symbole.
 
-Der Online-Katalog wird nicht mit VeliShell ausgeliefert. Suchergebnisse bleiben kurz im Arbeitsspeicher; nur das gewählte Bild wird in einem begrenzten lokalen Cache gespeichert. Quelle und App-Store-Link bleiben in den Einstellungen beziehungsweise am Eintrag erreichbar. App-Store-Artwork bleibt Eigentum der jeweiligen Rechteinhaber und unterliegt Apples Bedingungen für Promo-Inhalte – es ist kein frei weiterverteilbares Icon-Paket. Die neuen Leer-/Vollgrafiken des Papierkorbs wurden eigenständig für VeliShell gestaltet und verwenden keine Apple-Vorlagen. Weitere Angaben stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Findet keine Quelle ein passendes Symbol, kannst du das vorhandene Windows-App-Icon mit dem macOSicons-Masking in Form bringen lassen. Dafür fragt VeliShell **noch einmal gesondert**, bevor das Bild hochgeladen wird. Ordner und Papierkorb sind ausdrücklich ausgenommen. Beide optionalen API-Schlüssel werden nur für dein Windows-Konto im Anmeldeinformationsmanager gespeichert – nicht in der Einstellungsdatei oder im Programmcode.
+
+Der Online-Katalog wird nicht mit VeliShell ausgeliefert. Suchergebnisse bleiben kurz im Arbeitsspeicher; nur das gewählte Bild wird lokal gespeichert. Quelle, Urheber und beim App Store der direkte Store-Link bleiben erreichbar. App-Store-Artwork bleibt Eigentum der jeweiligen Rechteinhaber und unterliegt Apples Bedingungen für Promo-Inhalte – es ist kein frei weiterverteilbares Icon-Paket. Weitere Angaben stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## 🔐 Datenschutz und Sicherheit
 
 - keine Telemetrie und kein Werbe-Tracking;
 - Taskleiste und Desktopsymbole werden nur temporär und nach ausdrücklichem Opt-in verändert; VeliShell schreibt dafür keine dauerhafte Explorer-Konfiguration;
 - Einstellungen und Icon-Cache bleiben lokal auf dem Rechner;
-- App-Namen werden nur bei einer von dir ausgelösten Online-Icon-Suche an `itunes.apple.com` gesendet; Vorschauen kommen von Apples `mzstatic.com`-CDN. Fensterinhalte und Dateiinhalte werden nicht übertragen;
+- bei einer von dir ausgelösten Online-Icon-Suche gehen App-, EXE- und Verknüpfungsnamen sowie passende **Fenstertitel** an Apple und mit eigenem Schlüssel auch an macOSicons; Vorschauen werden nur für die Auswahl geladen. Das Bild des Windows-App-Icons wird ausschließlich nach einer zweiten Bestätigung zum Masking hochgeladen;
+- Live-Webanfragen gehen nur mit deinem eigenen Brave-Schlüssel nach einer Tipp-Pause an Brave. Ohne Schlüssel wird erst beim Anklicken einer Websuche dein Browser geöffnet;
 - Wo eine signierte paketierte Ausgabe den Windows-Zugriff unterstützt, werden Mitteilungen nur nach der Windows-Freigabe lokal gelesen, nie übertragen und nicht in Diagnoseprotokolle geschrieben. Das Entfernen in VeliShell löscht ausschließlich die ausdrücklich angezeigte Mitteilung anhand ihrer Windows-ID. MSI und Portable besitzen aktuell keine Paketidentität und lassen den Zugriff daher deaktiviert;
 - Update-Metadaten kommen ausschließlich aus dem offiziellen VeliShell-Repository;
 - die Windows-Shell, Systemdateien und Sicherheitsfunktionen werden nicht ersetzt oder deaktiviert.
@@ -148,7 +152,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.7.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.8.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

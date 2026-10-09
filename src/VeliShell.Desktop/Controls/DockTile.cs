@@ -70,7 +70,9 @@ internal sealed class DockTile : Button
         UpdateIndicator();
     }
 
-    private static bool UsesFreeformArtwork(DockItem item) => item.Key == "trash";
+    private static bool UsesFreeformArtwork(DockItem item) =>
+        item.Key == "trash" || item.IconId == "folder" ||
+        (!string.IsNullOrWhiteSpace(item.Target) && System.IO.Directory.Exists(item.Target));
 
     private void UpdateAutomationStatus(DockItem item)
     {

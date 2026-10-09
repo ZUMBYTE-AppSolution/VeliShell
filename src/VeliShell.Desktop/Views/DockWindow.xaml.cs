@@ -674,7 +674,8 @@ public partial class DockWindow : Window
                     IsCursorOverDockPlate());
             };
             dragSource.QueryContinueDrag += queryContinueDrag;
-            ShowDragGhost("pin:" + pin.Id, IconService.For(pin.Id, pin.Target, pin.Icon));
+            ShowDragGhost("pin:" + pin.Id, IconService.For(pin.Id, pin.Target, pin.Icon),
+                Directory.Exists(pin.Target));
             System.Windows.DragDrop.DoDragDrop(
                 dragSource,
                 CreateDockPinDragData(pin.Id),
@@ -772,7 +773,7 @@ public partial class DockWindow : Window
         hasPin ? DragDropEffects.Move :
         hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
 
-    private void ShowDragGhost(string key, ImageSource source)
+    private void ShowDragGhost(string key, ImageSource source, bool freeform)
     {
         if (_dragGhost is not null && string.Equals(_dragGhostKey, key, StringComparison.Ordinal))
         {
@@ -784,7 +785,7 @@ public partial class DockWindow : Window
         try
         {
             _dragGhostKey = key;
-            _dragGhost = new DragGhostWindow(this, source, _app.Preferences.IconSize);
+            _dragGhost = new DragGhostWindow(this, source, _app.Preferences.IconSize, freeform);
             _dragGhost.ShowAtCursor();
         }
         catch (Exception exception) when (exception is InvalidOperationException or ExternalException)
@@ -898,7 +899,9 @@ public partial class DockWindow : Window
             : insertionIndex;
         finalIndex = Math.Clamp(finalIndex, 0, remainingPins.Count);
 
-        var placeholder = CreateDropPlaceholder(previewIcon, itemCount);
+        var freeform = _dropSourceTile?.Item.Pin is { } sourcePin && Directory.Exists(sourcePin.Target) ||
+                       _cachedDragPaths.Count > 0 && Directory.Exists(_cachedDragPaths[0]);
+        var placeholder = CreateDropPlaceholder(previewIcon, itemCount, freeform);
         var childIndex = remainingPins.Count == 0
             ? 0
             : finalIndex < remainingPins.Count
@@ -915,10 +918,10 @@ public partial class DockWindow : Window
         if (!string.IsNullOrEmpty(movingPinId)) _dragGhost?.SnapTo(placeholder);
     }
 
-    private FrameworkElement CreateDropPlaceholder(ImageSource? previewIcon, int itemCount)
+    private FrameworkElement CreateDropPlaceholder(ImageSource? previewIcon, int itemCount, bool freeform)
     {
         var size = _app.Preferences.IconSize;
-        var iconSurface = new AppIconSurface(previewIcon, size)
+        var iconSurface = new AppIconSurface(previewIcon, size, freeform)
         {
             Opacity = previewIcon is null ? 0.24 : 0.78,
         };
@@ -1045,7 +1048,8 @@ public partial class DockWindow : Window
                     movingPinId = pin.Id;
                     var ghostKey = "pin:" + pin.Id;
                     if (_dragGhost is null || !string.Equals(_dragGhostKey, ghostKey, StringComparison.Ordinal))
-                        ShowDragGhost(ghostKey, IconService.For(pin.Id, pin.Target, pin.Icon));
+                        ShowDragGhost(ghostKey, IconService.For(pin.Id, pin.Target, pin.Icon),
+                            Directory.Exists(pin.Target));
                 }
             }
             else if (_cachedDragPaths.Count > 0)

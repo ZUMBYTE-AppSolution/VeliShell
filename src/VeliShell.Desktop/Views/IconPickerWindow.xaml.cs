@@ -14,7 +14,7 @@ public partial class IconPickerWindow : VeliShellWindow
     private readonly IReadOnlyList<AppStoreIconSearchHit> _hits;
     private readonly List<(AppStoreIconSearchHit Hit, Image Preview)> _previews = [];
 
-    internal IconPickerWindow(string appName, string query, IReadOnlyList<AppStoreIconSearchHit> hits)
+    internal IconPickerWindow(string appName, string query, IReadOnlyList<AppStoreIconSearchHit> hits, bool allowSkip = false)
     {
         _hits = hits;
         InitializeComponent();
@@ -22,12 +22,14 @@ public partial class IconPickerWindow : VeliShellWindow
             LocalizationService.Current.Get("IconPicker.Heading"), appName);
         SearchHint.Text = string.Format(LocalizationService.Current.ActiveCulture,
             LocalizationService.Current.Get("IconPicker.SearchHint"), query, hits.Count);
+        SkipButton.Visibility = allowSkip ? Visibility.Visible : Visibility.Collapsed;
         BuildResults();
         Loaded += async (_, _) => await LoadPreviewsAsync();
         Closed += (_, _) => _lifetime.Cancel();
     }
 
     internal AppStoreIconSearchHit? SelectedHit { get; private set; }
+    internal bool Skipped { get; private set; }
 
     private void BuildResults()
     {
@@ -81,14 +83,14 @@ public partial class IconPickerWindow : VeliShellWindow
                 Margin = new Thickness(0, 7, 0, 0),
                 Padding = new Thickness(8, 3, 8, 3),
                 MinHeight = 26,
-                ToolTip = hit.StoreUrl.AbsoluteUri
+                ToolTip = hit.CreditUrl?.AbsoluteUri ?? hit.StoreUrl.AbsoluteUri
             };
             AutomationProperties.SetName(storeLink,
                 LocalizationService.Current.Get("IconPicker.OpenResult") + ": " + hit.AppName);
             storeLink.Click += (_, args) =>
             {
                 args.Handled = true;
-                LaunchService.Open(hit.StoreUrl.AbsoluteUri);
+                LaunchService.Open(hit.CreditUrl?.AbsoluteUri ?? hit.StoreUrl.AbsoluteUri);
             };
 
             var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -129,14 +131,23 @@ public partial class IconPickerWindow : VeliShellWindow
     {
         try
         {
+            using var gate = new SemaphoreSlim(4);
             await Task.WhenAll(_previews.Select(async entry =>
             {
-                var image = await AppStoreIconService.LoadPreviewAsync(entry.Hit, _lifetime.Token);
-                if (image is null || _lifetime.IsCancellationRequested) return;
-                await Dispatcher.InvokeAsync(() => entry.Preview.Source = image);
+                await gate.WaitAsync(_lifetime.Token);
+                try
+                {
+                    var image = entry.Hit.Provider == MacOsIconsApiService.Provider
+                        ? await MacOsIconsApiService.LoadPreviewAsync(entry.Hit, _lifetime.Token)
+                        : await AppStoreIconService.LoadPreviewAsync(entry.Hit, _lifetime.Token);
+                    if (image is null || _lifetime.IsCancellationRequested) return;
+                    await Dispatcher.InvokeAsync(() => entry.Preview.Source = image);
+                }
+                finally { gate.Release(); }
             }));
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception exception) { App.Log("Could not load an online icon preview", exception); }
     }
 
     private static string FormatDetails(AppStoreIconSearchHit hit)
@@ -147,7 +158,8 @@ public partial class IconPickerWindow : VeliShellWindow
     }
 
     private static string FormatAttribution(AppStoreIconSearchHit hit) =>
-        "App Store · " + hit.DeveloperName;
+        (hit.Provider == MacOsIconsApiService.Provider ? "macOSicons.com" : "App Store") +
+        " · " + hit.DeveloperName;
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
@@ -156,6 +168,11 @@ public partial class IconPickerWindow : VeliShellWindow
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Skip_Click(object sender, RoutedEventArgs e)
+    {
+        Skipped = true;
+        DialogResult = false;
+    }
     private void OpenProvider_Click(object sender, RoutedEventArgs e) =>
         LaunchService.Open(
             "https://performance-partners.apple.com/resources/documentation/itunes-store-web-service-search-api/");

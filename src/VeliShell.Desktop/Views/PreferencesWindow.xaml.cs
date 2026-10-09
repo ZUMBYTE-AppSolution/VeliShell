@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -19,6 +20,7 @@ public partial class PreferencesWindow : VeliShellWindow
     private bool _iconSearchBusy;
     private int _currentPage;
     private readonly bool _onboarding;
+    private const int LastPage = 5;
     private static string L(string key) => LocalizationService.Current.Get(key);
     public PreferencesWindow(App app, bool onboarding = false)
     {
@@ -30,7 +32,7 @@ public partial class PreferencesWindow : VeliShellWindow
         _app.UpdateStateChanged += UpdateUpdateStatus;
         _app.Themes.Changed += UpdateThemeStatus;
         NotificationCenterService.Current.WindowsAccessChanged += WindowsNotificationAccessChanged;
-        Loaded += (_, _) => { SyncUi(); UpdateDiagnostics(); };
+        Loaded += (_, _) => { SyncUi(); UpdateDiagnostics(); UpdateApiKeyStatus(); };
         Closed += (_, _) =>
         {
             _app.PreferencesChanged -= SyncUi;
@@ -118,28 +120,30 @@ public partial class PreferencesWindow : VeliShellWindow
         AppearancePage.Visibility = page == 0 ? Visibility.Visible : Visibility.Collapsed;
         DockPage.Visibility = page == 1 ? Visibility.Visible : Visibility.Collapsed;
         AppsPage.Visibility = page == 2 ? Visibility.Visible : Visibility.Collapsed;
-        WindowsPage.Visibility = page == 3 ? Visibility.Visible : Visibility.Collapsed;
-        InfoPage.Visibility = page == 4 ? Visibility.Visible : Visibility.Collapsed;
+        OnlinePage.Visibility = page == 3 ? Visibility.Visible : Visibility.Collapsed;
+        WindowsPage.Visibility = page == 4 ? Visibility.Visible : Visibility.Collapsed;
+        InfoPage.Visibility = page == LastPage ? Visibility.Visible : Visibility.Collapsed;
         PageTitle.Text = page switch
         {
             1 => L("Nav.Dock"),
             2 => L("Nav.Apps"),
-            3 => L("Nav.Windows"),
-            4 => L("Nav.Info"),
+            3 => L("Nav.Online"),
+            4 => L("Nav.Windows"),
+            LastPage => L("Nav.Info"),
             _ => L("Nav.Appearance")
         };
         PageScroll.ScrollToTop();
         if (page == 2) RenderRunningIcons();
-        if (page == 4) UpdateDiagnostics();
+        if (page == LastPage) UpdateDiagnostics();
         if (_onboarding) UpdateOnboardingStep();
     }
     private void UpdateOnboardingStep()
     {
         OnboardingStep.Text = string.Format(LocalizationService.Current.ActiveCulture,
-            L("Onboarding.Step"), _currentPage + 1, 5, PageTitle.Text);
+            L("Onboarding.Step"), _currentPage + 1, LastPage + 1, PageTitle.Text);
         OnboardingExplanation.Text = L($"Onboarding.Explain{_currentPage}");
         OnboardingBack.IsEnabled = _currentPage > 0;
-        OnboardingNext.Content = L(_currentPage == 4 ? "Onboarding.Finish" : "Onboarding.Next");
+        OnboardingNext.Content = L(_currentPage == LastPage ? "Onboarding.Finish" : "Onboarding.Next");
     }
 
     private void OnboardingBack_Click(object sender, RoutedEventArgs e)
@@ -149,10 +153,16 @@ public partial class PreferencesWindow : VeliShellWindow
 
     private void OnboardingNext_Click(object sender, RoutedEventArgs e)
     {
-        if (_currentPage < 4) { ShowPage(_currentPage + 1); return; }
+        if (_currentPage == 3 &&
+            (!SavePendingKey(UserApiCredentials.BraveSearch, BraveKeyBox) ||
+             !SavePendingKey(UserApiCredentials.MacOsIcons, MacOsIconsKeyBox))) return;
+        if (_currentPage < LastPage) { ShowPage(_currentPage + 1); return; }
         _app.CompleteOnboarding();
         Close();
     }
+
+    private bool SavePendingKey(string target, PasswordBox box) =>
+        box.Password.Length == 0 || SaveApiKey(target, box);
     private void Navigation_Checked(object sender, RoutedEventArgs e)
     {
         if (!_loading && sender is RadioButton { Tag: string value } && int.TryParse(value, out var page)) ShowPage(page);
@@ -402,22 +412,24 @@ public partial class PreferencesWindow : VeliShellWindow
             var applied = 0;
             var noMatch = 0;
             var failed = 0;
+            var canceled = false;
+            var windows = await Task.Run(WindowCatalog.Read);
             string? firstError = null;
             foreach (var pin in pins)
             {
-                var result = await ChooseOnlineIconForPinAsync(pin);
+                var result = await ChooseOnlineIconForPinAsync(pin, allowSkip: true, windows: windows);
                 switch (result)
                 {
                     case IconChoiceResult.Applied: applied++; break;
+                    case IconChoiceResult.Skipped: noMatch++; break;
                     case IconChoiceResult.NoMatch: noMatch++; break;
                     case IconChoiceResult.Failed: failed++; firstError ??= OnlineIconStatus.Text; break;
-                    case IconChoiceResult.Canceled:
-                        noMatch += pins.Count - applied - noMatch - failed;
-                        break;
+                    case IconChoiceResult.Canceled: canceled = true; break;
                 }
                 if (result == IconChoiceResult.Canceled) break;
             }
-            OnlineIconStatus.Text = string.Format(LocalizationService.Current.ActiveCulture,
+            OnlineIconStatus.Text = (canceled ? L("Apps.SearchCanceled") + " " : "") +
+                string.Format(LocalizationService.Current.ActiveCulture,
                 L("Apps.SearchResult"), applied, noMatch, failed) +
                 (failed > 0 && !string.IsNullOrWhiteSpace(firstError) ? " " + firstError : "");
             RenderPins();
@@ -435,7 +447,9 @@ public partial class PreferencesWindow : VeliShellWindow
 
     private async Task<IconChoiceResult> ChooseOnlineIconForPinAsync(
         Pin pin,
-        Action<Settings, IconReference>? applyOverride = null)
+        Action<Settings, IconReference>? applyOverride = null,
+        bool allowSkip = false,
+        IReadOnlyList<NativeWindow>? windows = null)
     {
         if (!EnsureOnlineIconConsent()) return IconChoiceResult.Canceled;
         if (_app.Preferences.IconStyle != DockIconStyle.Mac)
@@ -443,36 +457,107 @@ public partial class PreferencesWindow : VeliShellWindow
             OnlineIconStatus.Text = L("Apps.OnlineRequiresMacStyle");
             return IconChoiceResult.Failed;
         }
-        var plan = MacOsIconSearchCatalog.CreatePlans(pin).FirstOrDefault();
-        if (plan is null) return IconChoiceResult.NoMatch;
+        windows ??= await Task.Run(WindowCatalog.Read);
+        var queries = IconSearchQueries.ForPin(pin, windows);
+        if (queries.Count == 0) return IconChoiceResult.NoMatch;
         return await ChooseOnlineIconAsync(
             LocalizationService.Current.DisplayPinName(pin),
-            plan.ExactName,
+            queries,
             applyOverride ?? ((settings, icon) =>
             {
                 var index = settings.Pins.FindIndex(item =>
                     string.Equals(item.Id, pin.Id, StringComparison.OrdinalIgnoreCase));
                 if (index >= 0) settings.Pins[index] = settings.Pins[index] with { Icon = icon };
-            }));
+            }), allowSkip, pin);
     }
 
     private async Task<IconChoiceResult> ChooseOnlineIconAsync(
         string displayName,
         string query,
-        Action<Settings, IconReference> apply)
+        Action<Settings, IconReference> apply) =>
+        await ChooseOnlineIconAsync(displayName, [query], apply, allowSkip: false);
+
+    private async Task<IconChoiceResult> ChooseOnlineIconAsync(
+        string displayName,
+        IReadOnlyList<string> queries,
+        Action<Settings, IconReference> apply,
+        bool allowSkip,
+        Pin? fallbackPin = null)
     {
         try
         {
             OnlineIconStatus.Text = string.Format(LocalizationService.Current.ActiveCulture,
                 L("Apps.SearchingOne"), displayName);
-            var hits = await AppStoreIconService.SearchAsync(query);
-            if (hits.Count == 0) return IconChoiceResult.NoMatch;
+            var searchErrors = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+            var searches = queries.Select(async query =>
+            {
+                try { return await AppStoreIconService.SearchAsync(query); }
+                catch (AppStoreIconServiceException exception)
+                {
+                    searchErrors.Enqueue(exception);
+                    return Array.Empty<AppStoreIconSearchHit>();
+                }
+            });
+            var macSearches = UserApiCredentials.Read(UserApiCredentials.MacOsIcons) is null
+                ? Array.Empty<Task<IReadOnlyList<AppStoreIconSearchHit>>>()
+                : queries.Take(4).Select(async query =>
+                {
+                    try { return await MacOsIconsApiService.SearchAsync(query); }
+                    catch (Exception exception) when (exception is HttpRequestException or IOException or
+                                                      InvalidDataException or
+                                                      System.Text.Json.JsonException)
+                    {
+                        App.Log("macOSicons search is unavailable", exception);
+                        searchErrors.Enqueue(exception);
+                        return Array.Empty<AppStoreIconSearchHit>();
+                    }
+                }).ToArray();
+            var hits = (await Task.WhenAll(searches.Concat(macSearches)))
+                .SelectMany(result => result)
+                .DistinctBy(hit => hit.Provider + ":" + hit.PreviewUrl.AbsoluteUri,
+                    StringComparer.Ordinal).Take(40).ToArray();
+            if (hits.Length == 0)
+            {
+                if (!searchErrors.IsEmpty)
+                {
+                    OnlineIconStatus.Text = L("Apps.SearchProviderFailed");
+                    return IconChoiceResult.Failed;
+                }
+                if (fallbackPin is null ||
+                    UserApiCredentials.Read(UserApiCredentials.MacOsIcons) is null)
+                    return IconChoiceResult.NoMatch;
+                var answer = MessageBox.Show(this,
+                    string.Format(LocalizationService.Current.ActiveCulture,
+                        L("Apps.MaskFallbackQuestion"), displayName),
+                    L("Apps.MaskFallbackTitle"), MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+                if (answer == MessageBoxResult.Cancel) return IconChoiceResult.Canceled;
+                if (answer == MessageBoxResult.No)
+                    return allowSkip ? IconChoiceResult.Skipped : IconChoiceResult.NoMatch;
+                try
+                {
+                    var icon = await MacOsIconsMaskService.MaskAsync(fallbackPin);
+                    _app.UpdatePreferences(settings => apply(settings, icon));
+                    return IconChoiceResult.Applied;
+                }
+                catch (Exception exception) when (exception is HttpRequestException or IOException or
+                                                  InvalidDataException or InvalidOperationException or
+                                                  NotSupportedException)
+                {
+                    App.Log("macOSicons mask generation failed", exception);
+                    OnlineIconStatus.Text = L("Apps.MaskFailed");
+                    return IconChoiceResult.Failed;
+                }
+            }
             var picker = new IconPickerWindow(
-                displayName, query, hits) { Owner = this };
-            if (picker.ShowDialog() != true || picker.SelectedHit is null) return IconChoiceResult.Canceled;
+                displayName, string.Join(" · ", queries), hits, allowSkip) { Owner = this };
+            if (picker.ShowDialog() != true || picker.SelectedHit is null)
+                return picker.Skipped ? IconChoiceResult.Skipped : IconChoiceResult.Canceled;
 
             OnlineIconStatus.Text = L("Apps.DownloadingSelection");
-            var download = await AppStoreIconService.DownloadAsync(picker.SelectedHit);
+            var download = picker.SelectedHit.Provider == MacOsIconsApiService.Provider
+                ? await MacOsIconsApiService.DownloadAsync(picker.SelectedHit)
+                : await AppStoreIconService.DownloadAsync(picker.SelectedHit);
             if (download.Icon is null)
             {
                 OnlineIconStatus.Text = download.Error ?? L("ItunesSearch.UnsafeImage");
@@ -492,8 +577,8 @@ public partial class PreferencesWindow : VeliShellWindow
         }
         catch (Exception ex)
         {
-            App.Log("Apple iTunes Search icon picker failed", ex);
-            OnlineIconStatus.Text = L("ItunesSearch.Unavailable");
+            App.Log("Online icon picker failed", ex);
+            OnlineIconStatus.Text = L("Apps.SearchProviderFailed");
             return IconChoiceResult.Failed;
         }
     }
@@ -514,7 +599,68 @@ public partial class PreferencesWindow : VeliShellWindow
         LaunchService.Open(
             "https://performance-partners.apple.com/resources/documentation/itunes-store-web-service-search-api/");
 
-    private enum IconChoiceResult { Applied, NoMatch, Failed, Canceled }
+    private void OpenBraveApi_Click(object sender, RoutedEventArgs e) =>
+        LaunchService.Open("https://api-dashboard.search.brave.com/documentation/quickstart");
+
+    private void OpenMacOsIconsApi_Click(object sender, RoutedEventArgs e) =>
+        LaunchService.Open("https://macosicons.com/developers");
+
+    private void UpdateApiKeyStatus()
+    {
+        try
+        {
+            BraveKeyStatus.Text = L(UserApiCredentials.Read(UserApiCredentials.BraveSearch) is null
+                ? "Common.KeyMissing" : "Common.KeyStored");
+            MacOsIconsKeyStatus.Text = L(UserApiCredentials.Read(UserApiCredentials.MacOsIcons) is null
+                ? "Common.KeyMissing" : "Common.KeyStored");
+        }
+        catch (Exception exception)
+        {
+            App.Log("Could not read API credential status", exception);
+            BraveKeyStatus.Text = MacOsIconsKeyStatus.Text = L("Common.KeyError");
+        }
+    }
+
+    private void SaveBraveKey_Click(object sender, RoutedEventArgs e) =>
+        SaveApiKey(UserApiCredentials.BraveSearch, BraveKeyBox);
+    private void SaveMacOsIconsKey_Click(object sender, RoutedEventArgs e) =>
+        SaveApiKey(UserApiCredentials.MacOsIcons, MacOsIconsKeyBox);
+    private void RemoveBraveKey_Click(object sender, RoutedEventArgs e) =>
+        RemoveApiKey(UserApiCredentials.BraveSearch);
+    private void RemoveMacOsIconsKey_Click(object sender, RoutedEventArgs e) =>
+        RemoveApiKey(UserApiCredentials.MacOsIcons);
+
+    private bool SaveApiKey(string target, PasswordBox box)
+    {
+        try
+        {
+            UserApiCredentials.Save(target, box.Password);
+            box.Clear();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            App.Log("Could not save a user API credential", exception);
+            MessageBox.Show(this, L("Common.KeyError"), L("Common.ErrorTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+        finally { UpdateApiKeyStatus(); }
+    }
+
+    private void RemoveApiKey(string target)
+    {
+        try { UserApiCredentials.Delete(target); }
+        catch (Exception exception)
+        {
+            App.Log("Could not remove a user API credential", exception);
+            MessageBox.Show(this, L("Common.KeyError"), L("Common.ErrorTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        UpdateApiKeyStatus();
+    }
+
+    private enum IconChoiceResult { Applied, Skipped, NoMatch, Failed, Canceled }
     private void OpenLocalLicenses_Click(object sender, RoutedEventArgs e)
     {
         var localDirectory = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-LICENSES");

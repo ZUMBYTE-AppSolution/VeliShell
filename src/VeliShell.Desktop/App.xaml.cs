@@ -26,6 +26,7 @@ public partial class App : Application
     private readonly SemaphoreSlim _shellLayoutGate = new(1, 1);
     private int _emergencyRestoreRequests;
     private readonly GitHubReleaseUpdateService _updates = new();
+    internal SearchCatalogIndex ProgramIndex { get; } = new();
     private UpdateWindow? _updateWindow;
     private SemanticVersion? _lastOfferedVersion;
     public static string DataDirectory => Path.Combine(
@@ -93,6 +94,7 @@ public partial class App : Application
         Store = new SettingsStore(DataDirectory);
         Preferences = Store.Load();
         LocalizationService.Current.Apply(Preferences.Language);
+        ProgramIndex.Start();
         if (Store.LoadWarning is not null) Log(Store.LoadWarning);
         Themes = new ThemeService();
         Themes.Apply(Preferences.Appearance);
@@ -702,6 +704,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        ProgramIndex.Dispose();
         _saveTimer?.Stop();
         _updateTimer?.Stop();
         _shutdown.Cancel();

@@ -62,6 +62,15 @@ internal static class IconService
         return BuiltIn("app");
     }
 
+    internal static ImageSource? ForOriginalWindowsIcon(string id, string target)
+    {
+        var path = ResolveShellTarget(id, target, DockIconStyle.Windows);
+        if (string.IsNullOrWhiteSpace(path) ||
+            !(path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) ||
+              File.Exists(path))) return null;
+        return ShellImage(path, 512) ?? LegacyShellIcon(path);
+    }
+
     private static DockIconStyle CurrentIconStyle()
     {
         try

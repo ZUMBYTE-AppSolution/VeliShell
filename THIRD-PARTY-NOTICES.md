@@ -31,9 +31,11 @@ Teil der laufenden VeliShell-Anwendung installiert.
 
 ## Apple iTunes Search API und App-Store-Inhalte
 
-Die optionale Online-Suche verwendet ausschließlich nach einem ausdrücklichen Klick
+Die optionale Online-Suche verwendet nach einem ausdrücklichen Klick
 die dokumentierte Apple iTunes Search API. Dafür ist kein API-Schlüssel erforderlich.
-Der Suchbegriff und ein aus der Windows-Region abgeleiteter Ländercode werden an
+Dabei können der App-Name, der Name der ausführbaren Datei, der Verknüpfungsname
+und passende Fenstertitel als Suchbegriffe verwendet werden. Sie und ein aus der
+Windows-Region abgeleiteter Ländercode werden an
 `itunes.apple.com` übertragen; Vorschaubilder kommen von Apples `mzstatic.com`-CDN.
 VeliShell zeigt mehrere Treffer mit Anbieter und direktem App-Store-Link. Es wählt
 keinen Treffer automatisch aus. Nur das ausdrücklich gewählte Bild wird zusammen
@@ -52,11 +54,33 @@ zur Verfügung.
 - Apple-Bedingungen für Promo-Inhalte: <https://www.apple.com/legal/internet-services/itunes/>
 - Apple Design Resources License: <https://developer.apple.com/support/downloads/terms/apple-design-resources/Apple-Design-Resources-License-20230621-English.pdf>
 
-Bereits mit einer älteren VeliShell-Version heruntergeladene macOSicons.com-Dateien
-bleiben aus dem vorhandenen lokalen Cache lesbar. VeliShell sendet keine neuen
-Anfragen an diesen Anbieter und speichert oder verwendet dafür keinen API-Schlüssel
-mehr. Die alten Bilder bleiben Eigentum ihrer jeweiligen Ersteller und unterliegen
-deren Bedingungen.
+## macOSicons.com und optionales Masking
+
+Mit einem eigenen, im Windows-Anmeldeinformationsmanager gespeicherten API-Schlüssel
+zeigt VeliShell zusätzlich Treffer von macOSicons.com. Ein gemeinsamer Schlüssel wird
+weder eingebettet noch im Repository gespeichert. Quelle und zurückgegebene
+Urheberangaben bleiben bei den Treffern und übernommenen Symbolen sichtbar.
+Ausgewählte Katalogbilder werden höchstens 30 Tage lokal vorgehalten. Schon mit einer
+älteren VeliShell-Version heruntergeladene Bilder bleiben über den alten Cache lesbar.
+
+Wenn beide Suchen keinen Treffer liefern, kann der Nutzer das vorhandene Windows-
+App-Symbol nach einer **gesonderten Bestätigung** an die Editor-Masking-API senden.
+Ohne diese Bestätigung findet kein Bild-Upload statt. Für Ordner und Papierkorb wird
+kein App-Masking angeboten. Nutzer müssen die Rechte am Ausgangsbild beachten.
+
+- API und Editor: <https://macosicons.com/developers>
+- API-Bedingungen: <https://beta.macosicons.com/developers/terms>
+- Allgemeine Bedingungen: <https://macosicons.com/terms>
+
+## Brave Search API
+
+Live-Webtreffer in der VeliShell-Suche sind optional und benötigen den eigenen
+Brave-Search-API-Schlüssel des Nutzers im Windows-Anmeldeinformationsmanager.
+Nach einer kurzen Tipp-Pause wird der Suchbegriff an Brave übertragen; ohne Schlüssel
+bleibt nur die Websuche im Browser nach einem ausdrücklichen Klick. Es wird kein
+gemeinsamer Schlüssel eingebettet oder mitgeliefert.
+
+- API-Dokumentation: <https://api-dashboard.search.brave.com/documentation/services/web-search>
 
 ## macOS-Systemsymbole und Papierkorb-Grafiken
 

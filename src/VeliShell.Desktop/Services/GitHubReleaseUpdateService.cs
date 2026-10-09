@@ -443,6 +443,36 @@ public sealed class GitHubReleaseUpdateService : IDisposable
         bool userConfirmedInstall,
         bool userAcceptedUnsignedPublisherWarning)
     {
+        ValidateInstallerStart(package, userConfirmedInstall, userAcceptedUnsignedPublisherWarning);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = package.FilePath,
+            UseShellExecute = true
+        });
+    }
+
+    internal static void StartVerifiedInstallerWithRestart(
+        VerifiedUpdatePackage package,
+        bool userConfirmedInstall,
+        bool userAcceptedUnsignedPublisherWarning)
+    {
+        ValidateInstallerStart(package, userConfirmedInstall, userAcceptedUnsignedPublisherWarning);
+        using (var stream = File.OpenRead(package.FilePath))
+        {
+            var actual = Convert.ToHexString(SHA256.HashData(stream));
+            if (!string.Equals(actual, package.Release.Installer.Sha256, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(actual, package.Verification.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new UpdateSecurityException("The installer changed after download verification.");
+        }
+        UpdateRestartService.Start(package);
+    }
+
+    private static void ValidateInstallerStart(
+        VerifiedUpdatePackage package,
+        bool userConfirmedInstall,
+        bool userAcceptedUnsignedPublisherWarning)
+    {
         ArgumentNullException.ThrowIfNull(package);
         if (!userConfirmedInstall)
             throw new InvalidOperationException("Starting the installer requires a separate user confirmation.");
@@ -457,11 +487,6 @@ public sealed class GitHubReleaseUpdateService : IDisposable
         if (!File.Exists(package.FilePath))
             throw new FileNotFoundException("The verified installer no longer exists.", package.FilePath);
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = package.FilePath,
-            UseShellExecute = true
-        });
     }
 
     internal static UpdateRelease ParseRelease(ReadOnlySpan<byte> utf8Json)

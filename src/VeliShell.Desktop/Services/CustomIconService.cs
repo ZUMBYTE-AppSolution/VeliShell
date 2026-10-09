@@ -98,6 +98,19 @@ internal static class CustomIconService
         return new IconReference(Provider, hash, FormatVersion, hash);
     }
 
+    internal static IconReference ImportPng(byte[] png)
+    {
+        if (png.Length == 0 || png.LongLength > MaximumSourceBytes)
+            throw new InvalidDataException("The generated PNG is too large.");
+        var bitmap = DecodeStoredPng(png);
+        var hash = Convert.ToHexString(SHA256.HashData(png)).ToLowerInvariant();
+        var root = EnsureStorageDirectory();
+        var destination = Path.Combine(root, hash + ".png");
+        if (!StoredFileMatches(destination, hash)) WriteAtomically(root, destination, png);
+        MemoryCache[hash] = bitmap;
+        return new IconReference(Provider, hash, FormatVersion, hash);
+    }
+
     internal static ImageSource? TryLoad(IconReference? reference)
     {
         if (!IsValidReference(reference)) return null;

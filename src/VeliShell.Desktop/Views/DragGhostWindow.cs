@@ -16,7 +16,10 @@ internal sealed class DragGhostWindow : Window, IDisposable
     private bool _disposed;
     private bool _snapped;
 
-    internal DragGhostWindow(Window owner, ImageSource source, double iconSize)
+    internal DragGhostWindow(Window owner, ImageSource source, double iconSize) :
+        this(owner, source, iconSize, freeform: false) { }
+
+    internal DragGhostWindow(Window owner, ImageSource source, double iconSize, bool freeform)
     {
         Owner = owner;
         Title = LocalizationService.Current.Get("Product.Name");
@@ -38,7 +41,7 @@ internal sealed class DragGhostWindow : Window, IDisposable
         Height = size + 20;
         Opacity = 0.72;
 
-        var iconSurface = new AppIconSurface(source, size);
+        var iconSurface = new AppIconSurface(source, size, freeform);
 
         var shadowHost = new Grid
         {

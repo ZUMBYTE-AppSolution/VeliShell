@@ -1,9 +1,10 @@
 using System.IO;
+using Microsoft.Win32;
 using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
 
-internal sealed record SearchEntry(string Name, string Target, string Category);
+internal sealed record SearchEntry(string Name, string Target, string Category, string? Description = null);
 
 internal static class SearchCatalogService
 {
@@ -51,7 +52,80 @@ internal static class SearchCatalogService
                 }
             }
         }
+        // App Paths covers installed desktop programs without traversing all of
+        // Program Files. Start-menu shortcuts above also include packaged apps.
+        foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            if (results.Count >= MaximumEntries) break;
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                using var appPaths = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths");
+                if (appPaths is null) continue;
+                foreach (var subkeyName in appPaths.GetSubKeyNames())
+                {
+                    if (results.Count >= MaximumEntries) break;
+                    using var entry = appPaths.OpenSubKey(subkeyName);
+                    var path = (entry?.GetValue("") as string)?.Trim().Trim('"');
+                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path) ||
+                        !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                    var name = Path.GetFileNameWithoutExtension(subkeyName);
+                    if (!seen.Add(name)) continue;
+                    results.Add(new SearchEntry(name, path, "app"));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                               System.Security.SecurityException)
+            {
+                // Registry permissions or a changing installation cannot stop search.
+            }
+        }
+        // Some desktop applications register only their installed-program
+        // entry. Include those only when DisplayIcon names a real executable,
+        // never an uninstall command or a guessed path.
+        foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            if (results.Count >= MaximumEntries) break;
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                using var installed = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+                if (installed is null) continue;
+                foreach (var subkeyName in installed.GetSubKeyNames())
+                {
+                    if (results.Count >= MaximumEntries) break;
+                    using var entry = installed.OpenSubKey(subkeyName);
+                    var name = (entry?.GetValue("DisplayName") as string)?.Trim();
+                    var path = ParseDisplayIconExecutable(entry?.GetValue("DisplayIcon") as string);
+                    if (string.IsNullOrWhiteSpace(name) || name.Length > 140 ||
+                        path is null || !seen.Add(name)) continue;
+                    results.Add(new SearchEntry(name, path, "app"));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                               System.Security.SecurityException)
+            {
+                // Inaccessible/uninstalling entries are simply excluded.
+            }
+        }
         return results;
+    }
+
+    private static string? ParseDisplayIconExecutable(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return null;
+        icon = Environment.ExpandEnvironmentVariables(icon.Trim());
+        var path = icon.StartsWith('"')
+            ? icon[1..].Split('"', 2)[0]
+            : icon[..Math.Max(0, icon.LastIndexOf(".exe", StringComparison.OrdinalIgnoreCase) + 4)];
+        if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(path))
+            return null;
+        var executable = Path.GetFileNameWithoutExtension(path);
+        if (executable.StartsWith("unins", StringComparison.OrdinalIgnoreCase) ||
+            executable.Contains("uninstall", StringComparison.OrdinalIgnoreCase)) return null;
+        return path;
     }
 
     internal static IReadOnlyList<SearchEntry> Match(

@@ -6,6 +6,25 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-09
+
+### Neu
+
+- Die Ersteinrichtung führt jetzt in sechs Schritten durch alle Bereiche. Ein eigener Schritt „Online-Dienste“ erklärt die persönlichen Brave- und macOSicons-API-Schlüssel, verlinkt die Anbieter und erlaubt die direkte, geschützte Eingabe. Beide Schlüssel sind freiwillig und bleiben im Windows-Anmeldeinformationsmanager des jeweiligen Benutzers.
+- Die Sofortsuche berücksichtigt neben Dock-Pins auch Startmenü-Einträge, registrierte Programme und geöffnete Apps. Ein schlanker Hintergrundkatalog hält diese Treffer bereit. Mit eigenem Brave-Schlüssel erscheinen nach kurzer Tipp-Pause Live-Webtreffer; ohne Schlüssel bleibt die Websuche per Browser-Klick erhalten.
+- Die manuelle Symbolsuche verwendet Programmdatei, Fenstertitel und Verknüpfungsnamen als Suchbegriffe und vereint Treffer aus dem Mac App Store und optional macOSicons. Für jede App kann ein Symbol gewählt oder zum nächsten Eintrag gesprungen werden.
+- Falls keine Katalogauswahl passt, kann das vorhandene Windows-App-Symbol nach gesonderter Bestätigung über das macOSicons-Masking angepasst werden. Ordner- und Papierkorbsymbole bleiben davon ausgenommen und behalten ihre freie Form.
+
+### Verbessert
+
+- Der Update-Dialog zeigt Version und Changelog vor dem Herunterladen, danach einen detaillierten Fortschritt und eine eigene Nachfrage vor der Installation. Nach dem MSI-Abschluss versucht VeliShell automatisch neu zu starten; ein abgebrochener Installer lässt die bisherige Version wieder starten.
+- Online-Symbol- und Webanfragen sind begrenzt und werden nur für die jeweils aktivierte Funktion ausgelöst. macOSicons-Vorschauen und -Downloads bleiben höchstens 30 Tage im lokalen Cache.
+
+### Hinweise
+
+- Brave- und macOSicons-Schlüssel gehören dem jeweiligen Benutzer; mögliche Tarife, Limits und Kosten legt der Anbieter fest. Apple-App-Store-Suche und lokale Programmsuche benötigen keinen Schlüssel.
+- Das Mitlesen fremder Windows-Mitteilungen bleibt in MSI und Portable ohne Windows-Paketidentität nicht verfügbar. Die Store-Version benötigt dafür weiterhin die Genehmigung der deklarierten Berechtigung.
+
 ## [0.7.0] - 2026-10-09
 
 ### Neu
@@ -159,7 +178,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.5.0

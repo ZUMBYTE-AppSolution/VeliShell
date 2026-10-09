@@ -128,8 +128,8 @@ public sealed class Settings
 
     private static IconReference? NormalizeIcon(IconReference? icon)
     {
-        // Current App Store selections and already-downloaded macOSicons cache
-        // entries remain readable. The legacy provider has no network path.
+        // Current App Store and macOSicons selections and legacy cache entries
+        // remain readable. The legacy cache itself has no network path.
         if (icon is null) return null;
         var isAppStore = string.Equals(icon.Provider, ItunesSearchApi.ProviderId, StringComparison.Ordinal);
         var isLegacyMacOsIcons = string.Equals(icon.Provider, "macosicons", StringComparison.Ordinal);

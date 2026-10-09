@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using VeliShell.Desktop.Controls;
@@ -16,6 +17,8 @@ public partial class UpdateWindow : VeliShellWindow
     private bool _downloading;
     private bool _verifying;
     private int _downloadPercent;
+    private double _downloadMiB;
+    private double _downloadSpeed;
 
     private static string L(string key) => LocalizationService.Current.Get(key);
     private static string LF(string key, params object[] args) =>
@@ -85,12 +88,17 @@ public partial class UpdateWindow : VeliShellWindow
 
         try
         {
+            var watch = Stopwatch.StartNew();
             var progress = new Progress<double>(value =>
             {
                 var percent = Math.Clamp((int)Math.Round(value * 100), 0, 100);
                 _downloadPercent = percent;
+                _downloadMiB = Math.Clamp(value, 0, 1) * _release.Installer.Size / 1048576d;
+                _downloadSpeed = watch.Elapsed.TotalSeconds < 0.5 ? 0 :
+                    _downloadMiB / watch.Elapsed.TotalSeconds;
                 DownloadProgress.Value = percent;
-                ProgressText.Text = LF("Update.Downloading", percent);
+                ProgressText.Text = LF("Update.DownloadDetail", percent, _downloadMiB,
+                    _release.Installer.Size / 1048576d, _downloadSpeed);
             });
             var directory = Path.Combine(App.DataDirectory, "updates", "v" + _release.Version);
             _package = await _updates.DownloadInstallerAsync(
@@ -180,7 +188,8 @@ public partial class UpdateWindow : VeliShellWindow
             PrimaryButton.Content = L("Update.CancelDownload");
             ProgressText.Text = _verifying
                 ? L("Update.Verifying")
-                : LF("Update.Downloading", _downloadPercent);
+                : LF("Update.DownloadDetail", _downloadPercent, _downloadMiB,
+                    _release.Installer.Size / 1048576d, _downloadSpeed);
         }
         else
         {
@@ -193,9 +202,12 @@ public partial class UpdateWindow : VeliShellWindow
         if (_package is null) return;
         var acceptedUnsigned = _package.Verification.Authenticode == AuthenticodeStatus.Valid ||
                                UnsignedAcknowledgement.IsChecked == true;
+        if (MessageBox.Show(this, LF("Update.InstallConfirm", _release.Version),
+                L("Update.ReadyTitle"), MessageBoxButton.YesNo, MessageBoxImage.Question) !=
+            MessageBoxResult.Yes) return;
         try
         {
-            GitHubReleaseUpdateService.StartVerifiedInstaller(
+            GitHubReleaseUpdateService.StartVerifiedInstallerWithRestart(
                 _package,
                 userConfirmedInstall: true,
                 userAcceptedUnsignedPublisherWarning: acceptedUnsigned);
