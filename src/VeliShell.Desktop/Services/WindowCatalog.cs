@@ -8,7 +8,7 @@ namespace VeliShell.Desktop.Services;
 
 internal sealed record NativeWindow(
     nint Handle, string Title, string Executable, string ProcessName,
-    string? AppUserModelId = null, WebAppShortcut? WebApp = null);
+    string? AppUserModelId = null, WebAppShortcut? WebApp = null, int ProcessId = 0);
 
 internal static class WindowCatalog
 {
@@ -46,7 +46,7 @@ internal static class WindowCatalog
                 }
                 var appId = IsBrowserProcess(processName) ? ReadWindowAppId(hwnd) : null;
                 result.Add(new NativeWindow(hwnd, title.ToString(), path, processName,
-                    appId, WebAppCatalog.Match(appId)));
+                    appId, WebAppCatalog.Match(appId), checked((int)pid)));
             }
             catch (Exception) { /* A process may exit while it is being enumerated. */ }
             return true;
@@ -100,7 +100,7 @@ internal static class WindowCatalog
         return helperPath;
     }
 
-    private static string GetProcessPath(uint pid)
+    internal static string GetProcessPath(uint pid)
     {
         var process = NativeMethods.OpenProcess(0x1000, false, pid);
         if (process == 0) return "";

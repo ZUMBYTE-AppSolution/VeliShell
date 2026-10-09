@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using VeliShell.Desktop.Services;
 
 internal static class Program
 {
@@ -92,6 +93,7 @@ internal static class Program
             TestVeliShellAssetSurface();
             TestDockIconCustomizationContract();
             TestWebAppAndSteamIdentityContracts();
+            TestBackgroundAppTracking();
             TestFolderPopoverAndDesktopIconContracts();
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
@@ -101,6 +103,9 @@ internal static class Program
             RenderIconSurfaceContactSheet(iconSurfacesPath);
             var trashSurfacesPath = Path.Combine(AppContext.BaseDirectory, "trash-surfaces.png");
             RenderTrashSurfaceContactSheet(trashSurfacesPath);
+            TestSteamIconDesaturation();
+            var steamStatusPath = Path.Combine(AppContext.BaseDirectory, "steam-status-light-dark.png");
+            var hasSteamIconSample = RenderInstalledSteamStatusIcon(steamStatusPath);
             Console.WriteLine("PASS: DWM thumbnail registered, hidden and released cleanly across 12 cycles.");
             Console.WriteLine("PASS: Drag ghost snapped/followed/disposed at 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock drag-out carries no FileDrop/shortcut payload; feedback, drop and removal share the visible dock-plate boundary while internal reorder/external file-drop inputs remain available.");
@@ -110,12 +115,16 @@ internal static class Program
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
             Console.WriteLine("PASS: Browser app shortcuts retain per-site identity; Steam web helpers map only to their own Steam installation; live web API search is absent.");
+            Console.WriteLine("PASS: Only previously visible same-session app processes appear after their last window closes; process exit, PID reuse, shell hosts, and Steam stay filtered.");
             Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
             Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             Console.WriteLine($"PASS: Rendered aligned freeform empty/full Recycle Bin surfaces to {trashSurfacesPath}");
+            Console.WriteLine(hasSteamIconSample
+                ? $"PASS: Rendered the installed Steam icon, desaturated for light and dark menu bars, to {steamStatusPath}"
+                : "PASS: Steam icon conversion checked; no installed Steam icon available for a visual sample.");
             return 0;
         }
         catch (Exception exception)
@@ -1814,6 +1823,62 @@ internal static class Program
         encoder.Save(stream);
     }
 
+    private static void TestSteamIconDesaturation()
+    {
+        var sourcePixels = new byte[] { 220, 70, 20, 255, 255, 255, 255, 77 };
+        var source = BitmapSource.Create(2, 1, 96, 96, PixelFormats.Bgra32, null, sourcePixels, 8);
+        var convert = RequireMethod(RequireType("VeliShell.Desktop.Services.SteamIconService"), "Desaturate");
+        var result = (BitmapSource)convert.Invoke(null, [source])!;
+        var pixels = new byte[8];
+        result.CopyPixels(pixels, 8, 0);
+        Require(pixels[0] == pixels[1] && pixels[1] == pixels[2] && pixels[3] == 255 &&
+                pixels[4] == 255 && pixels[5] == 255 && pixels[6] == 255 && pixels[7] == 77 &&
+                sourcePixels[0] == 220,
+            "Steam artwork must keep its original alpha and shape while only removing color.");
+    }
+
+    private static bool RenderInstalledSteamStatusIcon(string path)
+    {
+        var steamService = RequireType("VeliShell.Desktop.Services.SteamClientService");
+        var running = RequireMethod(steamService, "ReadRunning").Invoke(null, null);
+        if (running is null) return false;
+        var executable = (string)running.GetType().GetProperty("Executable")!.GetValue(running)!;
+        var load = RequireMethod(RequireType("VeliShell.Desktop.Services.SteamIconService"), "FromExecutable");
+        if (load.Invoke(null, [executable]) is not BitmapSource icon) return false;
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Width = 160, Height = 80 };
+        foreach (var background in new[]
+        {
+            Color.FromRgb(235, 240, 250),
+            Color.FromRgb(26, 34, 53)
+        })
+        {
+            panel.Children.Add(new Border
+            {
+                Width = 80,
+                Height = 80,
+                Background = new SolidColorBrush(background),
+                Child = new Image
+                {
+                    Source = icon,
+                    Width = 17,
+                    Height = 17,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            });
+        }
+        panel.Measure(new Size(160, 80));
+        panel.Arrange(new Rect(0, 0, 160, 80));
+        panel.UpdateLayout();
+        var bitmap = new RenderTargetBitmap(640, 320, 384, 384, PixelFormats.Pbgra32);
+        bitmap.Render(panel);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(path);
+        encoder.Save(stream);
+        return true;
+    }
+
     private static void RenderIconSurfaceContactSheet(string path)
     {
         const int width = 410;
@@ -2030,6 +2095,72 @@ internal static class Program
         return pixels;
     }
 
+    private static void TestBackgroundAppTracking()
+    {
+        const int session = 7;
+        const int pid = 4242;
+        const string executable = @"C:\Apps\Example.exe";
+        var processes = new Dictionary<int, BackgroundProcessIdentity>
+        {
+            [pid] = new(pid, 100, session, executable)
+        };
+        var tracker = new BackgroundAppTracker(
+            id => processes.GetValueOrDefault(id), session);
+        var window = new NativeWindow((nint)1, "Example", executable, "Example", ProcessId: pid);
+
+        Require(tracker.Update([]).Count == 0,
+            "A process that never owned a visible window must not appear in the menu bar.");
+        Require(tracker.Update([window]).Count == 0,
+            "An app with an open window must not appear as a background app.");
+        var background = tracker.Update([]);
+        Require(background.Count == 1 && background[0].ProcessId == pid &&
+                background[0].Name == "Example" && tracker.IsStillRunning(background[0]),
+            "A previously visible app still running in this session must appear after its last window closes.");
+        Require(tracker.Update([window]).Count == 0,
+            "Reopening an app window must hide its background indicator.");
+        background = tracker.Update([]);
+        processes[pid] = new(pid, 101, session, executable);
+        Require(!tracker.IsStillRunning(background[0]) && tracker.Update([]).Count == 0,
+            "A reused process ID must not inherit the former app's indicator or click action.");
+        Require(tracker.Update([window]).Count == 0 && tracker.Update([]).Count == 1,
+            "A newly observed process with the same ID may appear only after owning a new visible window.");
+        const int secondPid = 4243;
+        processes[secondPid] = new(secondPid, 150, session, executable);
+        var secondWindow = window with { Handle = (nint)4, ProcessId = secondPid };
+        tracker.Update([window, secondWindow]);
+        Require(tracker.Update([window]).Count == 0,
+            "Another visible window of the same app must suppress its background-process indicator.");
+        Require(tracker.Update([]).Count == 1,
+            "Multiple background processes for one app must collapse to one menu-bar indicator.");
+        processes.Remove(secondPid);
+        processes.Remove(pid);
+        Require(tracker.Update([]).Count == 0,
+            "The indicator must disappear when its process exits.");
+
+        var ignored = new[] { "explorer.exe", "ApplicationFrameHost.exe", "RuntimeBroker.exe",
+            "steam.exe", "steamwebhelper.exe", "msedgewebview2.exe", "svchost.exe" };
+        foreach (var file in ignored)
+            Require(!BackgroundAppTracker.IsEligibleWindow(new NativeWindow(
+                    (nint)2, file, @"C:\Windows\" + file, Path.GetFileNameWithoutExtension(file),
+                    ProcessId: 5000)),
+                $"{file} must not become a generic background-app indicator.");
+
+        processes[pid] = new(pid, 102, session + 1, executable);
+        tracker.Update([window]);
+        Require(tracker.Update([]).Count == 0,
+            "A window from another Windows session must not create a background indicator.");
+
+        const int webPid = 5252;
+        const string browser = @"C:\Apps\chrome.exe";
+        processes[webPid] = new(webPid, 200, session, browser);
+        var webWindow = new NativeWindow((nint)3, "Gmail", browser, "chrome",
+            WebApp: new WebAppShortcut("Gmail", @"C:\Links\Gmail.lnk", "Chrome._crx_gmail"),
+            ProcessId: webPid);
+        tracker.Update([webWindow]);
+        Require(tracker.Update([]).Single().Name == "Gmail",
+            "A previously visible web app must retain its own name, not the browser's process name.");
+    }
+
     private static void TestWebAppAndSteamIdentityContracts()
     {
         var shortcutType = RequireType("VeliShell.Desktop.Services.ShellLinkService+ShortcutInfo");
@@ -2113,6 +2244,10 @@ internal static class Program
 
         var ownerMethod = RequireMethod(RequireType("VeliShell.Desktop.Services.WindowCatalog"),
             "SteamOwnerExecutable");
+        var steamService = RequireType("VeliShell.Desktop.Services.SteamClientService");
+        var steamClientType = RequireType("VeliShell.Desktop.Services.SteamClient");
+        var steamCommandType = RequireType("VeliShell.Desktop.Services.SteamClientCommand");
+        var createSteamStart = RequireMethod(steamService, "CreateStartInfo");
         var root = Path.Combine(Path.GetTempPath(), "VeliShellQa-" + Guid.NewGuid().ToString("N"));
         var steamRoot = Path.Combine(root, "Steam");
         var helper = Path.Combine(steamRoot, "bin", "cef", "steamwebhelper.exe");
@@ -2123,7 +2258,8 @@ internal static class Program
             Directory.CreateDirectory(Path.GetDirectoryName(helper)!);
             Directory.CreateDirectory(Path.GetDirectoryName(unrelated)!);
             Directory.CreateDirectory(Path.GetDirectoryName(gameHelper)!);
-            File.WriteAllBytes(Path.Combine(steamRoot, "steam.exe"), []);
+            var steamExecutable = Path.Combine(steamRoot, "steam.exe");
+            File.WriteAllBytes(steamExecutable, []);
             Require(string.Equals((string)ownerMethod.Invoke(null, [helper])!,
                     Path.Combine(steamRoot, "steam.exe"), StringComparison.OrdinalIgnoreCase),
                 "Steam's own web helper must join its Steam entry.");
@@ -2133,8 +2269,30 @@ internal static class Program
             Require(string.Equals((string)ownerMethod.Invoke(null, [gameHelper])!, gameHelper,
                     StringComparison.OrdinalIgnoreCase),
                 "A helper shipped inside a Steam game must not be merged with the Steam client.");
+            var client = Activator.CreateInstance(steamClientType, 123, steamExecutable)!;
+            foreach (var (command, uri) in new[]
+            {
+                ("Open", "steam://open/main"),
+                ("Settings", "steam://open/settings"),
+                ("Quit", "steam://exit")
+            })
+            {
+                var action = Enum.Parse(steamCommandType, command);
+                var start = (System.Diagnostics.ProcessStartInfo)createSteamStart.Invoke(null, [client, action])!;
+                Require(start.FileName == steamExecutable && !start.UseShellExecute &&
+                        start.ArgumentList.SequenceEqual(["--", uri]),
+                    "Steam menu commands must target the running installation directly, without shell associations or process termination.");
+            }
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+
+        var runningSteam = RequireMethod(steamService, "ReadRunning").Invoke(null, null);
+        if (runningSteam is not null)
+        {
+            var executable = (string)steamClientType.GetProperty("Executable")!.GetValue(runningSteam)!;
+            Require(Path.GetFileName(executable).Equals("steam.exe", StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(executable), "A background Steam process must be visible without a top-level window.");
+        }
 
         Require(DesktopAssembly.GetType("VeliShell.Desktop.Services.LiveWebSearchService") is null,
             "The removed live-web API client must not ship in the app.");

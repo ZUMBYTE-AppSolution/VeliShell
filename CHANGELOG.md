@@ -6,6 +6,13 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-09
+
+### Neu
+
+- Solange der Steam-Client im aktuellen Windows-Benutzerkontext läuft, zeigt die optionale Menüleiste das Symbol seiner installierten `steam.exe` in entsättigter Form – auch wenn Steam nur im Hintergrund aktiv ist. Ein Klick öffnet Steam; per Rechtsklick sind Öffnen, Einstellungen und ein ausdrücklich bestätigtes reguläres Beenden erreichbar. SteamWebHelper allein löst den Indikator nicht aus.
+- Die Menüleiste erkennt nun auch andere zuvor sichtbare Apps, deren letzter Fenstereintrag verschwindet, während derselbe Prozess weiterläuft. Sie zeigt deren echtes lokal installiertes Icon und fasst mehrere Prozesse derselben App zusammen. Windows-Shell-Hosts und Helferprozesse werden ausgeschlossen; nach Prozessende oder PID-Wiederverwendung verschwindet der Indikator.
+
 ## [0.9.0] - 2026-10-09
 
 ### Neu
@@ -190,7 +197,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...v0.7.0

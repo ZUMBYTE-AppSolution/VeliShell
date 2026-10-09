@@ -19,6 +19,7 @@
     <NeutralLanguage>de-DE</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../VeliShell.Core/VeliShell.Core.csproj" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="VeliShell.InteractionQa" /></ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\VeliShellApp.png" />
     <Resource Include="Assets\VeliShellMark.png" />

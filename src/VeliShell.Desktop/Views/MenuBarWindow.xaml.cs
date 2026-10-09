@@ -1,9 +1,11 @@
 using System.Net.NetworkInformation;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -25,6 +27,11 @@ public partial class MenuBarWindow : Window
     private readonly DispatcherTimer _windowTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(750) };
     private List<NativeWindow> _windows = [];
+    private readonly BackgroundAppTracker _backgroundApps = BackgroundAppTracker.ForCurrentSession();
+    private string _backgroundAppsSignature = "";
+    private bool _refreshInProgress;
+    private SteamClient? _steam;
+    private string? _steamIconPath;
     private NativeWindow? _activeWindow;
     private HwndSource? _source;
     private nint _handle;
@@ -93,6 +100,7 @@ public partial class MenuBarWindow : Window
     private void ApplyPreferences()
     {
         if (_closed) return;
+        _backgroundAppsSignature = "\0";
         Topmost = _app.Preferences.MenuBarAlwaysOnTop;
         if (_openPanel is not null) _openPanel.Topmost = Topmost;
         PositionBar();
@@ -134,12 +142,31 @@ public partial class MenuBarWindow : Window
 
     private async Task RefreshWindowsAsync()
     {
-        if (_closed) return;
+        if (_closed || _refreshInProgress) return;
+        _refreshInProgress = true;
         try
         {
-            var windows = await Task.Run(WindowCatalog.Read);
+            var (windows, steam, background) = await Task.Run(() =>
+            {
+                var windows = WindowCatalog.Read();
+                return (windows, SteamClientService.ReadRunning(), _backgroundApps.Update(windows));
+            });
             if (_closed) return;
             _windows = windows;
+            RenderBackgroundApps(background);
+            _steam = steam;
+            if (steam is null)
+            {
+                _steamIconPath = null;
+                SteamIcon.Source = null;
+            }
+            else if (!string.Equals(_steamIconPath, steam.Executable, StringComparison.OrdinalIgnoreCase))
+            {
+                _steamIconPath = steam.Executable;
+                SteamIcon.Source = SteamIconService.FromExecutable(steam.Executable);
+            }
+            SteamButton.Visibility = steam is not null && SteamIcon.Source is not null
+                ? Visibility.Visible : Visibility.Collapsed;
             var foreground = NativeMethods.GetForegroundWindow();
             _activeWindow = windows.FirstOrDefault(window => window.Handle == foreground);
             ActiveAppLabel.Text = _activeWindow is null
@@ -153,6 +180,91 @@ public partial class MenuBarWindow : Window
         {
             App.Log("Menu bar window enumeration failed", exception);
         }
+        finally { _refreshInProgress = false; }
+    }
+
+    private void RenderBackgroundApps(IReadOnlyList<BackgroundApp> apps)
+    {
+        const int maximumVisibleIcons = 6;
+        var signature = string.Join("|", apps.Select(app =>
+            $"{app.ProcessId}:{app.StartTimeUtcTicks}:{app.Name}:{app.IconTarget}"));
+        if (signature == _backgroundAppsSignature) return;
+        _backgroundAppsSignature = signature;
+        BackgroundAppsPanel.Children.Clear();
+        var overflow = new List<BackgroundApp>();
+        var visibleCount = 0;
+
+        foreach (var app in apps)
+        {
+            if (visibleCount >= maximumVisibleIcons)
+            {
+                overflow.Add(app);
+                continue;
+            }
+            try
+            {
+                // Use the actual installed app or web-app shortcut icon. No
+                // synthetic menu-bar artwork is generated or bundled.
+                var icon = IconService.ForOriginalWindowsIcon("app", app.IconTarget);
+                if (icon is null)
+                {
+                    overflow.Add(app);
+                    continue;
+                }
+                var button = new Button
+                {
+                    Style = (Style)FindResource("MenuBarButton"),
+                    Padding = new Thickness(6, 4, 6, 4),
+                    ToolTip = string.Format(LocalizationService.Current.ActiveCulture,
+                        L("MenuBar.BackgroundAppRunning"), app.Name),
+                    Content = new Image
+                    {
+                        Source = icon,
+                        Width = 17,
+                        Height = 17,
+                        Stretch = Stretch.Uniform,
+                        SnapsToDevicePixels = true
+                    }
+                };
+                RenderOptions.SetBitmapScalingMode((Image)button.Content, BitmapScalingMode.HighQuality);
+                System.Windows.Automation.AutomationProperties.SetName(button, app.Name);
+                button.Click += (_, _) => OpenBackgroundApp(app);
+                BackgroundAppsPanel.Children.Add(button);
+                visibleCount++;
+            }
+            catch (Exception exception)
+            {
+                App.Log("Could not show a background app icon", exception);
+                overflow.Add(app);
+            }
+        }
+
+        if (overflow.Count == 0) return;
+        var more = new Button
+        {
+            Style = (Style)FindResource("MenuBarButton"),
+            Content = $"+{overflow.Count}",
+            ToolTip = L("MenuBar.MoreBackgroundApps")
+        };
+        System.Windows.Automation.AutomationProperties.SetName(more, L("MenuBar.MoreBackgroundApps"));
+        more.Click += (_, _) =>
+        {
+            var menu = NewMenu(more);
+            foreach (var app in overflow)
+                Add(menu, app.Name, () => OpenBackgroundApp(app));
+            menu.IsOpen = true;
+        };
+        BackgroundAppsPanel.Children.Add(more);
+    }
+
+    private void OpenBackgroundApp(BackgroundApp app)
+    {
+        if (!_backgroundApps.IsStillRunning(app) || !File.Exists(app.LaunchTarget))
+        {
+            _ = RefreshWindowsAsync();
+            return;
+        }
+        LaunchService.Open(app.LaunchTarget);
     }
 
     private void UpdateClockAndIndicators()
@@ -254,6 +366,49 @@ public partial class MenuBarWindow : Window
     }
 
     private void Search_Click(object sender, RoutedEventArgs e) => _app.ShowSearch();
+
+    private void Steam_Click(object sender, RoutedEventArgs e) =>
+        SendSteamCommand(SteamClientCommand.Open);
+
+    private void Steam_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        ShowSteamMenu();
+    }
+
+    private void Steam_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        e.Handled = true;
+        ShowSteamMenu();
+    }
+
+    private void ShowSteamMenu()
+    {
+        if (_steam is null) return;
+        var menu = NewMenu(SteamButton);
+        Add(menu, L("MenuBar.SteamOpen"), () => SendSteamCommand(SteamClientCommand.Open));
+        Add(menu, L("MenuBar.SteamSettings"), () => SendSteamCommand(SteamClientCommand.Settings));
+        menu.Items.Add(new Separator());
+        Add(menu, L("MenuBar.SteamQuit"), () =>
+        {
+            if (MessageBox.Show(this, L("MenuBar.SteamQuitConfirm"), L("MenuBar.Steam"),
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                SendSteamCommand(SteamClientCommand.Quit);
+        });
+        menu.IsOpen = true;
+    }
+
+    private void SendSteamCommand(SteamClientCommand command)
+    {
+        if (_steam is not { } steam) return;
+        try { SteamClientService.Send(steam, command); }
+        catch (Exception exception)
+        {
+            App.Log("Steam menu action failed", exception);
+            MessageBox.Show(this, L("MenuBar.SteamActionFailed"), L("MenuBar.Steam"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
 
     private void ActiveApp_Click(object sender, RoutedEventArgs e)
     {

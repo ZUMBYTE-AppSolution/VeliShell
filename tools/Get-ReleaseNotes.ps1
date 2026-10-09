@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $changelog = Join-Path $root 'CHANGELOG.md'
-$lines = Get-Content -LiteralPath $changelog
+$lines = Get-Content -LiteralPath $changelog -Encoding UTF8
 $headingPattern = '^## \[' + [Regex]::Escape($Version) + '\](?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$'
 $start = -1
 for ($index = 0; $index -lt $lines.Count; $index++) {

@@ -38,6 +38,8 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Suche ohne Umweg:** VeliShell findet Dock-Apps, Startmenü-Einträge, registrierte Programme, installierte Web-Apps und geöffnete Anwendungen schon beim Tippen. Die Websuche öffnet erst nach deinem Klick den Browser; eine Live-Webabfrage gibt es nicht.
 - **Web-Apps als eigene Programme:** Installierte Chrome- und Edge-Web-Apps aus Startmenü oder Desktop behalten ihren Verknüpfungsnamen und ihr eigenes Symbol. Laufende Fenster werden anhand ihrer Windows-App-ID zugeordnet, nicht pauschal dem Browser zugeschlagen.
 - **Steam ohne doppelten WebHelper:** Steam-Oberflächen im `steamwebhelper.exe` werden dem Steam-Eintrag zugeordnet, wenn die zugehörige Steam-Installation sicher erkannt wird.
+- **Steam in der Menüleiste:** Läuft Steam nur im Hintergrund, bleibt sein echtes Symbol aus der installierten `steam.exe` sichtbar – für die Leiste lediglich entsättigt. Linksklick öffnet Steam; Rechtsklick bietet Öffnen, Einstellungen und Beenden nach Bestätigung. Ein bloßer SteamWebHelper ohne Steam-Client erscheint nicht.
+- **Andere Hintergrund-Apps in der Menüleiste:** VeliShell merkt sich Apps, deren Fenster es bei aktivierter Menüleiste gesehen hat. Schließt sich das letzte Fenster, während derselbe Prozess weiterläuft, erscheint sein lokal installiertes App-Symbol rechts in der Leiste. Ein Klick öffnet die App über ihre EXE beziehungsweise Web-App-Verknüpfung; weitere Einträge stehen im `+N`-Menü. Explorer, Windows-Shell-Hosts, Helferprozesse und reine Dienste werden nicht als Apps angezeigt. Bereits vor dem Start von VeliShell geschlossene Fenster können nicht rückwirkend erkannt werden.
 - **Optionales Start-Symbol:** Links vor den Apps kann ein Windows-Start-Symbol mit eigener Trennlinie stehen. Es öffnet das normale Windows-Startmenü und lässt sich jederzeit wieder entfernen.
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
@@ -154,7 +156,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.9.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.10.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

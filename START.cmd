@@ -1,7 +1,7 @@
 @echo off
 setlocal
 pushd "%~dp0"
-echo VeliShell 0.9.0 - Bauen und starten
+echo VeliShell 0.10.0 - Bauen und starten
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\Build.ps1" -Run
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (

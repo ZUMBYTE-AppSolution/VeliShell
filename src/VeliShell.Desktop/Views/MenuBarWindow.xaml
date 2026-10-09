@@ -35,6 +35,15 @@
     <Button Grid.Column="2" Style="{StaticResource MenuBarButton}" Click="WindowsMenu_Click"
             Content="{services:Loc MenuBar.Windows}" AutomationProperties.Name="{services:Loc MenuBar.Windows}" />
     <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+     <StackPanel x:Name="BackgroundAppsPanel" Orientation="Horizontal" />
+     <Button x:Name="SteamButton" Style="{StaticResource MenuBarButton}" Visibility="Collapsed"
+             Click="Steam_Click" PreviewMouseRightButtonUp="Steam_RightClick"
+             ContextMenuOpening="Steam_ContextMenuOpening"
+             ToolTip="{services:Loc MenuBar.SteamRunning}"
+             AutomationProperties.Name="{services:Loc MenuBar.SteamRunning}">
+      <Image x:Name="SteamIcon" Width="17" Height="17" Stretch="Uniform"
+             RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
+     </Button>
      <Button Style="{StaticResource MenuBarButton}" Click="Search_Click"
              ToolTip="{services:Loc Search.Open}" AutomationProperties.Name="{services:Loc Search.Open}">
       <controls:VeliSymbol Symbol="Search" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />

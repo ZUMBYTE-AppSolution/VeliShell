@@ -98,5 +98,8 @@ Originalsymbolen auf VeliShell.
 ## Marken und Zugehörigkeit
 
 Apple, macOS und zugehörige Produktnamen sind Marken von Apple Inc. Windows und
-.NET sind Marken von Microsoft. VeliShell ist ein unabhängiges Zumbyte.de-Projekt
-und weder von Apple noch Microsoft autorisiert oder unterstützt.
+.NET sind Marken von Microsoft. Steam ist eine Marke von Valve. Das Steam-
+Statussymbol wird aus der lokal installierten `steam.exe` gelesen und für die
+Menüleiste entsättigt; kein Valve-Bildasset wird mitgeliefert. VeliShell ist ein
+unabhängiges Zumbyte.de-Projekt und weder von Apple, Microsoft noch Valve
+autorisiert oder unterstützt.
