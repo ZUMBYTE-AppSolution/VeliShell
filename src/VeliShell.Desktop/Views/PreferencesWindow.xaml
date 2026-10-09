@@ -219,18 +219,6 @@
      <StackPanel x:Name="OnlinePage" Visibility="Collapsed">
       <TextBlock Text="{services:Loc Online.Title}" FontSize="25" FontWeight="SemiBold" Margin="0,3,0,8" />
       <TextBlock Text="{services:Loc Online.Description}" Style="{StaticResource SecondaryText}" Margin="0,0,0,20" />
-      <TextBlock Text="{services:Loc Online.BraveSection}" Style="{StaticResource SectionLabel}" />
-      <Border Style="{StaticResource Card}"><StackPanel>
-       <TextBlock Text="{services:Loc Online.BraveInstructions}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
-       <Button Content="{services:Loc Online.OpenBrave}" HorizontalAlignment="Left" Click="OpenBraveApi_Click" Margin="0,0,0,12" />
-       <TextBlock Text="{services:Loc Search.LiveWebKey}" Style="{StaticResource SecondaryText}" Margin="0,0,0,5" />
-       <WrapPanel>
-        <PasswordBox x:Name="BraveKeyBox" Width="250" Margin="0,0,8,8" AutomationProperties.Name="{services:Loc Online.BraveKeyLabel}" />
-        <Button Content="{services:Loc Common.SaveKey}" Click="SaveBraveKey_Click" Margin="0,0,8,8" />
-        <Button Content="{services:Loc Common.RemoveKey}" Click="RemoveBraveKey_Click" Margin="0,0,8,8" />
-       </WrapPanel>
-       <TextBlock x:Name="BraveKeyStatus" Style="{StaticResource SecondaryText}" />
-      </StackPanel></Border>
       <TextBlock Text="{services:Loc Online.MacOsIconsSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <TextBlock Text="{services:Loc Online.MacOsIconsInstructions}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
@@ -246,6 +234,12 @@
       <Border Style="{StaticResource Card}" Margin="0,16,0,0"><StackPanel>
        <TextBlock Text="{services:Loc Online.NoKeySection}" FontWeight="SemiBold" Margin="0,0,0,7" />
        <TextBlock Text="{services:Loc Online.NoKeyDescription}" Style="{StaticResource SecondaryText}" />
+      </StackPanel></Border>
+      <Border x:Name="LegacyBraveKeyCard" Style="{StaticResource Card}" Margin="0,16,0,0" Visibility="Collapsed"><StackPanel>
+       <TextBlock Text="{services:Loc Online.LegacyBraveTitle}" FontWeight="SemiBold" Margin="0,0,0,7" />
+       <TextBlock Text="{services:Loc Online.LegacyBraveDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
+       <Button Content="{services:Loc Online.RemoveLegacyBraveKey}" HorizontalAlignment="Left" Click="RemoveBraveKey_Click" />
+       <TextBlock x:Name="BraveKeyStatus" Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
       </StackPanel></Border>
      </StackPanel>
      <StackPanel x:Name="WindowsPage" Visibility="Collapsed">

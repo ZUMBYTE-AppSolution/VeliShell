@@ -72,16 +72,6 @@ kein App-Masking angeboten. Nutzer müssen die Rechte am Ausgangsbild beachten.
 - API-Bedingungen: <https://beta.macosicons.com/developers/terms>
 - Allgemeine Bedingungen: <https://macosicons.com/terms>
 
-## Brave Search API
-
-Live-Webtreffer in der VeliShell-Suche sind optional und benötigen den eigenen
-Brave-Search-API-Schlüssel des Nutzers im Windows-Anmeldeinformationsmanager.
-Nach einer kurzen Tipp-Pause wird der Suchbegriff an Brave übertragen; ohne Schlüssel
-bleibt nur die Websuche im Browser nach einem ausdrücklichen Klick. Es wird kein
-gemeinsamer Schlüssel eingebettet oder mitgeliefert.
-
-- API-Dokumentation: <https://api-dashboard.search.brave.com/documentation/services/web-search>
-
 ## macOS-Systemsymbole und Papierkorb-Grafiken
 
 Die mitgelieferten Leer- und Vollgrafiken des Papierkorbs wurden ohne fremde

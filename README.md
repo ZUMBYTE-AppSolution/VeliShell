@@ -35,7 +35,9 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Direkt aus dem Explorer anheften:** Dateien und Ordner erhalten den statischen Kontextmenü-Befehl **„Im Dock anheften“**. Unter Windows 11 kann er im klassischen Bereich **„Weitere Optionen anzeigen“** stehen; VeliShell lädt dafür keinen Erweiterungscode in den Explorer.
 - **Ordner direkt im Dock durchsuchen:** Ein normaler Klick auf einen Ordner-Pin öffnet ein themefähiges Popover mit Zurück-Navigation, Breadcrumbs und „Im Explorer öffnen“. Die asynchrone Ansicht bleibt bewusst begrenzt und folgt keinen Junctions oder symbolischen Ordnerlinks aus dem angehefteten Stamm heraus.
 - **Fenster auf einen Blick:** Laufende Apps erhalten einen einzelnen Punkt. Bei mehreren Fenstern zeigt das Kontextmenü seitlich eine Live-Miniatur des gerade berührten Eintrags.
-- **Suche ohne Umweg:** VeliShell findet Dock-Apps, Startmenü-Einträge, registrierte Programme und geöffnete Anwendungen schon beim Tippen. Mit deinem eigenen Brave-Search-Schlüssel erscheinen auch Live-Webtreffer; ohne Schlüssel bleibt die Websuche per Klick im Browser.
+- **Suche ohne Umweg:** VeliShell findet Dock-Apps, Startmenü-Einträge, registrierte Programme, installierte Web-Apps und geöffnete Anwendungen schon beim Tippen. Die Websuche öffnet erst nach deinem Klick den Browser; eine Live-Webabfrage gibt es nicht.
+- **Web-Apps als eigene Programme:** Installierte Chrome- und Edge-Web-Apps aus Startmenü oder Desktop behalten ihren Verknüpfungsnamen und ihr eigenes Symbol. Laufende Fenster werden anhand ihrer Windows-App-ID zugeordnet, nicht pauschal dem Browser zugeschlagen.
+- **Steam ohne doppelten WebHelper:** Steam-Oberflächen im `steamwebhelper.exe` werden dem Steam-Eintrag zugeordnet, wenn die zugehörige Steam-Installation sicher erkannt wird.
 - **Optionales Start-Symbol:** Links vor den Apps kann ein Windows-Start-Symbol mit eigener Trennlinie stehen. Es öffnet das normale Windows-Startmenü und lässt sich jederzeit wieder entfernen.
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
@@ -49,7 +51,7 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **VeliShell-Menüleiste mit zwei Centern:** App-Menü, offene Fenster, Uhr und Statusanzeigen werden durch ein milchiges Kontrollzentrum für Netzwerk, Bluetooth, Fokus, Anzeige, Energie, Lautstärke und Stummschaltung ergänzt. Die Mitteilungszentrale sammelt VeliShell-Hinweise und besitzt einen ausdrücklich freizugebenden Adapter für aktuelle Windows-Mitteilungen. Dieser Windows-Zugriff verlangt eine signierte Paketidentität; in der derzeitigen MSI-/Portable-Ausgabe bleibt er deshalb sicher deaktiviert. Die Leiste reserviert ihren oberen Bildschirmbereich, sodass maximierte Fenster nicht darunterrutschen.
 - **Scharfe Vektorsymbole:** Menüleiste, Center-Panels und Einstellungsnavigation verwenden einen eigenen VeliShell-Symbolsatz auf gemeinsamem 24-Punkt-Raster. Er skaliert verlustfrei, übernimmt automatisch das aktive Theme und bündelt keine Apple-SF-Symbol-Dateien.
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
-- **Geführter erster Start:** Sechs erklärende Schritte führen durch Design, Dock, Symbole, Online-Dienste, Windows-Optionen und Updates. Für die optionalen Brave- und macOSicons-Schlüssel gibt es direkte Anleitungen und geschützte Eingabefelder; freiwillige Systemeingriffe bleiben zunächst aus.
+- **Geführter erster Start:** Sechs erklärende Schritte führen durch Design, Dock, Symbole, Online-Dienste, Windows-Optionen und Updates. Für den optionalen macOSicons-Schlüssel gibt es eine direkte Anleitung und ein geschütztes Eingabefeld; freiwillige Systemeingriffe bleiben zunächst aus.
 
 ## 🚀 Installation
 
@@ -111,7 +113,7 @@ Unabhängig vom globalen Stil lässt sich jedes sichtbare Dock-Element in **Eins
 
 Wenn lokal kein passendes hochauflösendes Symbol vorhanden ist, kann VeliShell nach deiner Freigabe die offizielle [Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) nach Mac-Software durchsuchen. Dafür ist **kein API-Schlüssel** nötig. Zusätzlich kann [macOSicons.com](https://macosicons.com/developers) mit deinem eigenen API-Schlüssel durchsucht werden. VeliShell sucht anhand von Programmdatei, Fenstertitel und Verknüpfungsnamen, zeigt Treffer beider Quellen mit Vorschau und Urheberangaben und lässt dich für jede App auswählen oder zur nächsten springen. Es gibt keine automatische Hintergrundsuche und keinen stillen Austausch bestehender Symbole.
 
-Findet keine Quelle ein passendes Symbol, kannst du das vorhandene Windows-App-Icon mit dem macOSicons-Masking in Form bringen lassen. Dafür fragt VeliShell **noch einmal gesondert**, bevor das Bild hochgeladen wird. Ordner und Papierkorb sind ausdrücklich ausgenommen. Beide optionalen API-Schlüssel werden nur für dein Windows-Konto im Anmeldeinformationsmanager gespeichert – nicht in der Einstellungsdatei oder im Programmcode.
+Findet keine Quelle ein passendes Symbol, kannst du das vorhandene Windows-App-Icon mit dem macOSicons-Masking in Form bringen lassen. Dafür fragt VeliShell **noch einmal gesondert**, bevor das Bild hochgeladen wird. Ordner und Papierkorb sind ausdrücklich ausgenommen. Der optionale macOSicons-Schlüssel wird nur für dein Windows-Konto im Anmeldeinformationsmanager gespeichert – nicht in der Einstellungsdatei oder im Programmcode. Einen alten Brave-Schlüssel aus früheren Versionen kannst du in den Einstellungen ausdrücklich löschen.
 
 Der Online-Katalog wird nicht mit VeliShell ausgeliefert. Suchergebnisse bleiben kurz im Arbeitsspeicher; nur das gewählte Bild wird lokal gespeichert. Quelle, Urheber und beim App Store der direkte Store-Link bleiben erreichbar. App-Store-Artwork bleibt Eigentum der jeweiligen Rechteinhaber und unterliegt Apples Bedingungen für Promo-Inhalte – es ist kein frei weiterverteilbares Icon-Paket. Weitere Angaben stehen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -121,7 +123,7 @@ Der Online-Katalog wird nicht mit VeliShell ausgeliefert. Suchergebnisse bleiben
 - Taskleiste und Desktopsymbole werden nur temporär und nach ausdrücklichem Opt-in verändert; VeliShell schreibt dafür keine dauerhafte Explorer-Konfiguration;
 - Einstellungen und Icon-Cache bleiben lokal auf dem Rechner;
 - bei einer von dir ausgelösten Online-Icon-Suche gehen App-, EXE- und Verknüpfungsnamen sowie passende **Fenstertitel** an Apple und mit eigenem Schlüssel auch an macOSicons; Vorschauen werden nur für die Auswahl geladen. Das Bild des Windows-App-Icons wird ausschließlich nach einer zweiten Bestätigung zum Masking hochgeladen;
-- Live-Webanfragen gehen nur mit deinem eigenen Brave-Schlüssel nach einer Tipp-Pause an Brave. Ohne Schlüssel wird erst beim Anklicken einer Websuche dein Browser geöffnet;
+- die Suche sendet beim Tippen keine Webanfragen; erst beim Anklicken einer Websuche wird dein Browser geöffnet;
 - Wo eine signierte paketierte Ausgabe den Windows-Zugriff unterstützt, werden Mitteilungen nur nach der Windows-Freigabe lokal gelesen, nie übertragen und nicht in Diagnoseprotokolle geschrieben. Das Entfernen in VeliShell löscht ausschließlich die ausdrücklich angezeigte Mitteilung anhand ihrer Windows-ID. MSI und Portable besitzen aktuell keine Paketidentität und lassen den Zugriff daher deaktiviert;
 - Update-Metadaten kommen ausschließlich aus dem offiziellen VeliShell-Repository;
 - die Windows-Shell, Systemdateien und Sicherheitsfunktionen werden nicht ersetzt oder deaktiviert.
@@ -152,7 +154,7 @@ dotnet run --project tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj -c R
 Der Installer wird reproduzierbar mit WiX Toolset 4 gebaut:
 
 ```powershell
-./tools/Build-Installer.ps1 -Version 0.8.0 -PublishDirectory ./out/portable
+./tools/Build-Installer.ps1 -Version 0.9.0 -PublishDirectory ./out/portable
 ```
 
 ## 💬 Support & Kontakt

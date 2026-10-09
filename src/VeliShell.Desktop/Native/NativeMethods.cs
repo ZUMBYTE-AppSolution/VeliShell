@@ -27,6 +27,16 @@ internal static class NativeMethods
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] internal struct NativeSize { public int Width, Height; }
+    [StructLayout(LayoutKind.Sequential)] internal struct PropertyKey
+    {
+        public Guid FormatId;
+        public uint PropertyId;
+    }
+    [StructLayout(LayoutKind.Explicit, Size = 24)] internal struct PropVariant
+    {
+        [FieldOffset(0)] public ushort VariantType;
+        [FieldOffset(8)] public nint PointerValue;
+    }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct MonitorInfo
     {
         public int Size;
@@ -125,6 +135,42 @@ internal static class NativeMethods
             ShellItemImageFactoryFlags flags,
             out nint bitmap);
     }
+
+    [ComImport]
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IPropertyStore
+    {
+        void GetCount(out uint count);
+        void GetAt(uint index, out PropertyKey key);
+        [PreserveSig] int GetValue(ref PropertyKey key, out PropVariant value);
+        void SetValue(ref PropertyKey key, ref PropVariant value);
+        void Commit();
+    }
+
+    internal static readonly PropertyKey AppUserModelIdKey = new()
+    {
+        FormatId = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"),
+        PropertyId = 5
+    };
+
+    internal static string? ReadAppUserModelId(IPropertyStore store)
+    {
+        var key = AppUserModelIdKey;
+        if (store.GetValue(ref key, out var value) < 0) return null;
+        try
+        {
+            return value.VariantType is 31 or 8 && value.PointerValue != 0
+                ? Marshal.PtrToStringUni(value.PointerValue) : null;
+        }
+        finally { PropVariantClear(ref value); }
+    }
+
+    [DllImport("shell32.dll", PreserveSig = true)]
+    internal static extern int SHGetPropertyStoreForWindow(
+        nint hwnd, ref Guid interfaceId, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore? store);
+    [DllImport("ole32.dll")]
+    internal static extern int PropVariantClear(ref PropVariant value);
 
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumWindows(EnumWindowsCallback callback, nint parameter);

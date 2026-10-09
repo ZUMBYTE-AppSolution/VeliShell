@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-09
+
+### Neu
+
+- Installierte Browser-Web-Apps aus Startmenü und Desktop werden mit ihrem eigenen Namen und Verknüpfungssymbol gefunden. Eine Windows-App-ID ordnet geöffnete Web-App-Fenster dem richtigen Dock-Eintrag zu, statt sie mit allen Fenstern desselben Browsers zu vermischen.
+- Steam-Fenster aus `steamwebhelper.exe` werden mit Steam zusammengeführt, wenn `steam.exe` im selben Installationsbaum gefunden wird.
+
+### Geändert
+
+- Die Live-Websuche und die Brave-Schlüsseleingabe wurden entfernt. Websuche öffnet weiterhin erst nach einem ausdrücklichen Klick den Browser. Ein früher gespeicherter Brave-Schlüssel wird nicht mehr verwendet und kann in den Einstellungen gelöscht werden.
+- Die Ersteinrichtung erklärt unter „Online-Dienste“ nur noch den optionalen macOSicons-Schlüssel.
+
 ## [0.8.0] - 2026-10-09
 
 ### Neu
@@ -178,7 +190,8 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v0.6.0

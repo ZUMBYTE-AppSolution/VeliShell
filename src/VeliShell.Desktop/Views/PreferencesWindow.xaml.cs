@@ -154,8 +154,7 @@ public partial class PreferencesWindow : VeliShellWindow
     private void OnboardingNext_Click(object sender, RoutedEventArgs e)
     {
         if (_currentPage == 3 &&
-            (!SavePendingKey(UserApiCredentials.BraveSearch, BraveKeyBox) ||
-             !SavePendingKey(UserApiCredentials.MacOsIcons, MacOsIconsKeyBox))) return;
+            !SavePendingKey(UserApiCredentials.MacOsIcons, MacOsIconsKeyBox)) return;
         if (_currentPage < LastPage) { ShowPage(_currentPage + 1); return; }
         _app.CompleteOnboarding();
         Close();
@@ -599,9 +598,6 @@ public partial class PreferencesWindow : VeliShellWindow
         LaunchService.Open(
             "https://performance-partners.apple.com/resources/documentation/itunes-store-web-service-search-api/");
 
-    private void OpenBraveApi_Click(object sender, RoutedEventArgs e) =>
-        LaunchService.Open("https://api-dashboard.search.brave.com/documentation/quickstart");
-
     private void OpenMacOsIconsApi_Click(object sender, RoutedEventArgs e) =>
         LaunchService.Open("https://macosicons.com/developers");
 
@@ -609,20 +605,28 @@ public partial class PreferencesWindow : VeliShellWindow
     {
         try
         {
-            BraveKeyStatus.Text = L(UserApiCredentials.Read(UserApiCredentials.BraveSearch) is null
-                ? "Common.KeyMissing" : "Common.KeyStored");
             MacOsIconsKeyStatus.Text = L(UserApiCredentials.Read(UserApiCredentials.MacOsIcons) is null
                 ? "Common.KeyMissing" : "Common.KeyStored");
         }
         catch (Exception exception)
         {
-            App.Log("Could not read API credential status", exception);
-            BraveKeyStatus.Text = MacOsIconsKeyStatus.Text = L("Common.KeyError");
+            App.Log("Could not read macOSicons credential status", exception);
+            MacOsIconsKeyStatus.Text = L("Common.KeyError");
+        }
+        try
+        {
+            var legacyBraveKeyPresent = UserApiCredentials.Read(UserApiCredentials.BraveSearch) is not null;
+            LegacyBraveKeyCard.Visibility = legacyBraveKeyPresent ? Visibility.Visible : Visibility.Collapsed;
+            BraveKeyStatus.Text = L(legacyBraveKeyPresent ? "Common.KeyStored" : "Common.KeyMissing");
+        }
+        catch (Exception exception)
+        {
+            App.Log("Could not read obsolete Brave credential status", exception);
+            BraveKeyStatus.Text = L("Common.KeyError");
+            LegacyBraveKeyCard.Visibility = Visibility.Visible;
         }
     }
 
-    private void SaveBraveKey_Click(object sender, RoutedEventArgs e) =>
-        SaveApiKey(UserApiCredentials.BraveSearch, BraveKeyBox);
     private void SaveMacOsIconsKey_Click(object sender, RoutedEventArgs e) =>
         SaveApiKey(UserApiCredentials.MacOsIcons, MacOsIconsKeyBox);
     private void RemoveBraveKey_Click(object sender, RoutedEventArgs e) =>

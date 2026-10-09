@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Services;
 
@@ -13,9 +12,6 @@ public partial class SearchWindow : VeliShellWindow
     private readonly App _app;
     private IReadOnlyList<SearchEntry> _catalog = [];
     private IReadOnlyList<SearchEntry> _running = [];
-    private IReadOnlyList<SearchEntry> _webResults = [];
-    private readonly DispatcherTimer _webDebounce = new() { Interval = TimeSpan.FromMilliseconds(650) };
-    private CancellationTokenSource? _webRequest;
     private readonly List<SearchEntry> _visible = [];
     private int _selectedIndex;
     private bool _closed;
@@ -26,33 +22,6 @@ public partial class SearchWindow : VeliShellWindow
         _catalog = app.ProgramIndex.Snapshot;
         InitializeComponent();
         app.ProgramIndex.Changed += IndexChanged;
-        _webDebounce.Tick += async (_, _) =>
-        {
-            _webDebounce.Stop();
-            var query = QueryBox.Text.Trim();
-            _webRequest?.Cancel();
-            var requestLifetime = new CancellationTokenSource();
-            _webRequest = requestLifetime;
-            var token = requestLifetime.Token;
-            try
-            {
-                var hits = await LiveWebSearchService.SearchAsync(query, token);
-                if (!_closed && !token.IsCancellationRequested && query == QueryBox.Text.Trim())
-                {
-                    _webResults = hits.Select(hit => new SearchEntry(hit.Title, hit.Url.AbsoluteUri,
-                            "web-result", hit.Description))
-                        .ToArray();
-                    RenderResults();
-                }
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-            catch (Exception exception) { App.Log("Live web results are unavailable", exception); }
-            finally
-            {
-                if (ReferenceEquals(_webRequest, requestLifetime)) _webRequest = null;
-                requestLifetime.Dispose();
-            }
-        };
         Loaded += async (_, _) =>
         {
             var work = SystemParameters.WorkArea;
@@ -67,7 +36,9 @@ public partial class SearchWindow : VeliShellWindow
                 {
                     _running = windows
                         .Where(window => !string.IsNullOrWhiteSpace(window.Executable))
-                        .Select(window => new SearchEntry(window.ProcessName, window.Executable, "app"))
+                        .Select(window => new SearchEntry(window.WebApp?.Name ?? window.ProcessName,
+                            window.WebApp?.ShortcutPath ?? window.Executable,
+                            window.WebApp is null ? "app" : "webapp"))
                         .DistinctBy(entry => entry.Target, StringComparer.OrdinalIgnoreCase).ToArray();
                     _catalog = _app.ProgramIndex.Snapshot.Concat(_running).ToArray();
                     RenderResults();
@@ -81,8 +52,6 @@ public partial class SearchWindow : VeliShellWindow
         Closed += (_, _) =>
         {
             _closed = true;
-            _webDebounce.Stop();
-            _webRequest?.Cancel();
             app.ProgramIndex.Changed -= IndexChanged;
         };
     }
@@ -96,17 +65,7 @@ public partial class SearchWindow : VeliShellWindow
 
     private void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _webDebounce.Stop();
-        _webRequest?.Cancel();
-        _webResults = [];
         RenderResults();
-        if (QueryBox.Text.Trim().Length < 3) return;
-        try
-        {
-            if (UserApiCredentials.Read(UserApiCredentials.BraveSearch) is not null)
-                _webDebounce.Start();
-        }
-        catch (Exception exception) { App.Log("Could not read live-search credential", exception); }
     }
 
     private void RenderResults()
@@ -116,7 +75,6 @@ public partial class SearchWindow : VeliShellWindow
         _visible.Clear();
         var query = QueryBox.Text.Trim();
         _visible.AddRange(SearchCatalogService.Match(query, _app.Preferences.Pins, _catalog));
-        _visible.AddRange(_webResults);
         if (query.Length is > 0 and <= 200)
             _visible.Add(new SearchEntry(
                 string.Format(LocalizationService.Current.ActiveCulture,
@@ -158,7 +116,7 @@ public partial class SearchWindow : VeliShellWindow
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var icon = entry.Category is "web" or "web-result"
+        var icon = entry.Category == "web"
             ? IconService.For("browser")
             : IconService.For("app", entry.Target);
         row.Children.Add(new AppIconSurface(icon, 34, false)
@@ -170,8 +128,8 @@ public partial class SearchWindow : VeliShellWindow
             TextTrimming = TextTrimming.CharacterEllipsis });
         labels.Children.Add(new TextBlock
         {
-            Text = entry.Category == "web-result" ? new Uri(entry.Target).Host :
-                LocalizationService.Current.Get(entry.Category == "web" ? "Search.Web" :
+            Text = LocalizationService.Current.Get(entry.Category == "web" ? "Search.Web" :
+                entry.Category == "webapp" ? "Search.WebApp" :
                 entry.Category == "pin" ? "Search.Pinned" : "Search.Program"),
             FontSize = 11,
             Foreground = (Brush)FindResource("TextSecondary")

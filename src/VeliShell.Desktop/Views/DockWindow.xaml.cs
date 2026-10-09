@@ -186,16 +186,20 @@ public partial class DockWindow : Window
         if (preferences.ShowRunningApps)
         {
             var running = _windows.Where(w => !preferences.Pins.Any(p => WindowCatalog.Matches(w, p)))
-                .GroupBy(w => string.IsNullOrEmpty(w.Executable) ? w.ProcessName : w.Executable, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(w => w.WebApp?.AppUserModelId ??
+                    (string.IsNullOrEmpty(w.Executable) ? w.ProcessName : w.Executable),
+                    StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
             foreach (var group in running)
             {
                 var first = group.First();
-                var runningId = Settings.RunningDockIconKey(first.Executable, first.ProcessName);
+                var target = first.WebApp?.ShortcutPath ?? first.Executable;
+                var runningId = Settings.RunningDockIconKey(target, first.ProcessName);
                 var onlineIcon = preferences.GetDockIconOverride(runningId);
                 items.Add(new DockItem { Key = runningId,
-                    Name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal) ? first.Title : first.ProcessName,
-                    Target = first.Executable,
+                    Name = first.WebApp?.Name ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
+                        ? first.Title : first.ProcessName),
+                    Target = target,
                     Icon = onlineIcon,
                     Attribution = OnlineIconService.TryGetAttribution(onlineIcon)?.Text,
                     Windows = group.ToList() });
@@ -283,20 +287,22 @@ public partial class DockWindow : Window
         var preferences = _app.Preferences;
         return _windows
             .Where(window => !preferences.Pins.Any(pin => WindowCatalog.Matches(window, pin)))
-            .GroupBy(window => string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable,
+            .GroupBy(window => window.WebApp?.AppUserModelId ??
+                (string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable),
                 StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();
-                var name = first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
+                var name = first.WebApp?.Name ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
                     ? first.Title
-                    : first.ProcessName;
-                var iconKey = Settings.RunningDockIconKey(first.Executable, first.ProcessName);
+                    : first.ProcessName);
+                var target = first.WebApp?.ShortcutPath ?? first.Executable;
+                var iconKey = Settings.RunningDockIconKey(target, first.ProcessName);
                 return new Pin(
                     iconKey,
                     name,
-                    first.Executable,
-                    first.ProcessName,
+                    target,
+                    first.WebApp is null ? first.ProcessName : null,
                     preferences.GetDockIconOverride(iconKey));
             })
             .OrderBy(pin => pin.Name, StringComparer.CurrentCultureIgnoreCase)

@@ -54,7 +54,9 @@ internal static class IconService
             var cacheKey = $"shell:{iconStyle}:{id}:{pixels}:{path}";
             if (TryGetCached(cacheKey, out var cached)) return cached;
 
-            var image = ShellImage(path, pixels) ?? LegacyShellIcon(path) ?? BuiltIn("app");
+            var artworkPath = WebAppArtworkPath(path);
+            var image = ShellImage(artworkPath, pixels) ?? LegacyShellIcon(artworkPath) ??
+                (artworkPath != path ? ShellImage(path, pixels) ?? LegacyShellIcon(path) : null) ?? BuiltIn("app");
             StoreCached(cacheKey, image);
             return image;
         }
@@ -68,7 +70,24 @@ internal static class IconService
         if (string.IsNullOrWhiteSpace(path) ||
             !(path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) ||
               File.Exists(path))) return null;
-        return ShellImage(path, 512) ?? LegacyShellIcon(path);
+        var artworkPath = WebAppArtworkPath(path);
+        return ShellImage(artworkPath, 512) ?? LegacyShellIcon(artworkPath) ??
+            (artworkPath != path ? ShellImage(path, 512) ?? LegacyShellIcon(path) : null);
+    }
+
+    private static string WebAppArtworkPath(string path)
+    {
+        if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) return path;
+        var link = ShellLinkService.Read(path);
+        if (link?.IsWebApp != true || link.IconPath is not { } iconPath) return path;
+        try
+        {
+            return Path.IsPathFullyQualified(iconPath) &&
+                   !iconPath.StartsWith(@"\\", StringComparison.Ordinal) &&
+                   Path.GetExtension(iconPath).Equals(".ico", StringComparison.OrdinalIgnoreCase) &&
+                   File.Exists(iconPath) ? iconPath : path;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException) { return path; }
     }
 
     private static DockIconStyle CurrentIconStyle()

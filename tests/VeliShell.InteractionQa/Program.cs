@@ -91,6 +91,7 @@ internal static class Program
             TestDockTileHoverMask();
             TestVeliShellAssetSurface();
             TestDockIconCustomizationContract();
+            TestWebAppAndSteamIdentityContracts();
             TestFolderPopoverAndDesktopIconContracts();
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
@@ -108,6 +109,7 @@ internal static class Program
             Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed icon and uses the same p=4.37 contour without an accent plate.");
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
+            Console.WriteLine("PASS: Browser app shortcuts retain per-site identity; Steam web helpers map only to their own Steam installation; live web API search is absent.");
             Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
@@ -2026,6 +2028,116 @@ internal static class Program
         var pixels = new byte[stride * source.PixelHeight];
         source.CopyPixels(pixels, stride, 0);
         return pixels;
+    }
+
+    private static void TestWebAppAndSteamIdentityContracts()
+    {
+        var shortcutType = RequireType("VeliShell.Desktop.Services.ShellLinkService+ShortcutInfo");
+        var webShortcut = Activator.CreateInstance(shortcutType,
+            @"C:\Browser\chrome_proxy.exe", "--profile-directory=Default --app-id=abcdefghijklmnopabcdefghijklmnop",
+            "Chrome._crx_abcdefghijklmnopabcdefghijklmnop", null)!;
+        var regularShortcut = Activator.CreateInstance(shortcutType,
+            @"C:\Browser\chrome.exe", "--new-window", null, null)!;
+        var isWebApp = shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(webShortcut);
+        var isRegularApp = shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(regularShortcut);
+        Require(isWebApp is true && isRegularApp is false,
+            "Browser web-app detection must require an app launch switch, not just a browser executable.");
+
+        // A real installed browser shortcut, when available, exercises the
+        // Windows property-store and icon-location interop in addition to the
+        // synthetic identity cases. Clean CI machines may have no such app.
+        var startMenu = Environment.GetFolderPath(Environment.SpecialFolder.StartMenu);
+        if (Directory.Exists(startMenu))
+        {
+            var read = RequireMethod(RequireType("VeliShell.Desktop.Services.ShellLinkService"), "Read");
+            string? installedWebAppPath = null;
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(startMenu, "*.lnk", SearchOption.AllDirectories)
+                             .Where(path => path.Contains("Chrome-Apps", StringComparison.OrdinalIgnoreCase) ||
+                                 path.Contains("Edge Apps", StringComparison.OrdinalIgnoreCase)).Take(64))
+                {
+                    var info = read.Invoke(null, [path]);
+                    if (info is null || shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
+                            .GetValue(info) is not true) continue;
+                    Require(!string.IsNullOrWhiteSpace((string?)shortcutType.GetProperty("AppUserModelId")!
+                            .GetValue(info)), "An installed web app must expose its Windows app identity.");
+                    Require(File.Exists((string?)shortcutType.GetProperty("IconPath")!.GetValue(info)),
+                        "An installed web app must expose its own icon file.");
+                    installedWebAppPath = path;
+                    break;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+            if (installedWebAppPath is not null)
+            {
+                var fromIndexerThread = Task.Run(() => read.Invoke(null, [installedWebAppPath]))
+                    .GetAwaiter().GetResult();
+                Require(fromIndexerThread is not null &&
+                        shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
+                            .GetValue(fromIndexerThread) is true,
+                    "Browser app metadata must also load from the background index thread.");
+                var discover = RequireMethod(RequireType("VeliShell.Desktop.Services.SearchCatalogService"),
+                    "Discover");
+                var entries = ((System.Collections.IEnumerable)discover.Invoke(null, null)!).Cast<object>();
+                Require(entries.Any(entry =>
+                        string.Equals((string)entry.GetType().GetProperty("Target")!.GetValue(entry)!,
+                            installedWebAppPath, StringComparison.OrdinalIgnoreCase) &&
+                        (string)entry.GetType().GetProperty("Category")!.GetValue(entry)! == "webapp"),
+                    "An installed web app must be indexed under its own shortcut and category.");
+            }
+        }
+
+        var catalogType = RequireType("VeliShell.Desktop.Services.WebAppCatalog");
+        var appType = RequireType("VeliShell.Desktop.Services.WebAppShortcut");
+        var snapshot = catalogType.GetField("_snapshot", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var previous = snapshot.GetValue(null);
+        try
+        {
+            var apps = Array.CreateInstance(appType, 2);
+            apps.SetValue(Activator.CreateInstance(appType, "Gmail", @"C:\Links\Gmail.lnk",
+                "Chrome._crx_gmail"), 0);
+            apps.SetValue(Activator.CreateInstance(appType, "YouTube", @"C:\Links\YouTube.lnk",
+                "Chrome._crx_youtube"), 1);
+            snapshot.SetValue(null, apps);
+            var match = RequireMethod(catalogType, "Match");
+            var gmail = match.Invoke(null, ["chrome._CRX_GMAIL"]);
+            Require(gmail is not null && (string)appType.GetProperty("Name")!.GetValue(gmail)! == "Gmail",
+                "A window AppUserModelID must resolve to the correct site title.");
+            Require(match.Invoke(null, ["Chrome._crx_unknown"]) is null,
+                "An unrelated browser window must not inherit another web app's identity.");
+        }
+        finally { snapshot.SetValue(null, previous); }
+
+        var ownerMethod = RequireMethod(RequireType("VeliShell.Desktop.Services.WindowCatalog"),
+            "SteamOwnerExecutable");
+        var root = Path.Combine(Path.GetTempPath(), "VeliShellQa-" + Guid.NewGuid().ToString("N"));
+        var steamRoot = Path.Combine(root, "Steam");
+        var helper = Path.Combine(steamRoot, "bin", "cef", "steamwebhelper.exe");
+        var unrelated = Path.Combine(root, "Other", "steamwebhelper.exe");
+        var gameHelper = Path.Combine(steamRoot, "steamapps", "common", "Game", "steamwebhelper.exe");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(helper)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(unrelated)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(gameHelper)!);
+            File.WriteAllBytes(Path.Combine(steamRoot, "steam.exe"), []);
+            Require(string.Equals((string)ownerMethod.Invoke(null, [helper])!,
+                    Path.Combine(steamRoot, "steam.exe"), StringComparison.OrdinalIgnoreCase),
+                "Steam's own web helper must join its Steam entry.");
+            Require(string.Equals((string)ownerMethod.Invoke(null, [unrelated])!, unrelated,
+                    StringComparison.OrdinalIgnoreCase),
+                "An unrelated web helper must not be joined to Steam.");
+            Require(string.Equals((string)ownerMethod.Invoke(null, [gameHelper])!, gameHelper,
+                    StringComparison.OrdinalIgnoreCase),
+                "A helper shipped inside a Steam game must not be merged with the Steam client.");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+
+        Require(DesktopAssembly.GetType("VeliShell.Desktop.Services.LiveWebSearchService") is null,
+            "The removed live-web API client must not ship in the app.");
     }
 
     private static void DrainDispatcher() =>

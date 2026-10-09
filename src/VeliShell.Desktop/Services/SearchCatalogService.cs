@@ -15,6 +15,7 @@ internal static class SearchCatalogService
     {
         var results = new List<SearchEntry>();
         var seen = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+        var shortcutPaths = new List<string>();
         var roots = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
@@ -35,6 +36,8 @@ internal static class SearchCatalogService
                         var extension = Path.GetExtension(file);
                         if (!extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) &&
                             !extension.Equals(".appref-ms", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase))
+                            shortcutPaths.Add(file);
                         var name = Path.GetFileNameWithoutExtension(file);
                         if (string.IsNullOrWhiteSpace(name) || !seen.Add(name)) continue;
                         results.Add(new SearchEntry(name, file, "app"));
@@ -110,6 +113,30 @@ internal static class SearchCatalogService
                 // Inaccessible/uninstalling entries are simply excluded.
             }
         }
+        foreach (var desktop in new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory)
+        }.Where(Directory.Exists))
+        {
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(desktop, "*.lnk").Take(512))
+                {
+                    shortcutPaths.Add(file);
+                    if (results.Count >= MaximumEntries) continue;
+                    if (WebAppCatalog.TryRead(file) is not { } webApp || !seen.Add(webApp.Name)) continue;
+                    results.Add(new SearchEntry(webApp.Name, file, "webapp"));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
+        WebAppCatalog.Refresh(shortcutPaths);
+        var webAppPaths = WebAppCatalog.Snapshot.Select(app => app.ShortcutPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < results.Count; index++)
+            if (webAppPaths.Contains(results[index].Target))
+                results[index] = results[index] with { Category = "webapp" };
         return results;
     }
 
