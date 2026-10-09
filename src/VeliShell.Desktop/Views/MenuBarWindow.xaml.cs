@@ -395,6 +395,7 @@ public partial class MenuBarWindow : Window
     private static string FriendlyProcessName(NativeWindow window)
     {
         if (window.WebApp is { } webApp) return webApp.Name;
+        if (!string.IsNullOrWhiteSpace(window.DisplayName)) return window.DisplayName;
         if (window.ProcessName.StartsWith("pid-", StringComparison.Ordinal)) return window.Title;
         var value = window.ProcessName.Replace('_', ' ').Trim();
         return value.Length == 0 ? window.Title : value;

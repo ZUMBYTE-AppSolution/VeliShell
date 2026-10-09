@@ -8,7 +8,8 @@ namespace VeliShell.Desktop.Services;
 
 internal sealed record NativeWindow(
     nint Handle, string Title, string Executable, string ProcessName,
-    string? AppUserModelId = null, WebAppShortcut? WebApp = null, int ProcessId = 0);
+    string? AppUserModelId = null, WebAppShortcut? WebApp = null, int ProcessId = 0,
+    string? DisplayName = null, string? IconTarget = null);
 
 internal static class WindowCatalog
 {
@@ -43,6 +44,29 @@ internal static class WindowCatalog
                     path = SteamOwnerExecutable(path);
                     processName = path.EndsWith("steam.exe", StringComparison.OrdinalIgnoreCase)
                         ? "Steam" : processName;
+                }
+                if (processName.Equals("ApplicationFrameHost", StringComparison.OrdinalIgnoreCase) &&
+                    className.ToString().Equals("ApplicationFrameWindow", StringComparison.Ordinal))
+                {
+                    var packaged = PackagedAppService.ForFrame(hwnd, pid);
+                    if (packaged is not null)
+                    {
+                        if (!processPaths.TryGetValue(packaged.ProcessId, out var appPath))
+                        {
+                            appPath = GetProcessPath(packaged.ProcessId);
+                            processPaths[packaged.ProcessId] = appPath;
+                        }
+                        result.Add(new NativeWindow(hwnd, title.ToString(), appPath,
+                            appPath.Length > 0 ? Path.GetFileNameWithoutExtension(appPath) : title.ToString(),
+                            packaged.AppUserModelId, null, checked((int)packaged.ProcessId),
+                            packaged.Name.Length > 0 ? packaged.Name : title.ToString(), packaged.Target));
+                        return true;
+                    }
+                    // A frame can briefly exist without its app child during
+                    // startup/shutdown; never present the host as an app name.
+                    result.Add(new NativeWindow(hwnd, title.ToString(), "", title.ToString(),
+                        ProcessId: checked((int)pid), DisplayName: title.ToString()));
+                    return true;
                 }
                 var appId = IsBrowserProcess(processName) ? ReadWindowAppId(hwnd) : null;
                 result.Add(new NativeWindow(hwnd, title.ToString(), path, processName,
@@ -116,6 +140,9 @@ internal static class WindowCatalog
     internal static bool Matches(NativeWindow window, Pin pin)
     {
         if (pin.Kind == PinKind.VirtualFolder) return false;
+        var packagedAppId = PackagedAppService.AppIdFromTarget(pin.Target);
+        if (packagedAppId is not null)
+            return string.Equals(packagedAppId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase);
         var webAppPin = WebAppCatalog.TryRead(pin.Target);
         if (webAppPin is not null || window.WebApp is not null)
             return webAppPin is not null &&

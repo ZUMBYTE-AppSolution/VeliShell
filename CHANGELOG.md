@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-10
+
+### Behoben
+
+- Windows-Apps, deren Fenster über „Application Frame Host“ laufen, erscheinen im Dock jetzt mit ihrem lokalisierten App-Namen und dem eigenen Windows-Symbol statt mit dem Namen und Symbol des Hosts. Die Zuordnung verwendet die App-ID des tatsächlichen Programms; damit lassen sich diese Apps auch eindeutig anheften und erneut öffnen.
+
 ## [0.11.1] - 2026-10-10
 
 ### Behoben

@@ -23,6 +23,7 @@ internal static class NativeMethods
     internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModWin = 0x0008, ModNoRepeat = 0x4000;
     internal const uint KeyEventKeyUp = 0x0002;
     internal delegate bool EnumWindowsCallback(nint hwnd, nint parameter);
+    internal delegate bool EnumChildWindowsCallback(nint hwnd, nint parameter);
     internal delegate bool MonitorEnumCallback(nint monitor, nint deviceContext, ref Rect bounds, nint parameter);
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
@@ -137,6 +138,18 @@ internal static class NativeMethods
     }
 
     [ComImport]
+    [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IShellItem
+    {
+        void BindToHandler(nint bindContext, ref Guid handlerId, ref Guid interfaceId, out nint result);
+        void GetParent(out nint parent);
+        [PreserveSig] int GetDisplayName(uint form, out nint name);
+        void GetAttributes(uint mask, out uint attributes);
+        void Compare(IShellItem other, uint hint, out int order);
+    }
+
+    [ComImport]
     [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IPropertyStore
@@ -174,6 +187,8 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumWindows(EnumWindowsCallback callback, nint parameter);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnumChildWindows(nint parent, EnumChildWindowsCallback callback, nint parameter);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumDisplayMonitors(
         nint deviceContext,
@@ -238,6 +253,8 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool TerminateProcess(nint process, uint exitCode);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool QueryFullProcessImageName(nint process, uint flags, StringBuilder path, ref uint size);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetApplicationUserModelId")]
+    internal static extern int GetApplicationUserModelId(nint process, ref uint length, StringBuilder? appUserModelId);
     [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool CloseHandle(nint handle);
     [DllImport("kernel32.dll")] internal static extern nint LocalFree(nint memory);
     [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -284,6 +301,12 @@ internal static class NativeMethods
         nint bindContext,
         ref Guid interfaceId,
         [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? imageFactory);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHCreateItemFromParsingName", PreserveSig = true)]
+    internal static extern int SHCreateShellItemFromParsingName(
+        string path,
+        nint bindContext,
+        ref Guid interfaceId,
+        [MarshalAs(UnmanagedType.Interface)] out IShellItem? item);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHQueryRecycleBinW")]
     internal static extern int SHQueryRecycleBin(string? rootPath, ref QueryRecycleBinInfo info);
     [DllImport("shell32.dll")]

@@ -103,6 +103,7 @@ internal static class Program
             TestVeliShellAssetSurface();
             TestDockIconCustomizationContract();
             TestWebAppAndSteamIdentityContracts();
+            TestPackagedAppFrameIdentity();
             TestBackgroundAppTracking();
             TestBackgroundAppCommands();
             TestFolderPopoverAndDesktopIconContracts();
@@ -126,6 +127,7 @@ internal static class Program
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
             Console.WriteLine("PASS: Browser app shortcuts retain per-site identity; Steam web helpers map only to their own Steam installation; live web API search is absent.");
+            Console.WriteLine("PASS: Application Frame Host windows resolve to their packaged app ID, localized name and native icon; shell-app pins match the real app.");
             Console.WriteLine("PASS: Only previously visible same-session app processes appear after their last window closes; process exit, PID reuse, shell hosts, and Steam stay filtered.");
             Console.WriteLine("PASS: Force quit rejects a stale identity and terminates only its own exact QA process handle.");
             Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
@@ -2269,6 +2271,45 @@ internal static class Program
         return pixels;
     }
 
+    private static void TestPackagedAppFrameIdentity()
+    {
+        const string appId = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App";
+        var target = PackagedAppService.TargetForAppId(appId);
+        Require(PackagedAppService.AppIdFromTarget(target) == appId &&
+                PackagedAppService.AppIdFromTarget("shell:AppsFolder\\..\\ApplicationFrameHost.exe") is null,
+            "Only a valid packaged-app shell target may be accepted as a dock pin.");
+
+        var pin = LaunchService.PinFromPath(target);
+        Require(pin is not null && pin.Target == target && pin.MatchProcess is null,
+            "A packaged app must be pinnable by its own AUMID rather than the shared frame-host EXE.");
+        var synthetic = new NativeWindow((nint)1, "Calculator", @"C:\WindowsApps\CalculatorApp.exe",
+            "CalculatorApp", appId, ProcessId: 1234, DisplayName: "Calculator", IconTarget: target);
+        Require(WindowCatalog.Matches(synthetic, pin!) &&
+                !WindowCatalog.Matches(synthetic, pin! with { Target = PackagedAppService.TargetForAppId(
+                    "Microsoft.WindowsStore_8wekyb3d8bbwe!App") }),
+            "Packaged-app pins must match the exact app ID, not every Application Frame Host window.");
+
+        // The real shell folder resolves localized labels and tile artwork.
+        // A clean test VM may not have Calculator installed.
+        var shellName = Task.Run(() => PackagedAppService.NameForAppId(appId)).GetAwaiter().GetResult();
+        if (shellName is not null)
+        {
+            Require(!shellName.Equals("Application Frame Host", StringComparison.OrdinalIgnoreCase) &&
+                    IconService.ForOriginalWindowsIcon("app", target) is not null,
+                "An installed packaged app must expose its own localized name and icon.");
+        }
+
+        // If a packaged window is already open, exercise the same MTA path as
+        // the dock's background window poll without launching other programs.
+        var live = Task.Run(WindowCatalog.Read).GetAwaiter().GetResult();
+        Console.WriteLine($"Packaged QA: {live.Count(window => window.AppUserModelId == appId)} Calculator window(s) found.");
+        foreach (var window in live.Where(window => window.AppUserModelId == appId))
+            Require(window.IconTarget == target && window.DisplayName == shellName &&
+                    !window.ProcessName.Equals("ApplicationFrameHost", StringComparison.OrdinalIgnoreCase) &&
+                    window.ProcessId > 0,
+                "A live ApplicationFrameWindow must identify Calculator, not its frame host.");
+    }
+
     private static void TestBackgroundAppTracking()
     {
         const int session = 7;
@@ -2333,6 +2374,19 @@ internal static class Program
         tracker.Update([webWindow]);
         Require(tracker.Update([]).Single().Name == "Gmail",
             "A previously visible web app must retain its own name, not the browser's process name.");
+
+        const int packagedPid = 6262;
+        const string packagedExe = @"C:\WindowsApps\CalculatorApp.exe";
+        const string packagedAppId = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App";
+        var packagedTarget = PackagedAppService.TargetForAppId(packagedAppId);
+        processes[packagedPid] = new(packagedPid, 250, session, packagedExe);
+        var packagedWindow = new NativeWindow((nint)5, "Rechner", packagedExe, "CalculatorApp",
+            packagedAppId, ProcessId: packagedPid, DisplayName: "Rechner", IconTarget: packagedTarget);
+        tracker.Update([packagedWindow]);
+        var packagedBackground = tracker.Update([]).Single(app => app.ProcessId == packagedPid);
+        Require(packagedBackground.Name == "Rechner" && packagedBackground.IconTarget == packagedTarget &&
+                packagedBackground.LaunchTarget == packagedTarget,
+            "A background packaged app must keep its localized name and own icon instead of the frame host.");
     }
 
     private static void TestBackgroundAppCommands()

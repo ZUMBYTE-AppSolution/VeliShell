@@ -51,7 +51,7 @@ internal sealed class BackgroundAppTracker
         var visibleTargets = windows.Where(IsEligibleWindow)
             .Select(window => !string.IsNullOrWhiteSpace(window.WebApp?.ShortcutPath) &&
                               File.Exists(window.WebApp.ShortcutPath)
-                ? window.WebApp.ShortcutPath : window.Executable)
+                ? window.WebApp.ShortcutPath : window.IconTarget ?? window.Executable)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var group in windows.Where(IsEligibleWindow).GroupBy(window => window.ProcessId))
@@ -62,12 +62,12 @@ internal sealed class BackgroundAppTracker
             var identity = _readProcess(group.Key);
             if (!MatchesWindow(identity, window)) continue;
 
-            var name = window.WebApp?.Name;
+            var name = window.WebApp?.Name ?? window.DisplayName;
             if (string.IsNullOrWhiteSpace(name))
                 name = Path.GetFileNameWithoutExtension(identity!.Executable).Replace('_', ' ');
             var shortcut = window.WebApp?.ShortcutPath;
             var target = !string.IsNullOrWhiteSpace(shortcut) && File.Exists(shortcut)
-                ? shortcut : identity!.Executable;
+                ? shortcut : window.IconTarget ?? identity!.Executable;
             _observed[group.Key] = new ObservedApp(identity!, name.Trim(), target, ++_sequence);
         }
 

@@ -29,6 +29,9 @@ internal static class LaunchService
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
         path = Environment.ExpandEnvironmentVariables(path);
+        if (PackagedAppService.AppIdFromTarget(path) is { } appId)
+            return new Pin(Guid.NewGuid().ToString("N"),
+                PackagedAppService.NameForAppId(appId) ?? appId.Split('!')[0], path);
         if (Directory.Exists(path))
             return new Pin(Guid.NewGuid().ToString("N"), new DirectoryInfo(path).Name, path);
         var extension = Path.GetExtension(path);

@@ -190,18 +190,18 @@ public partial class DockWindow : Window
         if (preferences.ShowRunningApps)
         {
             var running = _windows.Where(w => !preferences.Pins.Any(p => WindowCatalog.Matches(w, p)))
-                .GroupBy(w => w.WebApp?.AppUserModelId ??
+                .GroupBy(w => w.WebApp?.AppUserModelId ?? (w.IconTarget is null ? null : w.AppUserModelId) ??
                     (string.IsNullOrEmpty(w.Executable) ? w.ProcessName : w.Executable),
                     StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
             foreach (var group in running)
             {
                 var first = group.First();
-                var target = first.WebApp?.ShortcutPath ?? first.Executable;
+                var target = first.WebApp?.ShortcutPath ?? first.IconTarget ?? first.Executable;
                 var runningId = Settings.RunningDockIconKey(target, first.ProcessName);
                 var onlineIcon = preferences.GetDockIconOverride(runningId);
                 items.Add(new DockItem { Key = runningId,
-                    Name = first.WebApp?.Name ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
+                    Name = first.WebApp?.Name ?? first.DisplayName ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
                         ? first.Title : first.ProcessName),
                     Target = target,
                     Icon = onlineIcon,
@@ -298,21 +298,22 @@ public partial class DockWindow : Window
         return _windows
             .Where(window => !preferences.Pins.Any(pin => WindowCatalog.Matches(window, pin)))
             .GroupBy(window => window.WebApp?.AppUserModelId ??
+                (window.IconTarget is null ? null : window.AppUserModelId) ??
                 (string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable),
                 StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();
-                var name = first.WebApp?.Name ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
+                var name = first.WebApp?.Name ?? first.DisplayName ?? (first.ProcessName.StartsWith("pid-", StringComparison.Ordinal)
                     ? first.Title
                     : first.ProcessName);
-                var target = first.WebApp?.ShortcutPath ?? first.Executable;
+                var target = first.WebApp?.ShortcutPath ?? first.IconTarget ?? first.Executable;
                 var iconKey = Settings.RunningDockIconKey(target, first.ProcessName);
                 return new Pin(
                     iconKey,
                     name,
                     target,
-                    first.WebApp is null ? first.ProcessName : null,
+                    first.WebApp is null && first.IconTarget is null ? first.ProcessName : null,
                     preferences.GetDockIconOverride(iconKey));
             })
             .OrderBy(pin => pin.Name, StringComparer.CurrentCultureIgnoreCase)
@@ -454,7 +455,7 @@ public partial class DockWindow : Window
                 AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
                 AddMenuItem(menu, L("Dock.Remove"), () => RemovePin(pin));
             }
-            else if (File.Exists(item.Target))
+            else if (File.Exists(item.Target) || PackagedAppService.AppIdFromTarget(item.Target) is not null)
                 AddMenuItem(menu, L("Dock.Keep"), () => AddPaths([item.Target]));
             menu.Items.Add(new Separator());
         }
@@ -1333,7 +1334,8 @@ public partial class DockWindow : Window
 
     private static bool IsSafeDropPath(string? path) =>
         !string.IsNullOrWhiteSpace(path) && path.Length <= MaximumDropPathLength &&
-        path.IndexOf('\0') < 0 && (File.Exists(path) || Directory.Exists(path));
+        path.IndexOf('\0') < 0 && (File.Exists(path) || Directory.Exists(path) ||
+                                  PackagedAppService.AppIdFromTarget(path) is not null);
 
     private static bool IsVirtualFolderHotZone(DockTile tile, DragEventArgs e)
     {
