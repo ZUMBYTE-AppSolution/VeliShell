@@ -7,6 +7,11 @@ name: Submit VeliShell MSIX to Microsoft Store
         description: Stable GitHub release tag to submit
         required: true
         type: string
+      access_check_only:
+        description: Verify that Partner Center exposes the Store app without submitting a package
+        required: false
+        default: false
+        type: boolean
     secrets:
       AZURE_AD_APPLICATION_CLIENT_ID:
         required: true
@@ -22,6 +27,11 @@ name: Submit VeliShell MSIX to Microsoft Store
         description: Existing stable GitHub release tag, for example v0.6.1
         required: true
         type: string
+      access_check_only:
+        description: Check Partner Center access only; do not build or submit a package
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -102,9 +112,11 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Test and publish self-contained application
+        if: ${{ !inputs.access_check_only }}
         run: ./tools/Build.ps1 -Portable
 
       - name: Build unsigned Store MSIX
+        if: ${{ !inputs.access_check_only }}
         env:
           MSIX_PATH: ${{ steps.package.outputs.msix_path }}
         run: |
@@ -121,6 +133,7 @@ jobs:
             -OutputPath $env:MSIX_PATH
 
       - name: Upload Store submission package
+        if: ${{ !inputs.access_check_only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: VeliShell-${{ steps.package.outputs.version }}-Microsoft-Store-MSIX
@@ -156,7 +169,20 @@ jobs:
             --clientSecret $env:STORE_CLIENT_SECRET
           if ($LASTEXITCODE -ne 0) { throw 'Microsoft Store CLI authentication failed.' }
 
+      - name: Verify Partner Center application access
+        run: |
+          $applications = & msstore apps list 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center did not return an app list for the configured Entra application.' }
+          $visible = $applications.Contains($env:STORE_PRODUCT_ID, [StringComparison]::OrdinalIgnoreCase)
+          Write-Host "Configured Store product ID appears in app list: $visible"
+          if (-not $visible) {
+            throw 'The configured Entra application cannot see this Store product. Check the Seller ID, Partner Center association and Manager role before publishing.'
+          }
+          msstore apps get $env:STORE_PRODUCT_ID | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'The configured Entra application cannot retrieve the Store product.' }
+
       - name: Publish MSIX submission
+        if: ${{ !inputs.access_check_only }}
         env:
           MSIX_PATH: ${{ steps.package.outputs.msix_path }}
         run: |
@@ -166,6 +192,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'The submitted Store status could not be read.' }
 
       - name: Write submission summary
+        if: ${{ !inputs.access_check_only }}
         env:
           RELEASE_VERSION: ${{ steps.package.outputs.version }}
         run: |
