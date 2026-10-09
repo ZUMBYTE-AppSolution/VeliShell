@@ -52,7 +52,7 @@
              ToolTip="{services:Loc MenuBar.Network}" AutomationProperties.Name="{services:Loc MenuBar.Network}">
       <controls:VeliSymbol Symbol="Network" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
      </Button>
-     <Button Style="{StaticResource MenuBarButton}" Click="Sound_Click"
+     <Button x:Name="SoundButton" Style="{StaticResource MenuBarButton}" Click="Sound_Click"
              ToolTip="{services:Loc MenuBar.Sound}" AutomationProperties.Name="{services:Loc MenuBar.Sound}">
       <controls:VeliSymbol Symbol="Sound" Width="16" Height="16" Foreground="{DynamicResource TextPrimary}" />
      </Button>

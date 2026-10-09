@@ -104,6 +104,7 @@ internal static class AppStoreIconService
     internal static bool IsEligibleAppPin(Pin pin)
     {
         ArgumentNullException.ThrowIfNull(pin);
+        if (pin.Kind == PinKind.VirtualFolder) return false;
         try
         {
             var target = Environment.ExpandEnvironmentVariables(pin.Target ?? "").Trim().Trim('"');

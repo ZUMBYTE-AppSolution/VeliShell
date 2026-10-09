@@ -48,6 +48,40 @@ try
     Test("Normalize empty labels", () => { var s = new Settings { Pins = [new("a", "  ", "a.exe")] }; s.Normalize(); Check(s.Pins[0].Name == "Anwendung"); });
     Test("Limit pins", () => { var s = new Settings { Pins = Enumerable.Range(0, 50).Select(i => new Pin(i.ToString(), "A", "a.exe")).ToList() }; s.Normalize(); Check(s.Pins.Count == Settings.MaximumPins); });
     Test("Empty pins stay empty", () => { var s = new Settings { Pins = [] }; s.Normalize(); Check(s.Pins.Count == 0); });
+    Test("Folder display mode is stored and invalid values fall back", () =>
+    {
+        var s = new Settings { Pins = [new("folder", "Files", @"C:\Files", FolderMode: FolderDisplayMode.Grid),
+            new("bad", "Files", @"C:\Other", FolderMode: (FolderDisplayMode)99)] };
+        s.Normalize();
+        Check(s.Pins[0].FolderMode == FolderDisplayMode.Grid && s.Pins[1].FolderMode == FolderDisplayMode.List);
+    });
+    Test("Virtual app folder moves shortcuts without changing files", () =>
+    {
+        var folder = Settings.CreateVirtualFolder("Tools");
+        var app = new Pin("editor", "Editor", @"C:\Apps\editor.exe");
+        var s = new Settings { Pins = [folder, app] };
+        Check(s.AddToVirtualFolder(folder.Id, app, removeDockPin: true));
+        Check(s.Pins.Count == 1 && s.Pins[0].VirtualItems?.Count == 1);
+        Check(!s.AddToVirtualFolder(folder.Id, app, removeDockPin: false));
+        s.Normalize();
+        Check(s.Pins[0].Kind == PinKind.VirtualFolder && s.Pins[0].VirtualItems?.Count == 1);
+        Check(s.RemoveFromVirtualFolder(folder.Id, "editor", moveToDock: true));
+        Check(s.Pins.Count == 2 && s.Pins[0].VirtualItems?.Count == 0 &&
+              s.Pins[1].Target == app.Target);
+    });
+    Test("Virtual app folder rejects nesting and bounds entries", () =>
+    {
+        var folder = Settings.CreateVirtualFolder("Work");
+        var s = new Settings { Pins = [folder] };
+        Check(!s.AddToVirtualFolder(folder.Id, Settings.CreateVirtualFolder("Nested"), false));
+        for (var index = 0; index < Settings.MaximumVirtualFolderItems; index++)
+            Check(s.AddToVirtualFolder(folder.Id,
+                new Pin(index.ToString(), "App", $@"C:\Apps\app{index}.exe"), false));
+        Check(!s.AddToVirtualFolder(folder.Id,
+            new Pin("overflow", "Extra", @"C:\Apps\extra.exe"), false));
+        s.Normalize();
+        Check(s.Pins.Single().VirtualItems?.Count == Settings.MaximumVirtualFolderItems);
+    });
     Test("Explorer pin command accepts one exact Unicode path", () =>
     {
         Directory.CreateDirectory(temp);

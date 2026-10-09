@@ -6,6 +6,15 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-10
+
+### Neu
+
+- Der optionale Start-Knopf öffnet nun VeliShells eigenen App-Launcher unmittelbar über seiner Dock-Position. Installierte Programme lassen sich durchsuchen, starten, anheften oder aus dem Launcher ins Dock ziehen; das normale Windows-Startmenü bleibt separat erreichbar.
+- Echte Dock-Ordner können je Eintrag als Liste, Raster oder App-Launcher geöffnet werden. Virtuelle App-Ordner bündeln mehrere Programme im Dock, ohne Dateien oder Verknüpfungen auf dem Datenträger zu verschieben.
+- Der Ton-Indikator in der Menüleiste öffnet ein eigenes Panel für erkannte Ausgabegeräte. Lautstärke und Stummschaltung sind je Gerät steuerbar; für das Windows-Standardgerät führt ein Knopf zu den Systemeinstellungen.
+- Auch andere erkannte Hintergrund-Apps haben nun ein Rechtsklickmenü zum Öffnen der App oder ihres Speicherorts. Ein reguläres Beenden wird nur angeboten, wenn der Prozess noch ein geeignetes Fenster besitzt. „Sofort beenden …“ warnt vor Datenverlust, verlangt eine Bestätigung und prüft Prozess-ID, Startzeit, Benutzer-Sitzung und Programmdatei erneut, bevor ausschließlich dieser Prozess beendet wird. Die Aktionen sind auch im Überlaufmenü erreichbar.
+
 ## [0.10.0] - 2026-10-09
 
 ### Neu

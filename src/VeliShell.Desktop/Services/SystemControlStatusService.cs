@@ -10,6 +10,9 @@ internal readonly record struct SystemControlStatus(
     double? MasterVolume,
     bool IsMuted);
 
+internal sealed record AudioOutputEndpoint(string Id, string Name, bool IsDefault,
+    double? VolumePercent, bool IsMuted);
+
 internal static class SystemControlStatusService
 {
     internal static SystemControlStatus Read()
@@ -63,7 +66,113 @@ internal static class SystemControlStatusService
         });
     }
 
-    private static bool TryWithAudioEndpoint(Func<IAudioEndpointVolume, bool> action)
+    internal static bool TrySetEndpointVolume(string deviceId, double percent)
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(deviceId) ||
+            !double.IsFinite(percent)) return false;
+        return TryWithAudioEndpoint(endpoint =>
+        {
+            var context = Guid.Empty;
+            return endpoint.SetMasterVolumeLevelScalar((float)(Math.Clamp(percent, 0d, 100d) / 100d),
+                ref context) == 0;
+        }, deviceId);
+    }
+
+    internal static bool TrySetEndpointMuted(string deviceId, bool muted)
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(deviceId)) return false;
+        return TryWithAudioEndpoint(endpoint =>
+        {
+            var context = Guid.Empty;
+            return endpoint.SetMute(muted, ref context) == 0;
+        }, deviceId);
+    }
+
+    internal static IReadOnlyList<AudioOutputEndpoint> ReadOutputDevices()
+    {
+        if (!OperatingSystem.IsWindows()) return [];
+        IMMDeviceEnumerator? enumerator = null;
+        IMMDeviceCollection? collection = null;
+        IMMDevice? defaultDevice = null;
+        try
+        {
+            var type = Type.GetTypeFromCLSID(
+                new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), throwOnError: true)!;
+            enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(type)!;
+            var defaultId = "";
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out defaultDevice) == 0 &&
+                defaultDevice is not null)
+                defaultDevice.GetId(out defaultId);
+            if (enumerator.EnumAudioEndpoints(0, 1, out collection) != 0 || collection is null ||
+                collection.GetCount(out var count) != 0) return [];
+            var results = new List<AudioOutputEndpoint>();
+            for (uint index = 0; index < Math.Min(count, 32); index++)
+            {
+                IMMDevice? device = null;
+                IPropertyStore? properties = null;
+                IAudioEndpointVolume? endpoint = null;
+                try
+                {
+                    if (collection.Item(index, out device) != 0 || device is null ||
+                        device.GetId(out var id) != 0 || string.IsNullOrWhiteSpace(id)) continue;
+                    var name = "";
+                    if (device.OpenPropertyStore(0, out properties) == 0 && properties is not null)
+                    {
+                        var key = new PropertyKey
+                        {
+                            FormatId = new Guid("A45C254E-DF1C-4EFD-8020-67D146A850E0"), PropertyId = 14
+                        };
+                        if (properties.GetValue(ref key, out var value) == 0)
+                        {
+                            try
+                            {
+                                if (value.VariantType == 31 && value.PointerValue != 0)
+                                    name = Marshal.PtrToStringUni(value.PointerValue) ?? "";
+                            }
+                            finally { PropVariantClear(ref value); }
+                        }
+                    }
+                    if (string.IsNullOrWhiteSpace(name)) name = $"Audio {index + 1}";
+                    double? volume = null;
+                    var muted = false;
+                    var interfaceId = typeof(IAudioEndpointVolume).GUID;
+                    if (device.Activate(ref interfaceId, 23, nint.Zero, out var instance) == 0 &&
+                        instance is IAudioEndpointVolume audio)
+                    {
+                        endpoint = audio;
+                        if (endpoint.GetMasterVolumeLevelScalar(out var scalar) == 0)
+                            volume = Math.Clamp(scalar * 100d, 0d, 100d);
+                        endpoint.GetMute(out muted);
+                    }
+                    results.Add(new AudioOutputEndpoint(id, name,
+                        string.Equals(id, defaultId, StringComparison.OrdinalIgnoreCase), volume, muted));
+                }
+                finally
+                {
+                    ReleaseComObject(endpoint);
+                    ReleaseComObject(properties);
+                    ReleaseComObject(device);
+                }
+            }
+            return results.OrderByDescending(device => device.IsDefault)
+                .ThenBy(device => device.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        }
+        catch (Exception exception) when (exception is COMException or InvalidCastException or
+               InvalidComObjectException or TypeLoadException or MissingMethodException or
+               System.Reflection.TargetInvocationException)
+        {
+            App.Log("Windows audio-device enumeration failed", exception);
+            return [];
+        }
+        finally
+        {
+            ReleaseComObject(defaultDevice);
+            ReleaseComObject(collection);
+            ReleaseComObject(enumerator);
+        }
+    }
+
+    private static bool TryWithAudioEndpoint(Func<IAudioEndpointVolume, bool> action, string? deviceId = null)
     {
         IMMDeviceEnumerator? enumerator = null;
         IMMDevice? device = null;
@@ -73,7 +182,10 @@ internal static class SystemControlStatusService
             var enumeratorType = Type.GetTypeFromCLSID(
                 new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), throwOnError: true)!;
             enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(enumeratorType)!;
-            if (enumerator.GetDefaultAudioEndpoint(0, 1, out device) != 0 || device is null)
+            var result = deviceId is null
+                ? enumerator.GetDefaultAudioEndpoint(0, 1, out device)
+                : enumerator.GetDevice(deviceId, out device);
+            if (result != 0 || device is null)
                 return false;
 
             var interfaceId = typeof(IAudioEndpointVolume).GUID;
@@ -113,6 +225,19 @@ internal static class SystemControlStatusService
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct PropertyKey { public Guid FormatId; public uint PropertyId; }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct PropertyValue
+    {
+        [FieldOffset(0)] public ushort VariantType;
+        [FieldOffset(8)] public nint PointerValue;
+    }
+
+    [DllImport("ole32.dll")]
+    private static extern int PropVariantClear(ref PropertyValue value);
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct SystemPowerStatus
     {
         internal byte AcLineStatus;
@@ -132,11 +257,20 @@ internal static class SystemControlStatusService
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IMMDeviceEnumerator
     {
-        [PreserveSig] int EnumAudioEndpoints(int dataFlow, uint stateMask, out nint devices);
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, uint stateMask, out IMMDeviceCollection devices);
         [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
         [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice device);
         [PreserveSig] int RegisterEndpointNotificationCallback(nint callback);
         [PreserveSig] int UnregisterEndpointNotificationCallback(nint callback);
+    }
+
+    [ComImport]
+    [Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMDeviceCollection
+    {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int Item(uint index, out IMMDevice device);
     }
 
     [ComImport]
@@ -150,9 +284,21 @@ internal static class SystemControlStatusService
             int classContext,
             nint activationParameters,
             [MarshalAs(UnmanagedType.IUnknown)] out object instance);
-        [PreserveSig] int OpenPropertyStore(int storageAccess, out nint properties);
+        [PreserveSig] int OpenPropertyStore(int storageAccess, out IPropertyStore properties);
         [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
         [PreserveSig] int GetState(out uint state);
+    }
+
+    [ComImport]
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IPropertyStore
+    {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int GetAt(uint index, out PropertyKey key);
+        [PreserveSig] int GetValue(ref PropertyKey key, out PropertyValue value);
+        [PreserveSig] int SetValue(ref PropertyKey key, ref PropertyValue value);
+        [PreserveSig] int Commit();
     }
 
     [ComImport]

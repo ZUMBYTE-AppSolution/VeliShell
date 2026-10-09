@@ -47,6 +47,7 @@ public partial class DockWindow : Window
     private IReadOnlyList<string> _cachedDragPaths = Array.Empty<string>();
     private WindowThumbnailPreview? _windowPreview;
     private FolderPopoverWindow? _folderPopover;
+    private StartLauncherWindow? _startLauncher;
     private FrameworkElement? _dropPlaceholder;
     private int _dropPlaceholderInsertionIndex = -1;
     private string? _dropPlaceholderKey;
@@ -67,7 +68,8 @@ public partial class DockWindow : Window
         {
             _hideTimer.Stop();
             if (_app.Preferences.AutoHide && !_dragInProgress && !IsMouseOver &&
-                _menu?.IsOpen != true && _folderPopover?.IsVisible != true) SetHidden(true);
+                _menu?.IsOpen != true && _folderPopover?.IsVisible != true &&
+                _startLauncher?.IsVisible != true) SetHidden(true);
         };
         Closed += (_, _) =>
         {
@@ -79,6 +81,7 @@ public partial class DockWindow : Window
             CloseDragGhost();
             CloseWindowPreview();
             CloseFolderPopover();
+            _startLauncher?.Close();
             NativeMethods.UnregisterHotKey(_handle, 1);
             NativeMethods.UnregisterHotKey(_handle, 2);
             NativeMethods.UnregisterHotKey(_handle, 3);
@@ -181,7 +184,8 @@ public partial class DockWindow : Window
         var items = new List<DockItem>();
         foreach (var pin in preferences.Pins)
             items.Add(new DockItem { Key = "pin:" + pin.Id, Name = LocalizationService.Current.DisplayPinName(pin), Target = pin.Target,
-                IconId = pin.Id, Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
+                IconId = pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
+                Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
                 Pin = pin, Windows = _windows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
         if (preferences.ShowRunningApps)
         {
@@ -262,6 +266,12 @@ public partial class DockWindow : Window
             tile.LostMouseCapture += Tile_LostMouseCapture;
             tile.PreviewMouseMove += Tile_PreviewMouseMove;
             tile.PreviewMouseRightButtonUp += (_, e) => { ShowItemMenu(tile); e.Handled = true; };
+            if (item.Pin?.Kind == PinKind.VirtualFolder)
+            {
+                tile.PreviewDragOver += (sender, e) => VirtualFolder_DragOver(tile, e);
+                tile.PreviewDragLeave += (_, _) => tile.SetFolderDropTarget(false);
+                tile.PreviewDrop += (sender, e) => VirtualFolder_Drop(tile, e);
+            }
             ItemsPanel.Children.Add(tile);
             _tiles.Add(tile);
             if (_launchDeadlines.TryGetValue(item.Key, out var deadline) &&
@@ -325,12 +335,17 @@ public partial class DockWindow : Window
 
     private void ActivateItem(DockItem item, FrameworkElement anchor)
     {
-        if (item.Key == "start") { WindowsStartService.Open(); return; }
+        if (item.Key == "start") { ShowStartLauncher(anchor); return; }
         if (item.Key == "velishell") { _app.ShowPreferences(); return; }
         if (item.Key == "overflow") { ShowOverflow(item, anchor); return; }
+        if (item.Pin?.Kind == PinKind.VirtualFolder)
+        {
+            ShowVirtualFolderPopover(item.Pin, anchor);
+            return;
+        }
         if (item.Pin is not null && FolderPopoverWindow.CanOpen(item.Target))
         {
-            ShowFolderPopover(item.Target, anchor);
+            ShowFolderPopover(item.Target, anchor, item.Pin.FolderMode);
             return;
         }
         var windows = item.Windows.Where(w => NativeMethods.IsWindow(w.Handle)).ToList();
@@ -414,9 +429,30 @@ public partial class DockWindow : Window
             menu.Items.Add(new Separator());
             if (item.Pin is { } pin)
             {
+                if (pin.Kind == PinKind.VirtualFolder)
+                {
+                    AddMenuItem(menu, L("FolderPopover.RenameTitle"), () => RenameVirtualFolder(pin));
+                    AddMenuItem(menu, L("FolderPopover.AddApps"), () => AddProgramsToVirtualFolder(pin.Id));
+                }
+                if (Directory.Exists(pin.Target))
+                {
+                    var viewMenu = new MenuItem { Header = L("FolderPopover.DisplayMode") };
+                    foreach (var mode in Enum.GetValues<FolderDisplayMode>())
+                    {
+                        var choice = new MenuItem
+                        {
+                            Header = L("FolderPopover.Mode." + mode),
+                            IsCheckable = true,
+                            IsChecked = pin.FolderMode == mode
+                        };
+                        choice.Click += (_, _) => SetFolderMode(pin.Id, mode);
+                        viewMenu.Items.Add(choice);
+                    }
+                    menu.Items.Add(viewMenu);
+                }
                 AddMenuItem(menu, L("Dock.MoveLeft"), () => MovePin(pin.Id, -1));
                 AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
-                AddMenuItem(menu, L("Dock.Remove"), () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
+                AddMenuItem(menu, L("Dock.Remove"), () => RemovePin(pin));
             }
             else if (File.Exists(item.Target))
                 AddMenuItem(menu, L("Dock.Keep"), () => AddPaths([item.Target]));
@@ -440,7 +476,8 @@ public partial class DockWindow : Window
         }
         else if (item.Key == "start")
         {
-            AddMenuItem(menu, L("Dock.WindowsStart"), () => WindowsStartService.Open());
+            AddMenuItem(menu, L("Dock.WindowsStart"), () => ShowStartLauncher(tile));
+            AddMenuItem(menu, L("Start.WindowsMenu"), () => WindowsStartService.Open());
             AddMenuItem(menu, L("Dock.HideWindowsStart"), () =>
                 _app.UpdatePreferences(settings => settings.ShowWindowsStartDockItem = false));
             menu.Items.Add(new Separator());
@@ -458,12 +495,19 @@ public partial class DockWindow : Window
         OpenMenu(menu, tile);
     }
 
-    private void ShowFolderPopover(string path, FrameworkElement anchor)
+    internal void SetFolderMode(string pinId, FolderDisplayMode mode) => _app.UpdatePreferences(settings =>
+    {
+        var index = settings.Pins.FindIndex(pin => string.Equals(pin.Id, pinId, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0 && Directory.Exists(settings.Pins[index].Target))
+            settings.Pins[index] = settings.Pins[index] with { FolderMode = mode };
+    });
+
+    private void ShowFolderPopover(string path, FrameworkElement anchor, FolderDisplayMode mode)
     {
         CloseFolderPopover();
         try
         {
-            var popover = new FolderPopoverWindow(path);
+            var popover = new FolderPopoverWindow(path, mode);
             _folderPopover = popover;
             popover.Closed += (_, _) =>
             {
@@ -479,6 +523,110 @@ public partial class DockWindow : Window
             App.Log("Could not open the pinned-folder popover", exception);
             LaunchService.Open(path);
         }
+    }
+
+    internal void OpenVirtualFolder(Pin folder)
+    {
+        var tile = _tiles.FirstOrDefault(candidate => candidate.Item.Pin?.Id == folder.Id)
+                   ?? _tiles.FirstOrDefault(candidate => candidate.Item.Key == "overflow")
+                   ?? _tiles.FirstOrDefault(candidate => candidate.Item.Key == "start");
+        if (tile is not null) ShowVirtualFolderPopover(folder, tile);
+    }
+
+    private void ShowVirtualFolderPopover(Pin folder, FrameworkElement anchor)
+    {
+        CloseFolderPopover();
+        var popover = new FolderPopoverWindow(_app, folder);
+        _folderPopover = popover;
+        popover.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_folderPopover, popover)) _folderPopover = null;
+            if (_app.Preferences.AutoHide && !IsMouseOver) _hideTimer.Start();
+        };
+        _hideTimer.Stop();
+        SetHidden(false);
+        popover.ShowRelativeTo(anchor, this, _app.Preferences.AlwaysOnTop);
+    }
+
+    internal void CreateVirtualFolder()
+    {
+        var dialog = new VirtualFolderNameWindow { Owner = this, Topmost = Topmost };
+        if (dialog.ShowDialog() != true) return;
+        _app.UpdatePreferences(settings =>
+        {
+            if (settings.Pins.Count < Settings.MaximumPins)
+                settings.Pins.Add(Settings.CreateVirtualFolder(dialog.ResultName));
+        });
+    }
+
+    internal void RenameVirtualFolder(Pin folder)
+    {
+        var dialog = new VirtualFolderNameWindow(folder.Name) { Owner = this, Topmost = Topmost };
+        if (dialog.ShowDialog() != true) return;
+        _app.UpdatePreferences(settings =>
+        {
+            var index = settings.Pins.FindIndex(pin => pin.Kind == PinKind.VirtualFolder && pin.Id == folder.Id);
+            if (index >= 0) settings.Pins[index] = settings.Pins[index] with { Name = dialog.ResultName };
+        });
+    }
+
+    internal void AddProgramsToVirtualFolder(string folderId)
+    {
+        var picker = new OpenFileDialog
+        {
+            Title = L("FolderPopover.AddApps"), Multiselect = true, CheckFileExists = true,
+            Filter = L("Dock.ProgramFilter")
+        };
+        if (picker.ShowDialog() != true) return;
+        AddPathsToVirtualFolder(folderId, picker.FileNames);
+    }
+
+    private void AddPathsToVirtualFolder(string folderId, IEnumerable<string> paths)
+    {
+        var candidates = paths.Take(Settings.MaximumVirtualFolderItems)
+            .Where(path => File.Exists(path) && IsVirtualFolderAppPath(path))
+            .Select(LaunchService.PinFromPath).OfType<Pin>().ToArray();
+        if (candidates.Length == 0) return;
+        _app.UpdatePreferences(settings =>
+        {
+            foreach (var candidate in candidates)
+                settings.AddToVirtualFolder(folderId, candidate, removeDockPin: false);
+        });
+    }
+
+    private static bool IsVirtualFolderAppPath(string path) =>
+        Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".appref-ms", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase);
+
+    internal void RemovePin(Pin pin)
+    {
+        if (pin.Kind == PinKind.VirtualFolder &&
+            MessageBox.Show(this, L("FolderPopover.RemoveVirtualConfirm"), pin.Name,
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        _app.UpdatePreferences(settings => settings.Pins.RemoveAll(candidate =>
+            string.Equals(candidate.Id, pin.Id, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void ShowStartLauncher(FrameworkElement anchor)
+    {
+        if (_startLauncher is { IsVisible: true })
+        {
+            _startLauncher.Close();
+            return;
+        }
+        CloseFolderPopover();
+        _hideTimer.Stop();
+        SetHidden(false);
+        var launcher = new StartLauncherWindow(_app);
+        _startLauncher = launcher;
+        launcher.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_startLauncher, launcher)) _startLauncher = null;
+            if (_app.Preferences.AutoHide && !IsMouseOver) _hideTimer.Start();
+        };
+        launcher.ShowAbove(anchor, this, _app.Preferences.AlwaysOnTop);
     }
 
     private void CloseFolderPopover()
@@ -543,6 +691,7 @@ public partial class DockWindow : Window
     {
         AddMenuItem(menu, L("Dock.PinProgram"), AddPrograms);
         AddMenuItem(menu, L("Dock.PinFolder"), AddFolder);
+        AddMenuItem(menu, L("FolderPopover.CreateVirtual"), CreateVirtualFolder);
         AddMenuItem(menu, L("Search.Open"), _app.ShowSearch);
         AddMenuItem(menu, L("Dock.Settings"), _app.ShowPreferences);
         menu.Items.Add(new Separator());
@@ -680,8 +829,10 @@ public partial class DockWindow : Window
                     IsCursorOverDockPlate());
             };
             dragSource.QueryContinueDrag += queryContinueDrag;
-            ShowDragGhost("pin:" + pin.Id, IconService.For(pin.Id, pin.Target, pin.Icon),
-                Directory.Exists(pin.Target));
+            ShowDragGhost("pin:" + pin.Id,
+                IconService.For(pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
+                    pin.Target, pin.Icon),
+                pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target));
             System.Windows.DragDrop.DoDragDrop(
                 dragSource,
                 CreateDockPinDragData(pin.Id),
@@ -704,8 +855,7 @@ public partial class DockWindow : Window
             if (_app.Preferences.AutoHide && !IsMouseOver) _hideTimer.Start();
         }
         if (removePinAfterDrag && !_closed)
-            _app.UpdatePreferences(settings => settings.Pins.RemoveAll(candidate =>
-                string.Equals(candidate.Id, pin.Id, StringComparison.OrdinalIgnoreCase)));
+            RemovePin(pin);
     }
 
     private void DragSource_GiveFeedback(object sender, GiveFeedbackEventArgs e)
@@ -905,7 +1055,8 @@ public partial class DockWindow : Window
             : insertionIndex;
         finalIndex = Math.Clamp(finalIndex, 0, remainingPins.Count);
 
-        var freeform = _dropSourceTile?.Item.Pin is { } sourcePin && Directory.Exists(sourcePin.Target) ||
+        var freeform = _dropSourceTile?.Item.Pin is { } sourcePin &&
+                       (sourcePin.Kind == PinKind.VirtualFolder || Directory.Exists(sourcePin.Target)) ||
                        _cachedDragPaths.Count > 0 && Directory.Exists(_cachedDragPaths[0]);
         var placeholder = CreateDropPlaceholder(previewIcon, itemCount, freeform);
         var childIndex = remainingPins.Count == 0
@@ -1183,6 +1334,70 @@ public partial class DockWindow : Window
     private static bool IsSafeDropPath(string? path) =>
         !string.IsNullOrWhiteSpace(path) && path.Length <= MaximumDropPathLength &&
         path.IndexOf('\0') < 0 && (File.Exists(path) || Directory.Exists(path));
+
+    private static bool IsVirtualFolderHotZone(DockTile tile, DragEventArgs e)
+    {
+        var point = e.GetPosition(tile);
+        return point.X > tile.ActualWidth * 0.17 && point.X < tile.ActualWidth * 0.83 &&
+               point.Y > tile.ActualHeight * 0.17 && point.Y < tile.ActualHeight * 0.83;
+    }
+
+    private void VirtualFolder_DragOver(DockTile tile, DragEventArgs e)
+    {
+        var folder = tile.Item.Pin;
+        if (folder?.Kind != PinKind.VirtualFolder || !IsVirtualFolderHotZone(tile, e))
+        {
+            tile.SetFolderDropTarget(false);
+            return;
+        }
+        var hasDockPin = TryReadDockPin(e.Data, out var sourceId) &&
+            _app.Preferences.Pins.Any(pin => pin.Id == sourceId && pin.Kind == PinKind.Item &&
+                !Directory.Exists(pin.Target));
+        var hasFiles = !hasDockPin && TryReadDroppedPaths(e.Data, out var paths) &&
+            paths.Any(path => File.Exists(path) && IsVirtualFolderAppPath(path));
+        if (!hasDockPin && !hasFiles)
+        {
+            tile.SetFolderDropTarget(false);
+            return;
+        }
+        tile.SetFolderDropTarget(true);
+        ClearDropSlot();
+        e.Effects = hasDockPin ? DragDropEffects.Move : DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void VirtualFolder_Drop(DockTile tile, DragEventArgs e)
+    {
+        tile.SetFolderDropTarget(false);
+        var folder = tile.Item.Pin;
+        if (folder?.Kind != PinKind.VirtualFolder || !IsVirtualFolderHotZone(tile, e)) return;
+        var added = false;
+        if (TryReadDockPin(e.Data, out var sourceId))
+        {
+            _app.UpdatePreferences(settings =>
+            {
+                var source = settings.Pins.FirstOrDefault(pin => pin.Id == sourceId);
+                if (source is not null && source.Kind == PinKind.Item && !Directory.Exists(source.Target))
+                    added = settings.AddToVirtualFolder(folder.Id, source, removeDockPin: true);
+            });
+            e.Effects = added ? DragDropEffects.Move : DragDropEffects.None;
+        }
+        else if (TryReadDroppedPaths(e.Data, out var paths))
+        {
+            var candidates = paths.Where(path => File.Exists(path) && IsVirtualFolderAppPath(path))
+                .Select(LaunchService.PinFromPath).OfType<Pin>().ToArray();
+            _app.UpdatePreferences(settings =>
+            {
+                foreach (var candidate in candidates)
+                    added |= settings.AddToVirtualFolder(folder.Id, candidate, removeDockPin: false);
+            });
+            e.Effects = added ? DragDropEffects.Copy : DragDropEffects.None;
+        }
+        else e.Effects = DragDropEffects.None;
+        ClearDropSlot();
+        ResetDragPayloadCache();
+        e.Handled = true;
+    }
     private void Dock_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;

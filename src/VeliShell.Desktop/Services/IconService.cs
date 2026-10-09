@@ -21,6 +21,7 @@ internal static class IconService
         // A user-selected local image is an explicit override in either icon
         // style. Online catalog artwork keeps the existing Mac-style behavior.
         if (CustomIconService.TryLoad(icon) is { } custom) return custom;
+        if (id == "virtual-folder") return BuiltIn(id);
         var iconStyle = CurrentIconStyle();
         if (iconStyle == DockIconStyle.Mac)
         {
@@ -303,9 +304,20 @@ internal static class IconService
                 _ => ("#9A9CFC", "#6655D8")
             };
             var gradient = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(palette.Item1), (Color)ColorConverter.ConvertFromString(palette.Item2), 90);
-            d.DrawRoundedRectangle(gradient, new Pen(Brush("#22000000"), 0.8), new Rect(3, 3, 58, 58), 13, 13);
+            if (id != "virtual-folder")
+                d.DrawRoundedRectangle(gradient, new Pen(Brush("#22000000"), 0.8), new Rect(3, 3, 58, 58), 13, 13);
             switch (id)
             {
+                case "virtual-folder":
+                    d.DrawGeometry(new LinearGradientBrush(Brush("#8BD7FF").Color, Brush("#698BEE").Color, 90),
+                        Pen("#B7E7FF", 1.3), Geometry.Parse("M 6,20 Q 6,16 10,16 L 25,16 L 30,21 L 53,21 Q 58,21 58,26 L 58,48 Q 58,53 53,53 L 11,53 Q 6,53 6,48 Z"));
+                    d.DrawRoundedRectangle(Brush("#D5F0FF"), null, new Rect(10, 25, 44, 25), 5, 5);
+                    foreach (var (x, y, color) in new[]
+                    {
+                        (18d, 29d, "#3B80E9"), (34d, 29d, "#6F6CEB"),
+                        (18d, 40d, "#39BAA1"), (34d, 40d, "#E390C9")
+                    }) d.DrawRoundedRectangle(Brush(color), null, new Rect(x, y, 10, 8), 2, 2);
+                    break;
                 case "files":
                     d.DrawGeometry(Brush("#D6F3FF"), null, Geometry.Parse("M 13,23 L 13,18 Q 13,16 16,16 L 27,16 L 32,21 L 48,21 Q 51,21 51,24 L 51,46 Q 51,48 48,48 L 16,48 Q 13,48 13,45 Z"));
                     d.DrawRoundedRectangle(Brush("#FFFFFF"), null, new Rect(13, 26, 38, 22), 3, 3);

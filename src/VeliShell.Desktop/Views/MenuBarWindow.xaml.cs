@@ -39,6 +39,7 @@ public partial class MenuBarWindow : Window
     private bool _closed;
     private bool _hidden;
     private ControlCenterWindow? _controlCenter;
+    private AudioDevicesWindow? _audioDevices;
     private NotificationCenterWindow? _notificationCenter;
     private Window? _openPanel;
     private string? _lastNotifiedUpdateVersion;
@@ -229,6 +230,16 @@ public partial class MenuBarWindow : Window
                 RenderOptions.SetBitmapScalingMode((Image)button.Content, BitmapScalingMode.HighQuality);
                 System.Windows.Automation.AutomationProperties.SetName(button, app.Name);
                 button.Click += (_, _) => OpenBackgroundApp(app);
+                button.MouseRightButtonUp += (_, args) =>
+                {
+                    args.Handled = true;
+                    ShowBackgroundAppMenu(button, app);
+                };
+                button.ContextMenuOpening += (_, args) =>
+                {
+                    args.Handled = true;
+                    ShowBackgroundAppMenu(button, app);
+                };
                 BackgroundAppsPanel.Children.Add(button);
                 visibleCount++;
             }
@@ -251,10 +262,73 @@ public partial class MenuBarWindow : Window
         {
             var menu = NewMenu(more);
             foreach (var app in overflow)
-                Add(menu, app.Name, () => OpenBackgroundApp(app));
+            {
+                var item = new MenuItem { Header = app.Name };
+                AddBackgroundAppActions(item, app);
+                menu.Items.Add(item);
+            }
             menu.IsOpen = true;
         };
         BackgroundAppsPanel.Children.Add(more);
+    }
+
+    private void ShowBackgroundAppMenu(FrameworkElement anchor, BackgroundApp app)
+    {
+        var menu = NewMenu(anchor);
+        AddBackgroundAppActions(menu, app);
+        menu.IsOpen = true;
+    }
+
+    private void AddBackgroundAppActions(ItemsControl menu, BackgroundApp app)
+    {
+        var running = _backgroundApps.IsStillRunning(app);
+        Add(menu, L("MenuBar.BackgroundAppOpen"), () => OpenBackgroundApp(app),
+            running && File.Exists(app.LaunchTarget));
+        var folder = Path.GetDirectoryName(app.LaunchTarget);
+        Add(menu, L("MenuBar.BackgroundAppFolder"), () =>
+        {
+            if (folder is not null && Directory.Exists(folder)) LaunchService.Open(folder);
+        }, folder is not null && Directory.Exists(folder));
+        menu.Items.Add(new Separator());
+        var canClose = running && BackgroundAppCommands.CanRequestClose(app);
+        var quit = Add(menu, L("MenuBar.BackgroundAppQuit"), () => QuitBackgroundApp(app), canClose);
+        if (running && !canClose)
+        {
+            quit.ToolTip = L("MenuBar.BackgroundAppNoCloseWindow");
+            ToolTipService.SetShowOnDisabled(quit, true);
+        }
+        Add(menu, L("MenuBar.BackgroundAppForceQuit"), () => _ = ForceQuitBackgroundAppAsync(app), running);
+    }
+
+    private void QuitBackgroundApp(BackgroundApp app)
+    {
+        var result = BackgroundAppCommands.RequestClose(app);
+        if (result == BackgroundAppCommandResult.Requested) _ = RefreshWindowsAsync();
+        else ShowBackgroundAppCommandResult(app, result);
+    }
+
+    private async Task ForceQuitBackgroundAppAsync(BackgroundApp app)
+    {
+        var question = string.Format(LocalizationService.Current.ActiveCulture,
+            L("MenuBar.BackgroundAppForceQuitConfirm"), app.Name, app.ProcessId);
+        if (MessageBox.Show(this, question, app.Name, MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        var result = await Task.Run(() => BackgroundAppCommands.ForceQuit(app));
+        if (result == BackgroundAppCommandResult.Requested) await RefreshWindowsAsync();
+        else ShowBackgroundAppCommandResult(app, result);
+    }
+
+    private void ShowBackgroundAppCommandResult(BackgroundApp app, BackgroundAppCommandResult result)
+    {
+        var key = result switch
+        {
+            BackgroundAppCommandResult.NotRunning => "MenuBar.BackgroundAppNotRunning",
+            BackgroundAppCommandResult.NoCloseWindow => "MenuBar.BackgroundAppNoCloseWindow",
+            _ => "MenuBar.BackgroundAppActionFailed"
+        };
+        MessageBox.Show(this, L(key), app.Name, MessageBoxButton.OK, MessageBoxImage.Information);
+        _ = RefreshWindowsAsync();
     }
 
     private void OpenBackgroundApp(BackgroundApp app)
@@ -343,7 +417,7 @@ public partial class MenuBarWindow : Window
         return menu;
     }
 
-    private static MenuItem Add(ContextMenu menu, string label, Action action, bool enabled = true)
+    private static MenuItem Add(ItemsControl menu, string label, Action action, bool enabled = true)
     {
         var item = new MenuItem { Header = label, IsEnabled = enabled };
         item.Click += (_, _) => action();
@@ -446,7 +520,7 @@ public partial class MenuBarWindow : Window
     private static string TrimTitle(string title) => title.Length > 72 ? title[..69] + "…" : title;
 
     private void Network_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:network-status");
-    private void Sound_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:sound");
+    private void Sound_Click(object sender, RoutedEventArgs e) => ShowAudioDevices();
     private void Power_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:batterysaver");
     private void Clock_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-clock:");
 
@@ -464,8 +538,27 @@ public partial class MenuBarWindow : Window
         var panel = new ControlCenterWindow();
         _controlCenter = panel;
         _openPanel = panel;
+        panel.OpenAudioDevicesRequested += ShowAudioDevices;
         panel.Closed += (_, _) => PanelClosed(panel);
         panel.ShowRelativeTo(ControlCenterButton, this, Topmost);
+    }
+
+    private void ShowAudioDevices()
+    {
+        if (_audioDevices is { IsVisible: true })
+        {
+            _audioDevices.Close();
+            return;
+        }
+
+        ClosePanels();
+        _hideTimer.Stop();
+        SetHidden(false);
+        var panel = new AudioDevicesWindow();
+        _audioDevices = panel;
+        _openPanel = panel;
+        panel.Closed += (_, _) => PanelClosed(panel);
+        panel.ShowRelativeTo(SoundButton, this, Topmost);
     }
 
     private void NotificationCenter_Click(object sender, RoutedEventArgs e)
@@ -489,6 +582,7 @@ public partial class MenuBarWindow : Window
     private void PanelClosed(Window panel)
     {
         if (ReferenceEquals(_controlCenter, panel)) _controlCenter = null;
+        if (ReferenceEquals(_audioDevices, panel)) _audioDevices = null;
         if (ReferenceEquals(_notificationCenter, panel)) _notificationCenter = null;
         if (ReferenceEquals(_openPanel, panel)) _openPanel = null;
         if (!_closed && _app.Preferences.MenuBarAutoHide && !IsMouseOver) _hideTimer.Start();
@@ -500,6 +594,7 @@ public partial class MenuBarWindow : Window
         _openPanel = null;
         if (panel is { IsVisible: true }) panel.Close();
         _controlCenter = null;
+        _audioDevices = null;
         _notificationCenter = null;
     }
 

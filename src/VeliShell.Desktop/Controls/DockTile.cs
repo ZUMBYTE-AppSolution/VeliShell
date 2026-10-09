@@ -14,6 +14,7 @@ internal sealed class DockTile : Button
     private readonly ScaleTransform _scale = new(1, 1);
     private readonly TranslateTransform _launchOffset = new();
     private readonly AppIconSurface _iconSurface;
+    private readonly Border _folderDropHalo;
     private readonly Ellipse _indicator;
     internal DockItem Item { get; set; }
     internal double IconSize { get; }
@@ -34,6 +35,19 @@ internal sealed class DockTile : Button
         AutomationProperties.SetName(this, item.Name);
         UpdateAutomationStatus(item);
         var grid = new Grid { Width = size + 22, Height = size + 22, ClipToBounds = false };
+        _folderDropHalo = new Border
+        {
+            Width = size + 14, Height = size + 14,
+            CornerRadius = new CornerRadius(Math.Max(11, size * 0.23)),
+            BorderThickness = new Thickness(2),
+            Visibility = Visibility.Collapsed,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            IsHitTestVisible = false
+        };
+        _folderDropHalo.SetResourceReference(Border.BackgroundProperty, "AccentSoft");
+        _folderDropHalo.SetResourceReference(Border.BorderBrushProperty, "AccentStroke");
+        grid.Children.Add(_folderDropHalo);
         var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
         var iconTransforms = new TransformGroup();
         iconTransforms.Children.Add(_scale);
@@ -59,6 +73,9 @@ internal sealed class DockTile : Button
 
     internal void UpdateIndicator() => _indicator.Visibility = Item.Windows.Count > 0 || Item.Key == "velishell" ? Visibility.Visible : Visibility.Hidden;
 
+    internal void SetFolderDropTarget(bool active) =>
+        _folderDropHalo.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+
     internal void UpdateItem(DockItem item)
     {
         Item = item;
@@ -71,7 +88,7 @@ internal sealed class DockTile : Button
     }
 
     private static bool UsesFreeformArtwork(DockItem item) =>
-        item.Key == "trash" || item.IconId == "folder" ||
+        item.Key == "trash" || item.IconId is "folder" or "virtual-folder" ||
         (!string.IsNullOrWhiteSpace(item.Target) && System.IO.Directory.Exists(item.Target));
 
     private void UpdateAutomationStatus(DockItem item)

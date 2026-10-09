@@ -7,6 +7,7 @@ namespace VeliShell.Desktop.Views;
 
 public partial class ControlCenterWindow : Window
 {
+    internal event Action? OpenAudioDevicesRequested;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private bool _updatingStatus;
 
@@ -102,6 +103,7 @@ public partial class ControlCenterWindow : Window
     private void Display_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:display");
     private void Power_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:powersleep");
     private void Settings_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:");
+    private void AudioDevices_Click(object sender, RoutedEventArgs e) => OpenAudioDevicesRequested?.Invoke();
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape) Close();

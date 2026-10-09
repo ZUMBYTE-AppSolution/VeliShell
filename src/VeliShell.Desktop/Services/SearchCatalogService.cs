@@ -160,7 +160,7 @@ internal static class SearchCatalogService
     {
         query = query.Trim();
         if (query.Length > 120) query = query[..120];
-        var pinned = pins.Select(pin => new SearchEntry(
+        var pinned = pins.Where(pin => pin.Kind == PinKind.Item).Select(pin => new SearchEntry(
             LocalizationService.Current.DisplayPinName(pin), pin.Target, "pin"));
         return pinned.Concat(catalog)
             .Where(entry => query.Length == 0 ||

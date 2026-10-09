@@ -199,6 +199,7 @@
       <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
        <Button Content="{services:Loc Apps.AddProgram}" Style="{StaticResource PrimaryButton}" Click="AddProgram_Click" />
        <Button Content="{services:Loc Apps.AddFolder}" Margin="8,0,0,0" Click="AddFolder_Click" />
+       <Button Content="{services:Loc FolderPopover.CreateVirtual}" Margin="8,0,0,0" Click="AddVirtualFolder_Click" />
       </StackPanel>
       <TextBox x:Name="PinSearch" TextChanged="PinSearch_Changed" Margin="0,0,0,10" ToolTip="{services:Loc Apps.FilterPins}" AutomationProperties.Name="{services:Loc Apps.FilterPins}" />
       <Border Style="{StaticResource Card}" Padding="10,6"><StackPanel x:Name="PinList" /></Border>

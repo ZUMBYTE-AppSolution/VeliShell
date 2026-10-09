@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -8,15 +9,24 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using VeliShell.Core;
 using VeliShell.Desktop.Services;
 
 internal static class Program
 {
     private static readonly Assembly DesktopAssembly = typeof(VeliShell.Desktop.App).Assembly;
 
+    private sealed class SafePreviewApp : VeliShell.Desktop.App
+    {
+        protected override void OnStartup(StartupEventArgs e) { }
+        protected override void OnExit(ExitEventArgs e) { }
+    }
+
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--render-start-launcher", StringComparer.OrdinalIgnoreCase))
+            return RenderStartLauncher();
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         if (args.Contains("--live-workarea-reflow", StringComparer.OrdinalIgnoreCase))
             return RunLiveWorkAreaReflowProbe(application);
@@ -94,6 +104,7 @@ internal static class Program
             TestDockIconCustomizationContract();
             TestWebAppAndSteamIdentityContracts();
             TestBackgroundAppTracking();
+            TestBackgroundAppCommands();
             TestFolderPopoverAndDesktopIconContracts();
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
@@ -116,6 +127,7 @@ internal static class Program
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
             Console.WriteLine("PASS: Browser app shortcuts retain per-site identity; Steam web helpers map only to their own Steam installation; live web API search is absent.");
             Console.WriteLine("PASS: Only previously visible same-session app processes appear after their last window closes; process exit, PID reuse, shell hosts, and Steam stay filtered.");
+            Console.WriteLine("PASS: Force quit rejects a stale identity and terminates only its own exact QA process handle.");
             Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
@@ -137,6 +149,105 @@ internal static class Program
             source.Close();
             owner.Close();
             application.Shutdown();
+        }
+    }
+
+    private static int RenderStartLauncher()
+    {
+        // WPF can dispatch Startup during a nested render frame even without
+        // Run(). Override it so this preview never loads user settings or
+        // changes Explorer/taskbar state.
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
+        });
+        var appType = typeof(VeliShell.Desktop.App);
+        appType.GetProperty("Preferences")!.SetValue(application, new Settings
+        {
+            FirstRunCompleted = true,
+            Pins = Settings.Defaults()
+        });
+
+        var entryType = RequireType("VeliShell.Desktop.Services.SearchEntry");
+        var entries = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(entryType))!;
+        foreach (var (name, target) in new[]
+        {
+            ("Editor", "notepad.exe"),
+            ("Explorer", "explorer.exe"),
+            ("Rechner", "calc.exe")
+        })
+            entries.Add(Activator.CreateInstance(entryType, name, target, "app", null)!);
+        var index = appType.GetProperty("ProgramIndex", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(application)!;
+        index.GetType().GetField("_snapshot", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(index, entries);
+
+        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "start-launcher-renders");
+        Directory.CreateDirectory(outputDirectory);
+        var launcherType = RequireType("VeliShell.Desktop.Views.StartLauncherWindow");
+        try
+        {
+            foreach (var dark in new[] { false, true })
+            {
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri($"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                var launcher = (Window)(Activator.CreateInstance(
+                    launcherType, BindingFlags.Instance | BindingFlags.NonPublic,
+                    binder: null, args: [application], culture: null)
+                    ?? throw new InvalidOperationException("Could not create Start launcher."));
+                launcherType.GetMethod("Render", BindingFlags.Instance | BindingFlags.NonPublic |
+                    BindingFlags.DeclaredOnly)!.Invoke(launcher, null);
+                RenderShellPanel(launcher,
+                    Path.Combine(outputDirectory, $"start-launcher-{(dark ? "dark" : "light")}.png"), dark);
+            }
+
+            var anchor = new Border { Width = 52, Height = 52, Background = Brushes.SteelBlue,
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(80, 0, 0, 10) };
+            var owner = new Window { Width = 600, Height = 90, Left = 100,
+                Top = Math.Max(20, SystemParameters.WorkArea.Bottom - 110),
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                ShowInTaskbar = false, Content = new Grid { Children = { anchor } } };
+            Window? positioned = null;
+            try
+            {
+                owner.Show();
+                owner.UpdateLayout();
+                positioned = (Window)(Activator.CreateInstance(
+                    launcherType, BindingFlags.Instance | BindingFlags.NonPublic,
+                    binder: null, args: [application], culture: null)
+                    ?? throw new InvalidOperationException("Could not create positioned Start launcher."));
+                RequireMethod(launcherType, "ShowAbove").Invoke(positioned, [anchor, owner, false]);
+                DrainDispatcher();
+                var anchorScreen = anchor.PointToScreen(new Point(0, 0));
+                var transform = PresentationSource.FromVisual(anchor)!.CompositionTarget!.TransformFromDevice;
+                var anchorDip = transform.Transform(anchorScreen);
+                Require(positioned.IsVisible && positioned.Top + positioned.Height < anchorDip.Y,
+                    "The real Start launcher did not open directly above its dock button.");
+                Require(positioned.Left >= SystemParameters.WorkArea.Left - 1 &&
+                        positioned.Left + positioned.Width <= SystemParameters.WorkArea.Right + 1,
+                    "The real Start launcher extends beyond the monitor work area.");
+            }
+            finally
+            {
+                positioned?.Close();
+                owner.Close();
+            }
+
+            Console.WriteLine($"PASS: Real Start launcher rendered in both themes and opened above its dock anchor: {outputDirectory}");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
         }
     }
 
@@ -1331,8 +1442,29 @@ internal static class Program
                 menuType.GetMethod("ClosePanels", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
             "The menu bar no longer owns a single, closeable center-panel lifecycle.");
         Require(RequireType("VeliShell.Desktop.Views.ControlCenterWindow") is { } &&
-                RequireType("VeliShell.Desktop.Views.NotificationCenterWindow") is { },
+                RequireType("VeliShell.Desktop.Views.NotificationCenterWindow") is { } &&
+                RequireType("VeliShell.Desktop.Views.AudioDevicesWindow") is { },
             "A menu-bar center window is missing.");
+        Require(menuType.GetField("_audioDevices", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetMethod("ShowAudioDevices", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The menu-bar sound button no longer owns an anchored audio panel.");
+        var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
+        Require(dockType.GetMethod("ShowStartLauncher", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                RequireType("VeliShell.Desktop.Views.StartLauncherWindow") is { },
+            "The dock Start button no longer opens its own anchored launcher.");
+        var startPlacement = RequireMethod(RequireType("VeliShell.Desktop.Views.StartLauncherWindow"),
+            "CalculateBounds");
+        Rect StartBounds(Rect anchor, Rect workArea) =>
+            (Rect)startPlacement.Invoke(null, [anchor, workArea, new Size(610, 640)])!;
+        var leftStart = StartBounds(new Rect(44, 970, 52, 52), new Rect(0, 0, 1920, 1040));
+        var middleStart = StartBounds(new Rect(960, 970, 52, 52), new Rect(0, 0, 1920, 1040));
+        Require(leftStart.Left == 10 && middleStart.Left > 600 &&
+                leftStart.Top == middleStart.Top && leftStart.Bottom < 970,
+            "The launcher no longer follows its actual dock tile position above the Start button.");
+        var compactStart = StartBounds(new Rect(22, 375, 52, 52), new Rect(0, 0, 430, 410));
+        Require(compactStart.Left >= 0 && compactStart.Right <= 430 &&
+                compactStart.Top >= 0 && compactStart.Bottom <= 410,
+            "The dock-anchored launcher exceeds a compact monitor work area.");
 
         var placementType = RequireType("VeliShell.Desktop.Views.MenuPanelPlacement");
         var calculateBounds = RequireMethod(placementType, "CalculateBounds");
@@ -1366,12 +1498,33 @@ internal static class Program
         var readStatus = controlStatusType.GetMethod("Read", BindingFlags.Static | BindingFlags.NonPublic);
         Require(readStatus is not null &&
                 controlStatusType.GetMethod("TrySetMasterVolume", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
-                controlStatusType.GetMethod("TrySetMuted", BindingFlags.Static | BindingFlags.NonPublic) is not null,
+                controlStatusType.GetMethod("TrySetMuted", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                controlStatusType.GetMethod("ReadOutputDevices", BindingFlags.Static | BindingFlags.NonPublic) is not null &&
+                controlStatusType.GetMethod("TrySetEndpointVolume", BindingFlags.Static | BindingFlags.NonPublic) is not null,
             "Control Center no longer exposes its bounded Windows status/audio contract.");
         var status = readStatus!.Invoke(null, null)!;
         var volume = status.GetType().GetProperty("MasterVolume")!.GetValue(status) as double?;
         Require(volume is null or >= 0 and <= 100,
             "The read-only system-volume probe returned a value outside 0–100 percent.");
+        var outputs = (System.Collections.IEnumerable)controlStatusType
+            .GetMethod("ReadOutputDevices", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, null)!;
+        var outputCount = 0;
+        var defaultCount = 0;
+        foreach (var output in outputs)
+        {
+            outputCount++;
+            var outputType = output!.GetType();
+            Require(outputType.GetProperty("Id")!.GetValue(output) is string { Length: > 0 } &&
+                    outputType.GetProperty("Name")!.GetValue(output) is string { Length: > 0 },
+                "Audio-device enumeration returned an unnamed or unidentifiable endpoint.");
+            if ((bool)outputType.GetProperty("IsDefault")!.GetValue(output)!) defaultCount++;
+            var endpointVolume = (double?)outputType.GetProperty("VolumePercent")!.GetValue(output);
+            Require(endpointVolume is null or >= 0 and <= 100,
+                "Audio-device enumeration returned a volume outside 0–100 percent.");
+        }
+        Require(outputCount <= 32 && defaultCount <= 1,
+            "Audio-device enumeration is unbounded or marked multiple default outputs.");
     }
 
     private static int RenderShellPanels(Application application)
@@ -1396,6 +1549,12 @@ internal static class Program
                               ?? throw new InvalidOperationException("Could not create Control Center."));
                 RequireMethod(controlType, "RefreshStatus").Invoke(control, null);
                 RenderShellPanel(control, Path.Combine(outputDirectory, $"control-center-{suffix}.png"), dark);
+
+                var audioType = RequireType("VeliShell.Desktop.Views.AudioDevicesWindow");
+                var audio = (Window)(Activator.CreateInstance(audioType, nonPublic: true)
+                            ?? throw new InvalidOperationException("Could not create audio panel."));
+                RequireMethod(audioType, "RefreshDevices").Invoke(audio, null);
+                RenderShellPanel(audio, Path.Combine(outputDirectory, $"audio-devices-{suffix}.png"), dark);
 
                 var notificationServiceType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
                 var notificationService = notificationServiceType
@@ -2159,6 +2318,35 @@ internal static class Program
         tracker.Update([webWindow]);
         Require(tracker.Update([]).Single().Name == "Gmail",
             "A previously visible web app must retain its own name, not the browser's process name.");
+    }
+
+    private static void TestBackgroundAppCommands()
+    {
+        // Terminate only this test's own short-lived helper. A mismatched start
+        // time must not be able to act on an otherwise valid PID.
+        var executable = Path.Combine(Environment.SystemDirectory, "PING.EXE");
+        using var owned = Process.Start(new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            ArgumentList = { "-n", "30", "127.0.0.1" }
+        }) ?? throw new InvalidOperationException("Could not start the owned QA process.");
+        try
+        {
+            var app = new BackgroundApp(owned.Id, owned.StartTime.ToUniversalTime().Ticks,
+                "VeliShell QA helper", executable, executable, executable);
+            Require(BackgroundAppCommands.ForceQuit(app with { StartTimeUtcTicks = app.StartTimeUtcTicks + 1 })
+                    == BackgroundAppCommandResult.NotRunning && !owned.HasExited,
+                "A stale menu entry must not terminate a process with a reused PID.");
+            Require(BackgroundAppCommands.ForceQuit(app) == BackgroundAppCommandResult.Requested &&
+                    owned.WaitForExit(5000),
+                "The explicitly selected, exact process must be terminated without its process tree.");
+        }
+        finally
+        {
+            if (!owned.HasExited) owned.Kill();
+        }
     }
 
     private static void TestWebAppAndSteamIdentityContracts()

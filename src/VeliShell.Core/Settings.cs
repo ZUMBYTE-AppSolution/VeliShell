@@ -15,6 +15,12 @@ public enum OnlineIconMode { Disabled, OnDemand, AutomaticExactMatches }
 
 public enum DockIconStyle { Mac, Windows }
 
+public enum FolderDisplayMode { List, Grid, AppLauncher }
+
+public enum PinKind { Item, VirtualFolder }
+
+public sealed record VirtualFolderEntry(string Id, string Name, string Target, IconReference? Icon = null);
+
 public sealed record IconReference(
     string Provider,
     string IconId,
@@ -26,17 +32,21 @@ public sealed record Pin(
     string Name,
     string Target,
     string? MatchProcess = null,
-    IconReference? Icon = null);
+    IconReference? Icon = null,
+    FolderDisplayMode FolderMode = FolderDisplayMode.List,
+    PinKind Kind = PinKind.Item,
+    List<VirtualFolderEntry>? VirtualItems = null);
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
     public const int CurrentOnlineIconConsentVersion = 4;
     public const double MinimumIconSize = 32;
     public const double DefaultIconSize = 52;
     public const double MaximumIconSize = 96;
     public const int MaximumPins = 32;
     public const int MaximumDockIconOverrides = 132;
+    public const int MaximumVirtualFolderItems = 24;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Appearance Appearance { get; set; } = Appearance.System;
@@ -94,13 +104,8 @@ public sealed class Settings
             ? Math.Clamp(IconSize, MinimumIconSize, MaximumIconSize)
             : DefaultIconSize;
         Pins = (Pins ?? Defaults())
-            .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Target))
-            .Select(p => p with
-            {
-                Id = string.IsNullOrWhiteSpace(p.Id) ? Guid.NewGuid().ToString("N") : p.Id,
-                Name = string.IsNullOrWhiteSpace(p.Name) ? "Anwendung" : p.Name.Trim(),
-                Icon = NormalizeIcon(p.Icon)
-            })
+            .Where(p => p is not null && (p.Kind == PinKind.VirtualFolder || !string.IsNullOrWhiteSpace(p.Target)))
+            .Select(NormalizePin)
             .DistinctBy(p => p.Id, StringComparer.OrdinalIgnoreCase)
             .Take(MaximumPins).ToList();
         DockIconOverrides = (DockIconOverrides ?? new Dictionary<string, IconReference>())
@@ -116,6 +121,79 @@ public sealed class Settings
 
     public IconReference? GetDockIconOverride(string key) =>
         DockIconOverrides.TryGetValue(key, out var icon) ? icon : null;
+
+    public static Pin CreateVirtualFolder(string name)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        return new Pin(id, name.Trim(), "velishell:folder:" + id, FolderMode: FolderDisplayMode.AppLauncher,
+            Kind: PinKind.VirtualFolder, VirtualItems: []);
+    }
+
+    public bool AddToVirtualFolder(string folderId, Pin item, bool removeDockPin)
+    {
+        var index = Pins.FindIndex(pin => pin.Kind == PinKind.VirtualFolder &&
+            string.Equals(pin.Id, folderId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0 || item.Kind != PinKind.Item || string.IsNullOrWhiteSpace(item.Target)) return false;
+        var folder = Pins[index];
+        var entries = folder.VirtualItems?.ToList() ?? [];
+        if (entries.Count >= MaximumVirtualFolderItems || entries.Any(entry =>
+                string.Equals(entry.Target, item.Target, StringComparison.OrdinalIgnoreCase))) return false;
+        entries.Add(new VirtualFolderEntry(item.Id, item.Name, item.Target, item.Icon));
+        Pins[index] = folder with { VirtualItems = entries };
+        if (removeDockPin) Pins.RemoveAll(pin => pin.Kind == PinKind.Item &&
+            string.Equals(pin.Id, item.Id, StringComparison.OrdinalIgnoreCase));
+        return true;
+    }
+
+    public bool RemoveFromVirtualFolder(string folderId, string entryId, bool moveToDock)
+    {
+        var index = Pins.FindIndex(pin => pin.Kind == PinKind.VirtualFolder &&
+            string.Equals(pin.Id, folderId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0) return false;
+        var folder = Pins[index];
+        var entries = folder.VirtualItems?.ToList() ?? [];
+        var entry = entries.FirstOrDefault(item => string.Equals(item.Id, entryId, StringComparison.OrdinalIgnoreCase));
+        if (entry is null || moveToDock && Pins.Count >= MaximumPins) return false;
+        entries.Remove(entry);
+        Pins[index] = folder with { VirtualItems = entries };
+        if (moveToDock) Pins.Insert(index + 1, new Pin(Guid.NewGuid().ToString("N"), entry.Name,
+            entry.Target, Icon: entry.Icon));
+        return true;
+    }
+
+    private static Pin NormalizePin(Pin pin)
+    {
+        var kind = pin.Kind == PinKind.VirtualFolder ? PinKind.VirtualFolder : PinKind.Item;
+        var id = string.IsNullOrWhiteSpace(pin.Id) ? Guid.NewGuid().ToString("N") : pin.Id;
+        if (kind == PinKind.VirtualFolder && (id.Length > 64 || id.Any(character =>
+                !(char.IsAsciiLetterOrDigit(character) || character == '-'))))
+            id = Guid.NewGuid().ToString("N");
+        var name = string.IsNullOrWhiteSpace(pin.Name) ? "Anwendung" : pin.Name.Trim();
+        if (name.Length > 100) name = name[..100];
+        return pin with
+        {
+            Id = id,
+            Name = name,
+            Target = kind == PinKind.VirtualFolder ? "velishell:folder:" + id : pin.Target,
+            MatchProcess = kind == PinKind.VirtualFolder ? null : pin.MatchProcess,
+            Icon = NormalizeIcon(pin.Icon),
+            FolderMode = kind == PinKind.VirtualFolder ? FolderDisplayMode.AppLauncher :
+                Enum.IsDefined(pin.FolderMode) ? pin.FolderMode : FolderDisplayMode.List,
+            Kind = kind,
+            VirtualItems = kind == PinKind.VirtualFolder
+                ? (pin.VirtualItems ?? [])
+                    .Where(entry => entry is not null && !string.IsNullOrWhiteSpace(entry.Target))
+                    .Select(entry => entry with
+                    {
+                        Id = string.IsNullOrWhiteSpace(entry.Id) ? Guid.NewGuid().ToString("N") : entry.Id,
+                        Name = string.IsNullOrWhiteSpace(entry.Name) ? "Anwendung" : entry.Name.Trim()[..Math.Min(100, entry.Name.Trim().Length)],
+                        Icon = NormalizeIcon(entry.Icon)
+                    })
+                    .DistinctBy(entry => entry.Target, StringComparer.OrdinalIgnoreCase)
+                    .Take(MaximumVirtualFolderItems).ToList()
+                : null
+        };
+    }
 
     public static string RunningDockIconKey(string executable, string processName)
     {

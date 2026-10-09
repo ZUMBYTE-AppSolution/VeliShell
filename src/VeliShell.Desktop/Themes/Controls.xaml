@@ -221,6 +221,28 @@
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="CompactToggleSwitch" TargetType="CheckBox">
+  <Setter Property="Cursor" Value="Hand" />
+  <Setter Property="Width" Value="40" /><Setter Property="Height" Value="26" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+   <Border x:Name="Track" Width="36" Height="21" CornerRadius="10.5"
+           Background="{DynamicResource SwitchOff}" BorderBrush="Transparent" BorderThickness="1.5">
+    <Ellipse x:Name="Thumb" Width="16" Height="16" Fill="{DynamicResource ControlThumb}"
+             Stroke="{DynamicResource ControlThumbStroke}" StrokeThickness="1"
+             Margin="2,0,0,0" HorizontalAlignment="Left" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsChecked" Value="True">
+     <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentGradient}" />
+     <Setter TargetName="Thumb" Property="Margin" Value="16,0,0,0" />
+    </Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4" /></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True">
+     <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource AccentStroke}" />
+    </Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType="Slider">
   <Setter Property="Height" Value="28" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider">

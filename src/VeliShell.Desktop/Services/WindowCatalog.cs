@@ -115,6 +115,7 @@ internal static class WindowCatalog
 
     internal static bool Matches(NativeWindow window, Pin pin)
     {
+        if (pin.Kind == PinKind.VirtualFolder) return false;
         var webAppPin = WebAppCatalog.TryRead(pin.Target);
         if (webAppPin is not null || window.WebApp is not null)
             return webAppPin is not null &&

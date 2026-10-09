@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -8,25 +9,49 @@ using System.Windows.Media;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Services;
+using VeliShell.Core;
 
 namespace VeliShell.Desktop.Views;
 
 public partial class FolderPopoverWindow : Window
 {
     private readonly string _rootPath;
+    private readonly FolderDisplayMode _mode;
+    private readonly App? _app;
+    private readonly string? _virtualFolderId;
     private string _currentPath;
     private CancellationTokenSource? _navigation;
     private int _navigationGeneration;
 
-    internal FolderPopoverWindow(string rootPath)
+    internal FolderPopoverWindow(string rootPath, FolderDisplayMode mode = FolderDisplayMode.List)
     {
         if (!FolderBrowserService.TryCreateRoot(rootPath, out _rootPath))
             throw new ArgumentException("The folder pin does not resolve to a readable directory.", nameof(rootPath));
         _currentPath = _rootPath;
+        _mode = mode;
         InitializeComponent();
         Loaded += async (_, _) => await NavigateAsync(_rootPath);
         Deactivated += (_, _) => Close();
         Closed += (_, _) => CancelNavigation();
+    }
+
+    internal FolderPopoverWindow(App app, Pin folder)
+    {
+        if (folder.Kind != PinKind.VirtualFolder)
+            throw new ArgumentException("A virtual folder pin is required.", nameof(folder));
+        _app = app;
+        _virtualFolderId = folder.Id;
+        _rootPath = "";
+        _currentPath = "";
+        _mode = FolderDisplayMode.AppLauncher;
+        InitializeComponent();
+        BackButton.Visibility = Visibility.Collapsed;
+        BreadcrumbPanel.Visibility = Visibility.Collapsed;
+        OpenExplorerButton.Visibility = Visibility.Collapsed;
+        app.PreferencesChanged += RenderVirtual;
+        Loaded += (_, _) => RenderVirtual();
+        Deactivated += (_, _) => Close();
+        Closed += (_, _) => app.PreferencesChanged -= RenderVirtual;
     }
 
     internal static bool CanOpen(string? target) => FolderBrowserService.TryCreateRoot(target, out _);
@@ -55,6 +80,9 @@ public partial class FolderPopoverWindow : Window
         _currentPath = location;
         UpdateNavigationChrome();
         ItemsPanel.Children.Clear();
+        GridItemsPanel.Children.Clear();
+        ItemsPanel.Visibility = _mode == FolderDisplayMode.List ? Visibility.Visible : Visibility.Collapsed;
+        GridItemsPanel.Visibility = _mode == FolderDisplayMode.List ? Visibility.Collapsed : Visibility.Visible;
         ItemsScroller.Visibility = Visibility.Collapsed;
         ShowState("FolderPopover.Loading", "FolderPopover.LoadingDescription");
         StatusText.Text = L("FolderPopover.Loading");
@@ -77,8 +105,15 @@ public partial class FolderPopoverWindow : Window
             return;
         }
 
-        foreach (var entry in result.Entries) ItemsPanel.Children.Add(CreateEntryButton(entry));
-        var hasEntries = result.Entries.Count > 0;
+        var entries = _mode == FolderDisplayMode.AppLauncher
+            ? result.Entries.Where(entry => entry.IsDirectory || IsLaunchableApp(entry.Path)).ToArray()
+            : result.Entries.ToArray();
+        foreach (var entry in entries)
+        {
+            if (_mode == FolderDisplayMode.List) ItemsPanel.Children.Add(CreateEntryButton(entry));
+            else GridItemsPanel.Children.Add(CreateGridEntryButton(entry));
+        }
+        var hasEntries = entries.Length > 0;
         ItemsScroller.Visibility = hasEntries ? Visibility.Visible : Visibility.Collapsed;
         StatePanel.Visibility = hasEntries ? Visibility.Collapsed : Visibility.Visible;
         if (!hasEntries)
@@ -91,7 +126,141 @@ public partial class FolderPopoverWindow : Window
             ? string.Format(LocalizationService.Current.ActiveCulture,
                 L("FolderPopover.Truncated"), FolderBrowserService.MaximumEntries)
             : string.Format(LocalizationService.Current.ActiveCulture,
-                L("FolderPopover.Count"), result.Entries.Count);
+                L("FolderPopover.Count"), entries.Length);
+    }
+
+    private static bool IsLaunchableApp(string path) =>
+        Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".appref-ms", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase);
+
+    private void RenderVirtual()
+    {
+        if (!IsInitialized || _app is null || _virtualFolderId is null) return;
+        var folder = _app.Preferences.Pins.FirstOrDefault(pin => pin.Kind == PinKind.VirtualFolder &&
+            string.Equals(pin.Id, _virtualFolderId, StringComparison.OrdinalIgnoreCase));
+        if (folder is null) { Close(); return; }
+        PathTitle.Text = folder.Name;
+        ItemsPanel.Visibility = Visibility.Collapsed;
+        GridItemsPanel.Visibility = Visibility.Visible;
+        GridItemsPanel.Children.Clear();
+        var entries = folder.VirtualItems ?? [];
+        foreach (var entry in entries) GridItemsPanel.Children.Add(CreateVirtualEntryButton(entry));
+        ItemsScroller.Visibility = entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        StatePanel.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (entries.Count == 0)
+        {
+            StateTitle.Text = L("FolderPopover.VirtualEmptyTitle");
+            StateDescription.Text = L("FolderPopover.VirtualEmptyDescription");
+            StateSymbol.Symbol = VeliSymbolKind.Apps;
+        }
+        StatusText.Text = string.Format(LocalizationService.Current.ActiveCulture,
+            L("FolderPopover.Count"), entries.Count);
+    }
+
+    private Button CreateVirtualEntryButton(VirtualFolderEntry entry)
+    {
+        var image = new AppIconSurface(IconService.For("app", entry.Target, entry.Icon), 44);
+        var button = new Button
+        {
+            Content = new StackPanel
+            {
+                Children =
+                {
+                    image,
+                    new TextBlock { Text = entry.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+                        TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+                        MaxWidth = 94, Margin = new Thickness(0, 7, 0, 0) }
+                }
+            },
+            Style = (Style)FindResource("GlassTileButton"),
+            Width = 111, Height = 102, Padding = new Thickness(6),
+            Margin = new Thickness(0, 0, 7, 7), ToolTip = entry.Name
+        };
+        AutomationProperties.SetName(button, entry.Name);
+        button.Click += (_, _) => { Close(); LaunchService.Open(entry.Target); };
+        var menu = new ContextMenu();
+        var toDock = new MenuItem { Header = L("FolderPopover.MoveToDock") };
+        toDock.Click += (_, _) => _app?.UpdatePreferences(settings =>
+            settings.RemoveFromVirtualFolder(_virtualFolderId!, entry.Id, moveToDock: true));
+        menu.Items.Add(toDock);
+        var remove = new MenuItem { Header = L("FolderPopover.RemoveVirtualItem") };
+        remove.Click += (_, _) => _app?.UpdatePreferences(settings =>
+            settings.RemoveFromVirtualFolder(_virtualFolderId!, entry.Id, moveToDock: false));
+        menu.Items.Add(remove);
+        button.ContextMenu = menu;
+        return button;
+    }
+
+    private void VirtualFolder_DragOver(object sender, DragEventArgs e)
+    {
+        try
+        {
+            e.Effects = _virtualFolderId is not null &&
+                        e.Data.GetData(DataFormats.FileDrop) is string[] paths &&
+                        paths.Take(Settings.MaximumVirtualFolderItems).Any(path =>
+                            path is { Length: > 0 and <= 32767 } && File.Exists(path) && IsLaunchableApp(path))
+                ? DragDropEffects.Copy : DragDropEffects.None;
+        }
+        catch (Exception exception) when (exception is ExternalException or InvalidOperationException
+                                        or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            App.Log("Could not inspect a folder drop", exception);
+            e.Effects = DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    private void VirtualFolder_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (_virtualFolderId is null || _app is null) return;
+        string[] paths;
+        try
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] values) return;
+            paths = values;
+        }
+        catch (Exception exception) when (exception is ExternalException or InvalidOperationException
+                                        or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            App.Log("Could not read a folder drop", exception);
+            return;
+        }
+        var candidates = paths.Take(Settings.MaximumVirtualFolderItems)
+            .Where(path => File.Exists(path) && IsLaunchableApp(path))
+            .Select(LaunchService.PinFromPath).OfType<Pin>().ToArray();
+        if (candidates.Length == 0) return;
+        _app.UpdatePreferences(settings =>
+        {
+            foreach (var candidate in candidates)
+                settings.AddToVirtualFolder(_virtualFolderId, candidate, removeDockPin: false);
+        });
+    }
+
+    private Button CreateGridEntryButton(FolderBrowserEntry entry)
+    {
+        var image = new AppIconSurface(IconService.For("app", entry.Path), 44,
+            entry.IsDirectory || !IsLaunchableApp(entry.Path));
+        var label = new TextBlock
+        {
+            Text = entry.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 94, Margin = new Thickness(0, 7, 0, 0)
+        };
+        var button = new Button
+        {
+            Content = new StackPanel { Children = { image, label } },
+            Style = (Style)FindResource("GlassTileButton"),
+            Width = 111, Height = 102, Padding = new Thickness(6),
+            Margin = new Thickness(0, 0, 7, 7),
+            IsEnabled = entry.IsOpenable && (!entry.IsDirectory || entry.IsNavigable),
+            ToolTip = entry.Name
+        };
+        AutomationProperties.SetName(button, entry.Name);
+        button.Click += async (_, _) => await OpenEntryAsync(entry);
+        return button;
     }
 
     private Button CreateEntryButton(FolderBrowserEntry entry)

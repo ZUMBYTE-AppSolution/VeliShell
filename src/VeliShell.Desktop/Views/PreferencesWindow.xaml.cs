@@ -681,6 +681,7 @@ public partial class PreferencesWindow : VeliShellWindow
     private void OpenWindowsSettings_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:");
     private void AddProgram_Click(object sender, RoutedEventArgs e) => _app.Dock.AddPrograms();
     private void AddFolder_Click(object sender, RoutedEventArgs e) => _app.Dock.AddFolder();
+    private void AddVirtualFolder_Click(object sender, RoutedEventArgs e) => _app.Dock.CreateVirtualFolder();
     private void ShowDockPage_Click(object sender, RoutedEventArgs e)
     {
         // Selecting the navigation item keeps both the page and the sidebar in sync.
@@ -701,7 +702,7 @@ public partial class PreferencesWindow : VeliShellWindow
             PinList.Children.Add(CreateIconRow(
                 displayName,
                 pin.Target,
-                pin.Id,
+                pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
                 pin.Icon,
                 chooseLocal: () => ChooseLocalIconForPin(pin),
                 chooseOnline: _app.Preferences.IconStyle == DockIconStyle.Mac &&
@@ -711,15 +712,49 @@ public partial class PreferencesWindow : VeliShellWindow
                 reset: pin.Icon is null ? null : () => ResetPinIcon(pin.Id),
                 addExtraButtons: buttons =>
                 {
+                    if (pin.Kind == PinKind.VirtualFolder)
+                    {
+                        AddTextButton(buttons, L("FolderPopover.AddApps"), displayName,
+                            () => _app.Dock.AddProgramsToVirtualFolder(pin.Id));
+                        AddTextButton(buttons, L("FolderPopover.RenameTitle"), displayName,
+                            () => _app.Dock.RenameVirtualFolder(pin));
+                    }
+                    else if (Directory.Exists(pin.Target))
+                        AddFolderModeSelector(buttons, pin, displayName);
                     AddCompactButton(buttons, "‹", L("Common.MoveLeft"), displayName,
                         () => _app.Dock.MovePin(pin.Id, -1));
                     AddCompactButton(buttons, "›", L("Common.MoveRight"), displayName,
                         () => _app.Dock.MovePin(pin.Id, 1));
                     AddCompactButton(buttons, "×", L("Common.Remove"), displayName,
-                        () => _app.UpdatePreferences(s => s.Pins.RemoveAll(p => p.Id == pin.Id)));
+                        () => _app.Dock.RemovePin(pin));
                 }));
         }
         if (PinList.Children.Count == 0) PinList.Children.Add(new TextBlock { Text = L("Common.None"), Margin = new Thickness(8,12,8,12) });
+    }
+
+    private void AddFolderModeSelector(Panel buttons, Pin pin, string displayName)
+    {
+        var selector = new Button
+        {
+            Content = L("FolderPopover.DisplayMode") + ": " + L("FolderPopover.Mode." + pin.FolderMode),
+            Padding = new Thickness(8, 3, 8, 3), MinHeight = 26,
+            Margin = new Thickness(0, 0, 6, 5)
+        };
+        AutomationProperties.SetName(selector, L("FolderPopover.DisplayMode") + ": " + displayName);
+        var menu = new ContextMenu();
+        foreach (var mode in Enum.GetValues<FolderDisplayMode>())
+        {
+            var choice = new MenuItem
+            {
+                Header = L("FolderPopover.Mode." + mode),
+                IsCheckable = true, IsChecked = mode == pin.FolderMode
+            };
+            choice.Click += (_, _) => _app.Dock.SetFolderMode(pin.Id, mode);
+            menu.Items.Add(choice);
+        }
+        selector.ContextMenu = menu;
+        selector.Click += (_, _) => menu.IsOpen = true;
+        buttons.Children.Add(selector);
     }
 
     private void RenderSystemIcons()

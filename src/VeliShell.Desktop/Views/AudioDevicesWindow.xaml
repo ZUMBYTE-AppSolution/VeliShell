@@ -1,0 +1,35 @@
+<Window x:Class="VeliShell.Desktop.Views.AudioDevicesWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:services="clr-namespace:VeliShell.Desktop.Services"
+ xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
+ Title="{services:Loc AudioDevices.Title}" Width="380" Height="470"
+ WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+ Foreground="{DynamicResource TextPrimary}" ResizeMode="NoResize" ShowInTaskbar="False"
+ WindowStartupLocation="Manual" UseLayoutRounding="True" SnapsToDevicePixels="True"
+ KeyDown="Window_KeyDown">
+ <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
+         BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
+  <Border.Effect><DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="34" ShadowDepth="9" Opacity="0.58" /></Border.Effect>
+  <Grid ClipToBounds="True">
+   <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />
+   <Ellipse Width="290" Height="225" HorizontalAlignment="Right" VerticalAlignment="Top"
+            Margin="0,-150,-120,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.12"
+            IsHitTestVisible="False"><Ellipse.Effect><BlurEffect Radius="48" /></Ellipse.Effect></Ellipse>
+   <Grid Margin="17,15,17,17">
+    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+    <StackPanel Margin="3,0,3,13">
+     <TextBlock Text="{services:Loc AudioDevices.Title}" FontSize="18" FontWeight="SemiBold" />
+     <TextBlock Text="{services:Loc AudioDevices.Hint}" Foreground="{DynamicResource TextSecondary}"
+                FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
+    </StackPanel>
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+     <StackPanel x:Name="DevicesPanel" />
+    </ScrollViewer>
+    <Button Grid.Row="2" Style="{StaticResource GlassTileButton}"
+            Content="{services:Loc AudioDevices.ChooseInWindows}" Padding="12,10" Margin="0,12,0,0"
+            Click="OpenSoundSettings_Click" />
+   </Grid>
+  </Grid>
+ </Border>
+</Window>
