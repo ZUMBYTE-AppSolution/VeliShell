@@ -20,6 +20,7 @@ public partial class StartLauncherWindow : Window
     private IReadOnlyList<SearchEntry> _catalog = [];
     private int _shown = PageSize;
     private bool _closed;
+    private bool _closing;
     private bool _dragging;
 
     internal StartLauncherWindow(App app)
@@ -30,12 +31,21 @@ public partial class StartLauncherWindow : Window
         UserLabel.Text = Environment.UserName;
         app.ProgramIndex.Changed += IndexChanged;
         Loaded += (_, _) => { Render(); QueryBox.Focus(); };
-        Deactivated += (_, _) => { if (!_dragging) Close(); };
+        Deactivated += (_, _) => { if (!_dragging) CloseOnce(); };
+        Closing += (_, _) => _closing = true;
         Closed += (_, _) =>
         {
             _closed = true;
+            _closing = true;
             app.ProgramIndex.Changed -= IndexChanged;
         };
+    }
+
+    internal void CloseOnce()
+    {
+        if (_closing || _closed) return;
+        _closing = true;
+        Close();
     }
 
     internal void ShowAbove(FrameworkElement anchor, Window owner, bool topmost)
@@ -165,7 +175,7 @@ public partial class StartLauncherWindow : Window
             {
                 if (pin.Kind == PinKind.VirtualFolder)
                 {
-                    Close();
+                    CloseOnce();
                     _app.Dock.OpenVirtualFolder(pin);
                 }
                 else Open(entry.Target);
@@ -236,14 +246,14 @@ public partial class StartLauncherWindow : Window
             finally
             {
                 _dragging = false;
-                Close();
+                CloseOnce();
             }
         };
     }
 
     private void Open(string target)
     {
-        Close();
+        CloseOnce();
         LaunchService.Open(target);
     }
 
@@ -255,19 +265,19 @@ public partial class StartLauncherWindow : Window
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        Close();
+        CloseOnce();
         _app.ShowPreferences();
     }
 
     private void WindowsMenu_Click(object sender, RoutedEventArgs e)
     {
-        Close();
+        CloseOnce();
         WindowsStartService.Open();
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { Close(); e.Handled = true; }
+        if (e.Key == Key.Escape) { CloseOnce(); e.Handled = true; }
         else if (e.Key == Key.Enter && Keyboard.FocusedElement == QueryBox)
         {
             var first = _catalog.Where(entry => entry.Name.Contains(QueryBox.Text.Trim(),

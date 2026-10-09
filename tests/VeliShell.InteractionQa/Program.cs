@@ -241,10 +241,15 @@ internal static class Program
                     Require(positioned.Left >= SystemParameters.WorkArea.Left - 1 &&
                             positioned.Left + positioned.Width <= SystemParameters.WorkArea.Right + 1,
                         "The real Start launcher extends beyond the monitor work area.");
+                    RequireMethod(launcherType, "CloseOnce").Invoke(positioned, null);
+                    RequireMethod(launcherType, "CloseOnce").Invoke(positioned, null);
+                    Require(!positioned.IsVisible,
+                        "Closing the Start launcher twice left the window open or caused a reentrant close.");
                 }
                 finally
                 {
-                    positioned?.Close();
+                    if (positioned is not null)
+                        RequireMethod(launcherType, "CloseOnce").Invoke(positioned, null);
                     owner.Close();
                 }
             }

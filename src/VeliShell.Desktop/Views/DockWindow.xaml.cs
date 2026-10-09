@@ -81,7 +81,7 @@ public partial class DockWindow : Window
             CloseDragGhost();
             CloseWindowPreview();
             CloseFolderPopover();
-            _startLauncher?.Close();
+            _startLauncher?.CloseOnce();
             NativeMethods.UnregisterHotKey(_handle, 1);
             NativeMethods.UnregisterHotKey(_handle, 2);
             NativeMethods.UnregisterHotKey(_handle, 3);
@@ -613,7 +613,7 @@ public partial class DockWindow : Window
     {
         if (_startLauncher is { IsVisible: true })
         {
-            _startLauncher.Close();
+            _startLauncher.CloseOnce();
             return;
         }
         CloseFolderPopover();

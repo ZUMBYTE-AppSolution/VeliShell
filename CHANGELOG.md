@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-10
+
+### Behoben
+
+- Der Knopf „Einstellungen“ im VeliShell-Startmenü schließt das Menü jetzt nur einmal, auch wenn Windows gleichzeitig einen Fokuswechsel meldet. Dadurch beendet sich VeliShell beim Öffnen der Einstellungen nicht mehr mit einem Fensterfehler.
+
 ## [0.11.0] - 2026-10-10
 
 ### Neu
