@@ -25,6 +25,7 @@
     <Resource Include="Assets\VeliShellMark.png" />
     <Resource Include="Assets\SystemIcons\RecycleBinEmpty.png" />
     <Resource Include="Assets\SystemIcons\RecycleBinFull.png" />
+    <Resource Include="Assets\SystemIcons\FolderShortcut.png" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

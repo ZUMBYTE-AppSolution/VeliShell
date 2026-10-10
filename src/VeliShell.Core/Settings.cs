@@ -15,7 +15,7 @@ public enum OnlineIconMode { Disabled, OnDemand, AutomaticExactMatches }
 
 public enum DockIconStyle { Mac, Windows }
 
-public enum FolderDisplayMode { List, Grid, AppLauncher, CompactAppLauncher }
+public enum FolderDisplayMode { List, Grid, AppLauncher, CompactAppLauncher, DirectOpen }
 
 public enum PinKind { Item, VirtualFolder }
 

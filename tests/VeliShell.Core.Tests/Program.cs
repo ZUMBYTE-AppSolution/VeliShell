@@ -51,18 +51,23 @@ try
     Test("Folder display mode is stored and invalid values fall back", () =>
     {
         var s = new Settings { Pins = [new("folder", "Files", @"C:\Files", FolderMode: FolderDisplayMode.Grid),
+            new("shortcut", "Downloads", @"C:\Downloads", FolderMode: FolderDisplayMode.DirectOpen),
             new("bad", "Files", @"C:\Other", FolderMode: (FolderDisplayMode)99)] };
         s.Normalize();
-        Check(s.Pins[0].FolderMode == FolderDisplayMode.Grid && s.Pins[1].FolderMode == FolderDisplayMode.List);
+        Check(s.Pins[0].FolderMode == FolderDisplayMode.Grid &&
+              s.Pins[1].FolderMode == FolderDisplayMode.DirectOpen &&
+              s.Pins[2].FolderMode == FolderDisplayMode.List);
     });
     Test("Virtual folders retain the compact 4 by 4 launcher choice", () =>
     {
         var compact = Settings.CreateVirtualFolder("Work") with { FolderMode = FolderDisplayMode.CompactAppLauncher };
         var invalid = Settings.CreateVirtualFolder("Other") with { FolderMode = FolderDisplayMode.Grid };
-        var settings = new Settings { Pins = [compact, invalid] };
+        var direct = Settings.CreateVirtualFolder("Direct") with { FolderMode = FolderDisplayMode.DirectOpen };
+        var settings = new Settings { Pins = [compact, invalid, direct] };
         settings.Normalize();
         Check(settings.Pins[0].FolderMode == FolderDisplayMode.CompactAppLauncher);
         Check(settings.Pins[1].FolderMode == FolderDisplayMode.AppLauncher);
+        Check(settings.Pins[2].FolderMode == FolderDisplayMode.AppLauncher);
     });
     Test("Virtual app folder moves shortcuts without changing files", () =>
     {

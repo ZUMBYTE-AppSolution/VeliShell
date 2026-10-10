@@ -348,6 +348,7 @@ internal static class GermanStrings
         ["FolderPopover.Mode.Grid"] = "Raster und Ordnerstruktur",
         ["FolderPopover.Mode.AppLauncher"] = "App-Raster (3 × 3)",
         ["FolderPopover.Mode.CompactAppLauncher"] = "Kompaktes App-Raster (4 × 4)",
+        ["FolderPopover.Mode.DirectOpen"] = "Als Verknüpfung (direkt im Explorer öffnen)",
         ["FolderPopover.PageStatus"] = "{0} / {1}",
         ["FolderPopover.PreviousPage"] = "Vorherige Seite",
         ["FolderPopover.NextPage"] = "Nächste Seite",

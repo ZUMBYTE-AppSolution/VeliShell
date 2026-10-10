@@ -359,6 +359,7 @@ internal static class Program
             Console.WriteLine("PASS: Dock folders share the app icon center, with their captions aligned to the activity-dot row at 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock-item menus contain only item actions; dock-wide actions stay on the plate, and menus are configured to dismiss on outside clicks.");
             Console.WriteLine("PASS: Folder-view submenus have a visible popup and save selections for virtual and physical folders.");
+            Console.WriteLine("PASS: A physical folder can open directly with the supplied unmasked icon in both themes; virtual folders remain launchers.");
             return 0;
         }
         catch (Exception exception)
@@ -647,7 +648,7 @@ internal static class Program
             Equals(entry.Header, Label("FolderPopover.DisplayMode")));
         var physicalViewMenu = physicalMenu.Items.OfType<MenuItem>().Single(entry =>
             Equals(entry.Header, Label("FolderPopover.DisplayMode")));
-        Require(virtualViewMenu.Items.Count == 2 && physicalViewMenu.Items.Count == 4,
+        Require(virtualViewMenu.Items.Count == 2 && physicalViewMenu.Items.Count == 5,
             "Dock folder view menus do not offer the supported layouts.");
         virtualViewMenu.ApplyTemplate();
         physicalViewMenu.ApplyTemplate();
@@ -699,17 +700,59 @@ internal static class Program
             Require(application.Preferences.Pins.Single(pin => pin.Id == physicalPin.Id).FolderMode ==
                     FolderDisplayMode.Grid,
                 "Choosing grid in the Dock menu did not save the physical-folder layout.");
+            var directChoice = physicalViewMenu.Items.OfType<MenuItem>().Single(entry =>
+                Equals(entry.Header, Label("FolderPopover.Mode.DirectOpen")));
+            directChoice.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, directChoice));
+            var directPin = application.Preferences.Pins.Single(pin => pin.Id == physicalPin.Id);
+            Require(directPin.FolderMode == FolderDisplayMode.DirectOpen,
+                "Choosing a direct folder shortcut did not save the physical-folder layout.");
+            var shortcutIconId = IconService.IdForPin(directPin);
+            Require(shortcutIconId == "folder-shortcut" &&
+                    IconService.For(shortcutIconId, directPin.Target) is BitmapSource
+                    { PixelWidth: 100, PixelHeight: 100 },
+                "The supplied transparent folder image is not the bundled default shortcut icon.");
+            var directItem = NewItem("pin:" + directPin.Id, directPin.Name, directPin.Target, directPin);
+            itemType.GetProperty("IconId")!.SetValue(directItem, shortcutIconId);
+            Require((bool)RequireMethod(dockType, "OpensFolderDirectly").Invoke(null, [directItem])! &&
+                    !(bool)RequireMethod(dockType, "OpensFolderDirectly").Invoke(null,
+                        [NewItem("pin:" + folderPin.Id, folderPin.Name, pin: folderPin)])!,
+                "Only physical folders in shortcut mode should open directly in File Explorer.");
+            foreach (var appearance in new[] { Appearance.Light, Appearance.Dark })
+            {
+                themes.Apply(appearance);
+                var shortcutTile = (FrameworkElement)(Activator.CreateInstance(tileType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [directItem, 58d], culture: null)
+                    ?? throw new InvalidOperationException("Could not create the direct folder tile."));
+                var preview = (FrameworkElement)RequireField(tileType, "_folderPreview").GetValue(shortcutTile)!;
+                var iconSurface = (VeliShell.Desktop.Controls.AppIconSurface)
+                    RequireField(tileType, "_iconSurface").GetValue(shortcutTile)!;
+                Require(preview.Visibility == Visibility.Collapsed &&
+                        iconSurface.Visibility == Visibility.Visible &&
+                        iconSurface.PlateElement.Clip is null,
+                    "The direct folder shortcut is masked or still shows the live folder preview.");
+                var stage = new Grid { Background = (Brush)application.FindResource("DockSurfaceGradient") };
+                stage.Children.Add(shortcutTile);
+                RenderShellPanel(new Window { Width = 180, Height = 145, Content = stage },
+                    Path.Combine(outputDirectory,
+                        $"dock-folder-shortcut-{(appearance == Appearance.Dark ? "dark" : "light")}.png"),
+                    appearance == Appearance.Dark);
+            }
             var rebuiltTiles = ((System.Collections.IEnumerable)RequireField(dockType, "_tiles")
                 .GetValue(dock)!).Cast<object>().ToArray();
             foreach (var (pinId, mode) in new[]
                      {
                          (folderPin.Id, FolderDisplayMode.CompactAppLauncher),
-                         (physicalPin.Id, FolderDisplayMode.Grid)
+                         (physicalPin.Id, FolderDisplayMode.DirectOpen)
                      })
             {
                 var tile = rebuiltTiles.Single(candidate =>
                     (string)itemType.GetProperty("Key")!.GetValue(
                         RequireProperty(tileType, "Item").GetValue(candidate)!)! == "pin:" + pinId);
+                if (pinId == physicalPin.Id)
+                    Require((string)itemType.GetProperty("IconId")!.GetValue(
+                                RequireProperty(tileType, "Item").GetValue(tile)!)! == "folder-shortcut",
+                        "The live dock tile did not switch to the bundled folder icon.");
                 var reopenedMenu = (ContextMenu)buildItemMenu.Invoke(dock, [tile])!;
                 var reopenedViewMenu = reopenedMenu.Items.OfType<MenuItem>().Single(entry =>
                     Equals(entry.Header, Label("FolderPopover.DisplayMode")));

@@ -16,12 +16,18 @@ internal static class IconService
     private static readonly Dictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<string> CacheOrder = [];
 
+    internal static string IdForPin(Pin pin) => pin.Kind == PinKind.VirtualFolder ? "virtual-folder" :
+        pin.FolderMode == FolderDisplayMode.DirectOpen && Directory.Exists(pin.Target)
+            ? "folder-shortcut" : pin.Id;
+
     internal static ImageSource For(string id, string target = "", IconReference? icon = null)
     {
         // A user-selected local image is an explicit override in either icon
         // style. Online catalog artwork keeps the existing Mac-style behavior.
         if (CustomIconService.TryLoad(icon) is { } custom) return custom;
         if (id == "virtual-folder") return BuiltIn(id);
+        if (id == "folder-shortcut")
+            return BundledAsset(id, "/VeliShell;component/Assets/SystemIcons/FolderShortcut.png");
         var iconStyle = CurrentIconStyle();
         if (iconStyle == DockIconStyle.Mac)
         {

@@ -8,7 +8,7 @@ namespace VeliShell.Desktop.Controls;
 /// Keeps app artwork centered, exactly sized, and continuously rounded. Source
 /// alpha bounds normalize transparent safe zones; VeliShell deliberately draws
 /// no generated color, gradient, tile, or backdrop behind the icon. Explicit
-/// freeform utility art (currently the Recycle Bin) preserves its source canvas.
+/// freeform utility art (such as the Recycle Bin and folder shortcuts) preserves its source canvas.
 /// </summary>
 internal sealed class AppIconSurface : Grid
 {

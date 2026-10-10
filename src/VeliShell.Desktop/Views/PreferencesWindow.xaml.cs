@@ -702,7 +702,7 @@ public partial class PreferencesWindow : VeliShellWindow
             PinList.Children.Add(CreateIconRow(
                 displayName,
                 pin.Target,
-                pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
+                IconService.IdForPin(pin),
                 pin.Icon,
                 chooseLocal: () => ChooseLocalIconForPin(pin),
                 chooseOnline: _app.Preferences.IconStyle == DockIconStyle.Mac &&

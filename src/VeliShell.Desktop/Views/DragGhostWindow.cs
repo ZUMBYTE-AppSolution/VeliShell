@@ -88,9 +88,12 @@ internal sealed class DragGhostWindow : Window, IDisposable
         var size = Math.Clamp(iconSize, 32, 96);
         if (folder.Icon is not null)
             return new AppIconSurface(IconService.For(
-                    folder.Kind == PinKind.VirtualFolder ? "virtual-folder" : folder.Id,
+                    IconService.IdForPin(folder),
                     folder.Target, folder.Icon), size,
                 freeform: true);
+        if (folder.Kind == PinKind.Item && folder.FolderMode == FolderDisplayMode.DirectOpen)
+            return new AppIconSurface(IconService.For(IconService.IdForPin(folder), folder.Target),
+                size, freeform: true);
         var preview = new DockFolderPreview(size);
         preview.UpdatePin(folder);
         return preview;

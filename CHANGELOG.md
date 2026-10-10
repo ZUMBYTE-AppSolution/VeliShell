@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-10-10
+
+### Hinzugefügt
+
+- Echte Dock-Ordner können wahlweise als direkte Verknüpfung im Explorer geöffnet werden. In dieser Ansicht zeigt das Dock standardmäßig das vom Nutzer bereitgestellte blaue Ordnersymbol statt der Inhaltsvorschau; eigene Icons bleiben erhalten.
+
 ## [0.12.2] - 2026-10-10
 
 ### Behoben

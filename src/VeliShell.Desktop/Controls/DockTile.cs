@@ -121,10 +121,11 @@ internal sealed class DockTile : Button
     {
         if (_folderPreview is null || item.Pin is not { } pin) return;
         // A chosen folder icon still takes precedence over the live preview.
-        _folderPreview.Visibility = pin.Icon is null ? Visibility.Visible : Visibility.Collapsed;
-        _iconSurface.Visibility = pin.Icon is null ? Visibility.Collapsed : Visibility.Visible;
+        var showPreview = pin.Icon is null && pin.FolderMode != FolderDisplayMode.DirectOpen;
+        _folderPreview.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
+        _iconSurface.Visibility = showPreview ? Visibility.Collapsed : Visibility.Visible;
         if (_folderName is not null) _folderName.Text = item.Name;
-        if (pin.Icon is null) _folderPreview.UpdatePin(pin);
+        if (showPreview) _folderPreview.UpdatePin(pin);
     }
 
     private static bool IsFolder(DockItem item) =>
@@ -132,7 +133,7 @@ internal sealed class DockTile : Button
         (item.Pin is not null && System.IO.Directory.Exists(item.Target));
 
     private static bool UsesFreeformArtwork(DockItem item) =>
-        item.Key == "trash" || item.IconId is "folder" or "virtual-folder" ||
+        item.Key == "trash" || item.IconId is "folder" or "virtual-folder" or "folder-shortcut" ||
         (!string.IsNullOrWhiteSpace(item.Target) && System.IO.Directory.Exists(item.Target));
 
     private void UpdateAutomationStatus(DockItem item)

@@ -160,8 +160,7 @@ public partial class StartLauncherWindow : Window
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Children =
                     {
-                        new AppIconSurface(IconService.For(pin.Kind == PinKind.VirtualFolder
-                            ? "virtual-folder" : pin.Id, pin.Target, pin.Icon), 35,
+                        new AppIconSurface(IconService.For(IconService.IdForPin(pin), pin.Target, pin.Icon), 35,
                             pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target))
                             { Width = 39, Height = 39 },
                         new TextBlock { Text = entry.Name, MaxWidth = 110, TextTrimming = TextTrimming.CharacterEllipsis,

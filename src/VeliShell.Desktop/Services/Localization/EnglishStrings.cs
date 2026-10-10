@@ -92,6 +92,7 @@ internal static class EnglishStrings
         ["FolderPopover.DisplayMode"] = "Open folder as", ["FolderPopover.Mode.List"] = "List and folder tree",
         ["FolderPopover.Mode.Grid"] = "Grid and folder tree", ["FolderPopover.Mode.AppLauncher"] = "App grid (3 × 3)",
         ["FolderPopover.Mode.CompactAppLauncher"] = "Compact app grid (4 × 4)",
+        ["FolderPopover.Mode.DirectOpen"] = "Shortcut (open directly in File Explorer)",
         ["FolderPopover.PageStatus"] = "{0} / {1}",
         ["FolderPopover.PreviousPage"] = "Previous page", ["FolderPopover.NextPage"] = "Next page",
         ["FolderPopover.CreateVirtual"] = "Create app folder …",

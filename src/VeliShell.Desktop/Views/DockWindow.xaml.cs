@@ -185,7 +185,7 @@ public partial class DockWindow : Window
         var items = new List<DockItem>();
         foreach (var pin in preferences.Pins)
             items.Add(new DockItem { Key = "pin:" + pin.Id, Name = LocalizationService.Current.DisplayPinName(pin), Target = pin.Target,
-                IconId = pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
+                IconId = IconService.IdForPin(pin),
                 Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
                 Pin = pin, Windows = _windows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
         if (preferences.ShowRunningApps)
@@ -345,6 +345,11 @@ public partial class DockWindow : Window
             ShowVirtualFolderPopover(item.Pin, anchor);
             return;
         }
+        if (OpensFolderDirectly(item))
+        {
+            LaunchService.Open(item.Target);
+            return;
+        }
         if (item.Pin is not null && FolderPopoverWindow.CanOpen(item.Target))
         {
             ShowFolderPopover(item.Target, anchor, item.Pin.FolderMode);
@@ -366,6 +371,10 @@ public partial class DockWindow : Window
             tile.StartLaunchBounce(_app.Preferences.ReducedMotion);
         }
     }
+
+    internal static bool OpensFolderDirectly(DockItem item) =>
+        item.Pin is { Kind: PinKind.Item, FolderMode: FolderDisplayMode.DirectOpen } &&
+        Directory.Exists(item.Target);
 
     private void StopCompletedLaunches()
     {
@@ -857,7 +866,7 @@ public partial class DockWindow : Window
             };
             dragSource.QueryContinueDrag += queryContinueDrag;
             ShowDragGhost("pin:" + pin.Id,
-                IconService.For(pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
+                IconService.For(IconService.IdForPin(pin),
                     pin.Target, pin.Icon),
                 pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target),
                 pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target) ? pin : null);
@@ -1235,7 +1244,7 @@ public partial class DockWindow : Window
                     movingPinId = pin.Id;
                     var ghostKey = "pin:" + pin.Id;
                     if (_dragGhost is null || !string.Equals(_dragGhostKey, ghostKey, StringComparison.Ordinal))
-                        ShowDragGhost(ghostKey, IconService.For(pin.Id, pin.Target, pin.Icon),
+                        ShowDragGhost(ghostKey, IconService.For(IconService.IdForPin(pin), pin.Target, pin.Icon),
                             pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target),
                             pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target) ? pin : null);
                 }
