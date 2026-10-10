@@ -1,4 +1,4 @@
-name: Publish VeliShell release
+name: Publish VeliShell GitHub release
 
 "on":
   push:
@@ -19,17 +19,12 @@ jobs:
     name: Build and publish Windows x64
     runs-on: windows-2025
     timeout-minutes: 50
-    outputs:
-      version: ${{ steps.version.outputs.value }}
     defaults:
       run:
         shell: pwsh
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
-      STORE_IDENTITY_NAME: ${{ vars.MICROSOFT_STORE_PACKAGE_IDENTITY_NAME }}
-      STORE_PUBLISHER: ${{ vars.MICROSOFT_STORE_PUBLISHER }}
-      STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MICROSOFT_STORE_PUBLISHER_DISPLAY_NAME }}
 
     steps:
       - name: Check out tagged source
@@ -51,10 +46,6 @@ jobs:
           $version = [string]$props.Project.PropertyGroup.Version
           if ($env:GITHUB_REF_NAME -ne "v$version") {
             throw "Tag $env:GITHUB_REF_NAME does not match Directory.Build.props version $version."
-          }
-          if ([string]::IsNullOrWhiteSpace($env:STORE_IDENTITY_NAME) -or
-              [string]::IsNullOrWhiteSpace($env:STORE_PUBLISHER)) {
-            throw 'Store package identity variables are missing. Read Product identity in Partner Center before tagging a release.'
           }
           ./tools/Get-ReleaseNotes.ps1 -Version $version -OutputPath ./out/release-notes.md
           "value=$version" >> $env:GITHUB_OUTPUT
@@ -85,25 +76,13 @@ jobs:
                 Select-Object -ExpandProperty FullName
             )
             if ($invalidPortableSignatures.Count -gt 0) {
-              throw "The Store-ready payload contains unsigned or untrusted PE files:`n$($invalidPortableSignatures -join "`n")"
+              throw "The release payload contains unsigned or untrusted PE files:`n$($invalidPortableSignatures -join "`n")"
             }
             'signed=true' >> $env:GITHUB_OUTPUT
           } else {
             Write-Warning 'Publishing an unsigned application; Windows SmartScreen may warn users.'
             'signed=false' >> $env:GITHUB_OUTPUT
           }
-
-      - name: Build unsigned MSIX for first Partner Center submission
-        run: |
-          $displayName = $env:STORE_PUBLISHER_DISPLAY_NAME
-          if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = 'Zumbyte - AppSolution' }
-          ./tools/Build-StoreMsix.ps1 `
-            -Version '${{ steps.version.outputs.value }}' `
-            -IdentityName $env:STORE_IDENTITY_NAME `
-            -Publisher $env:STORE_PUBLISHER `
-            -PublisherDisplayName $displayName `
-            -PublishDirectory ./out/portable `
-            -OutputPath './out/store/VeliShell-${{ steps.version.outputs.value }}-win-x64-Store.msix'
 
       - name: Build per-machine MSI
         run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.value }}' -PublishDirectory ./out/portable
@@ -118,12 +97,9 @@ jobs:
       - name: Smoke-test MSI install, uninstall and v0.3.1 upgrade
         run: ./tools/Test-InstallerLifecycle.ps1 -Version '${{ steps.version.outputs.value }}' -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.value }}-win-x64.msi' -AllowMachineChanges
 
-      - name: Create release artifacts and security notice
+      - name: Create GitHub release artifacts and security notice
         run: |
-          ./tools/New-ReleaseArtifacts.ps1 `
-            -Version '${{ steps.version.outputs.value }}' `
-            -StoreMsixPath './out/store/VeliShell-${{ steps.version.outputs.value }}-win-x64-Store.msix'
-          Add-Content ./out/release-notes.md "`n> [!IMPORTANT]`n> Die MSIX-Datei ist ausschließlich für die Einreichung im Microsoft Partner Center bestimmt. Sie ist nicht für eine direkte Installation signiert. Microsoft signiert die Store-Ausgabe nach erfolgreicher Zertifizierung.`n" -Encoding utf8
+          ./tools/New-ReleaseArtifacts.ps1 -Version '${{ steps.version.outputs.value }}'
           if ('${{ steps.sign_app.outputs.signed }}' -ne 'true') {
             Add-Content ./out/release-notes.md "`n> [!WARNING]`n> Dieses Release besitzt noch keine Windows-Herausgebersignatur. Prüfe `SHA256SUMS.txt`; Windows SmartScreen kann vor der Installation warnen.`n" -Encoding utf8
           }
@@ -136,7 +112,6 @@ jobs:
             out/release/VeliShell-${{ steps.version.outputs.value }}-win-x64-portable.zip
             out/release/VeliShell-Setup-win-x64.msi
             out/release/VeliShell-Portable-win-x64.zip
-            out/release/VeliShell-${{ steps.version.outputs.value }}-win-x64-Store.msix
             out/release/SHA256SUMS.txt
 
       - name: Publish GitHub release
@@ -149,17 +124,7 @@ jobs:
             "out/release/VeliShell-$version-win-x64-portable.zip",
             'out/release/VeliShell-Setup-win-x64.msi',
             'out/release/VeliShell-Portable-win-x64.zip',
-            "out/release/VeliShell-$version-win-x64-Store.msix",
             'out/release/SHA256SUMS.txt',
             'out/release/RELEASE-INFO.txt'
           )
           gh release create "v$version" @assets --verify-tag --latest --title "VeliShell $version" --notes-file out/release-notes.md
-
-  publish-microsoft-store:
-    name: Submit MSIX to Microsoft Store
-    needs: release-windows-x64
-    if: ${{ vars.MICROSOFT_STORE_PUBLISH_ENABLED == 'true' && vars.MICROSOFT_STORE_FIRST_PUBLICATION_DONE == 'true' }}
-    uses: ./.github/workflows/store-publish.yml
-    with:
-      tag: v${{ needs.release-windows-x64.outputs.version }}
-    secrets: inherit

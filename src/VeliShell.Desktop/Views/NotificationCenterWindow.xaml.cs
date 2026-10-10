@@ -5,14 +5,16 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Services;
 
 namespace VeliShell.Desktop.Views;
 
-public partial class NotificationCenterWindow : Window
+public partial class NotificationCenterWindow : Window, ITransientPanel
 {
     private readonly NotificationCenterService _notifications;
+    private bool _closing;
 
     internal NotificationCenterWindow(NotificationCenterService notifications)
     {
@@ -29,12 +31,20 @@ public partial class NotificationCenterWindow : Window
             if (_notifications.WindowsAccess.State == WindowsNotificationAccessState.Allowed)
                 await _notifications.RefreshWindowsNotificationsAsync();
         };
-        Deactivated += (_, _) => Close();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        Closing += (_, _) => _closing = true;
         Closed += (_, _) =>
         {
             _notifications.Changed -= NotificationsChanged;
             _notifications.WindowsAccessChanged -= WindowsAccessChanged;
         };
+    }
+
+    public void CloseOnce()
+    {
+        if (_closing) return;
+        _closing = true;
+        Close();
     }
 
     internal void ShowRelativeTo(FrameworkElement anchor, Window owner, bool topmost)
@@ -299,6 +309,6 @@ public partial class NotificationCenterWindow : Window
     private void Clear_Click(object sender, RoutedEventArgs e) => _notifications.Clear();
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) Close();
+        if (e.Key == Key.Escape) CloseOnce();
     }
 }

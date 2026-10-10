@@ -3,18 +3,29 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Services;
 
 namespace VeliShell.Desktop.Views;
 
-public partial class AudioDevicesWindow : Window
+public partial class AudioDevicesWindow : Window, ITransientPanel
 {
+    private bool _closing;
+
     internal AudioDevicesWindow()
     {
         InitializeComponent();
         Loaded += (_, _) => RefreshDevices();
-        Deactivated += (_, _) => Close();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        Closing += (_, _) => _closing = true;
+    }
+
+    public void CloseOnce()
+    {
+        if (_closing) return;
+        _closing = true;
+        Close();
     }
 
     internal void ShowRelativeTo(FrameworkElement anchor, Window owner, bool topmost)
@@ -115,13 +126,13 @@ public partial class AudioDevicesWindow : Window
 
     private void OpenSoundSettings_Click(object sender, RoutedEventArgs e)
     {
-        Close();
+        CloseOnce();
         LaunchService.Open("ms-settings:sound");
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) Close();
+        if (e.Key == Key.Escape) CloseOnce();
     }
 
     private static string L(string key) => LocalizationService.Current.Get(key);

@@ -55,6 +55,15 @@ try
         s.Normalize();
         Check(s.Pins[0].FolderMode == FolderDisplayMode.Grid && s.Pins[1].FolderMode == FolderDisplayMode.List);
     });
+    Test("Virtual folders retain the compact 4 by 4 launcher choice", () =>
+    {
+        var compact = Settings.CreateVirtualFolder("Work") with { FolderMode = FolderDisplayMode.CompactAppLauncher };
+        var invalid = Settings.CreateVirtualFolder("Other") with { FolderMode = FolderDisplayMode.Grid };
+        var settings = new Settings { Pins = [compact, invalid] };
+        settings.Normalize();
+        Check(settings.Pins[0].FolderMode == FolderDisplayMode.CompactAppLauncher);
+        Check(settings.Pins[1].FolderMode == FolderDisplayMode.AppLauncher);
+    });
     Test("Virtual app folder moves shortcuts without changing files", () =>
     {
         var folder = Settings.CreateVirtualFolder("Tools");

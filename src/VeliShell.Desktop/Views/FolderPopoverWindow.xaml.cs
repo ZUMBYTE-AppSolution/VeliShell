@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Services;
@@ -13,15 +14,19 @@ using VeliShell.Core;
 
 namespace VeliShell.Desktop.Views;
 
-public partial class FolderPopoverWindow : Window
+public partial class FolderPopoverWindow : Window, ITransientPanel
 {
     private readonly string _rootPath;
-    private readonly FolderDisplayMode _mode;
+    private FolderDisplayMode _mode;
     private readonly App? _app;
     private readonly string? _virtualFolderId;
     private string _currentPath;
     private CancellationTokenSource? _navigation;
     private int _navigationGeneration;
+    private readonly List<Func<Button>> _pageItems = [];
+    private int _pageIndex;
+    private Point? _touchStart;
+    private bool _closing;
 
     internal FolderPopoverWindow(string rootPath, FolderDisplayMode mode = FolderDisplayMode.List)
     {
@@ -30,8 +35,8 @@ public partial class FolderPopoverWindow : Window
         _currentPath = _rootPath;
         _mode = mode;
         InitializeComponent();
+        RegisterCloseGuard();
         Loaded += async (_, _) => await NavigateAsync(_rootPath);
-        Deactivated += (_, _) => Close();
         Closed += (_, _) => CancelNavigation();
     }
 
@@ -43,15 +48,29 @@ public partial class FolderPopoverWindow : Window
         _virtualFolderId = folder.Id;
         _rootPath = "";
         _currentPath = "";
-        _mode = FolderDisplayMode.AppLauncher;
+        _mode = folder.FolderMode is FolderDisplayMode.CompactAppLauncher
+            ? FolderDisplayMode.CompactAppLauncher : FolderDisplayMode.AppLauncher;
         InitializeComponent();
+        RegisterCloseGuard();
         BackButton.Visibility = Visibility.Collapsed;
         BreadcrumbPanel.Visibility = Visibility.Collapsed;
         OpenExplorerButton.Visibility = Visibility.Collapsed;
         app.PreferencesChanged += RenderVirtual;
         Loaded += (_, _) => RenderVirtual();
-        Deactivated += (_, _) => Close();
         Closed += (_, _) => app.PreferencesChanged -= RenderVirtual;
+    }
+
+    private void RegisterCloseGuard()
+    {
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        Closing += (_, _) => _closing = true;
+    }
+
+    public void CloseOnce()
+    {
+        if (_closing) return;
+        _closing = true;
+        Close();
     }
 
     internal static bool CanOpen(string? target) => FolderBrowserService.TryCreateRoot(target, out _);
@@ -78,6 +97,10 @@ public partial class FolderPopoverWindow : Window
         _navigation = cancellation;
         var generation = ++_navigationGeneration;
         _currentPath = location;
+        _pageIndex = 0;
+        _pageItems.Clear();
+        PageControls.Visibility = Visibility.Collapsed;
+        StatusText.Visibility = Visibility.Visible;
         UpdateNavigationChrome();
         ItemsPanel.Children.Clear();
         GridItemsPanel.Children.Clear();
@@ -105,14 +128,17 @@ public partial class FolderPopoverWindow : Window
             return;
         }
 
-        var entries = _mode == FolderDisplayMode.AppLauncher
+        var entries = IsPagedMode
             ? result.Entries.Where(entry => entry.IsDirectory || IsLaunchableApp(entry.Path)).ToArray()
             : result.Entries.ToArray();
+        ConfigureGrid();
         foreach (var entry in entries)
         {
             if (_mode == FolderDisplayMode.List) ItemsPanel.Children.Add(CreateEntryButton(entry));
-            else GridItemsPanel.Children.Add(CreateGridEntryButton(entry));
+            else if (IsPagedMode) _pageItems.Add(() => CreateGridEntryButton(entry, paged: true));
+            else GridItemsPanel.Children.Add(CreateGridEntryButton(entry, paged: false));
         }
+        if (IsPagedMode) RenderPage();
         var hasEntries = entries.Length > 0;
         ItemsScroller.Visibility = hasEntries ? Visibility.Visible : Visibility.Collapsed;
         StatePanel.Visibility = hasEntries ? Visibility.Collapsed : Visibility.Visible;
@@ -140,13 +166,20 @@ public partial class FolderPopoverWindow : Window
         if (!IsInitialized || _app is null || _virtualFolderId is null) return;
         var folder = _app.Preferences.Pins.FirstOrDefault(pin => pin.Kind == PinKind.VirtualFolder &&
             string.Equals(pin.Id, _virtualFolderId, StringComparison.OrdinalIgnoreCase));
-        if (folder is null) { Close(); return; }
+        if (folder is null) { CloseOnce(); return; }
         PathTitle.Text = folder.Name;
+        var newMode = folder.FolderMode is FolderDisplayMode.CompactAppLauncher
+            ? FolderDisplayMode.CompactAppLauncher : FolderDisplayMode.AppLauncher;
+        if (_mode != newMode) _pageIndex = 0;
+        _mode = newMode;
         ItemsPanel.Visibility = Visibility.Collapsed;
         GridItemsPanel.Visibility = Visibility.Visible;
         GridItemsPanel.Children.Clear();
+        _pageItems.Clear();
+        ConfigureGrid();
         var entries = folder.VirtualItems ?? [];
-        foreach (var entry in entries) GridItemsPanel.Children.Add(CreateVirtualEntryButton(entry));
+        foreach (var entry in entries) _pageItems.Add(() => CreateVirtualEntryButton(entry));
+        RenderPage();
         ItemsScroller.Visibility = entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         StatePanel.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (entries.Count == 0)
@@ -159,9 +192,81 @@ public partial class FolderPopoverWindow : Window
             L("FolderPopover.Count"), entries.Count);
     }
 
+    private bool IsPagedMode => _mode is FolderDisplayMode.AppLauncher or FolderDisplayMode.CompactAppLauncher;
+
+    private void ConfigureGrid()
+    {
+        if (!IsPagedMode)
+        {
+            GridItemsPanel.Width = double.NaN;
+            GridItemsPanel.ItemWidth = GridItemsPanel.ItemHeight = double.NaN;
+            ItemsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            return;
+        }
+        var compact = _mode == FolderDisplayMode.CompactAppLauncher;
+        GridItemsPanel.ItemWidth = compact ? 87 : 112;
+        GridItemsPanel.ItemHeight = compact ? 80 : 104;
+        GridItemsPanel.Width = (compact ? 4 : 3) * GridItemsPanel.ItemWidth;
+        GridItemsPanel.HorizontalAlignment = HorizontalAlignment.Center;
+        ItemsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+    }
+
+    private void RenderPage()
+    {
+        GridItemsPanel.Children.Clear();
+        var pageSize = _mode == FolderDisplayMode.CompactAppLauncher ? 16 : 9;
+        var pages = Math.Max(1, (_pageItems.Count + pageSize - 1) / pageSize);
+        _pageIndex = Math.Clamp(_pageIndex, 0, pages - 1);
+        foreach (var create in _pageItems.Skip(_pageIndex * pageSize).Take(pageSize))
+            GridItemsPanel.Children.Add(create());
+        PageControls.Visibility = pages > 1 ? Visibility.Visible : Visibility.Collapsed;
+        StatusText.Visibility = pages > 1 ? Visibility.Collapsed : Visibility.Visible;
+        PreviousPageButton.IsEnabled = _pageIndex > 0;
+        NextPageButton.IsEnabled = _pageIndex < pages - 1;
+        PageText.Text = string.Format(LocalizationService.Current.ActiveCulture,
+            L("FolderPopover.PageStatus"), _pageIndex + 1, pages);
+        ItemsScroller.ScrollToTop();
+    }
+
+    private void MovePage(int delta)
+    {
+        if (PageControls.Visibility != Visibility.Visible) return;
+        _pageIndex += delta;
+        RenderPage();
+    }
+
+    private void PreviousPage_Click(object sender, RoutedEventArgs e) => MovePage(-1);
+
+    private void NextPage_Click(object sender, RoutedEventArgs e) => MovePage(1);
+
+    private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (PageControls.Visibility != Visibility.Visible) return;
+        MovePage(e.Delta > 0 ? -1 : 1);
+        e.Handled = true;
+    }
+
+    private void Window_PreviewTouchDown(object sender, TouchEventArgs e) =>
+        _touchStart = e.GetTouchPoint(this).Position;
+
+    private void Window_PreviewTouchUp(object sender, TouchEventArgs e)
+    {
+        if (_touchStart is not { } start) return;
+        _touchStart = null;
+        var end = e.GetTouchPoint(this).Position;
+        var horizontal = end.X - start.X;
+        if (PageControls.Visibility != Visibility.Visible ||
+            Math.Abs(horizontal) < 45 || Math.Abs(horizontal) < Math.Abs(end.Y - start.Y) * 1.2) return;
+        MovePage(horizontal < 0 ? 1 : -1);
+        e.Handled = true;
+    }
+
     private Button CreateVirtualEntryButton(VirtualFolderEntry entry)
     {
-        var image = new AppIconSurface(IconService.For("app", entry.Target, entry.Icon), 44);
+        var compact = _mode == FolderDisplayMode.CompactAppLauncher;
+        var cellWidth = compact ? 87d : 112d;
+        var cellHeight = compact ? 80d : 104d;
+        var image = new AppIconSurface(IconService.For("app", entry.Target, entry.Icon), compact ? 40 : 56);
         var button = new Button
         {
             Content = new StackPanel
@@ -169,17 +274,17 @@ public partial class FolderPopoverWindow : Window
                 Children =
                 {
                     image,
-                    new TextBlock { Text = entry.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+                    new TextBlock { Text = entry.Name, FontSize = compact ? 10.5 : 11.5, FontWeight = FontWeights.Medium,
                         TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
-                        MaxWidth = 94, Margin = new Thickness(0, 7, 0, 0) }
+                        MaxWidth = cellWidth - 8, Margin = new Thickness(0, compact ? 4 : 7, 0, 0) }
                 }
             },
-            Style = (Style)FindResource("GlassTileButton"),
-            Width = 111, Height = 102, Padding = new Thickness(6),
-            Margin = new Thickness(0, 0, 7, 7), ToolTip = entry.Name
+            Style = (Style)FindResource("FolderAppButton"),
+            Width = cellWidth, Height = cellHeight, Padding = new Thickness(3),
+            ToolTip = entry.Name
         };
         AutomationProperties.SetName(button, entry.Name);
-        button.Click += (_, _) => { Close(); LaunchService.Open(entry.Target); };
+        button.Click += (_, _) => { CloseOnce(); LaunchService.Open(entry.Target); };
         var menu = new ContextMenu();
         var toDock = new MenuItem { Header = L("FolderPopover.MoveToDock") };
         toDock.Click += (_, _) => _app?.UpdatePreferences(settings =>
@@ -239,22 +344,26 @@ public partial class FolderPopoverWindow : Window
         });
     }
 
-    private Button CreateGridEntryButton(FolderBrowserEntry entry)
+    private Button CreateGridEntryButton(FolderBrowserEntry entry, bool paged)
     {
-        var image = new AppIconSurface(IconService.For("app", entry.Path), 44,
+        var compact = paged && _mode == FolderDisplayMode.CompactAppLauncher;
+        var cellWidth = compact ? 87d : paged ? 112d : 111d;
+        var cellHeight = compact ? 80d : paged ? 104d : 102d;
+        var image = new AppIconSurface(IconService.For("app", entry.Path),
+            compact ? 40 : paged ? 56 : 44,
             entry.IsDirectory || !IsLaunchableApp(entry.Path));
         var label = new TextBlock
         {
-            Text = entry.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold,
+            Text = entry.Name, FontSize = compact ? 10.5 : 11.5, FontWeight = FontWeights.Medium,
             TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = 94, Margin = new Thickness(0, 7, 0, 0)
+            MaxWidth = cellWidth - 8, Margin = new Thickness(0, compact ? 4 : 7, 0, 0)
         };
         var button = new Button
         {
             Content = new StackPanel { Children = { image, label } },
-            Style = (Style)FindResource("GlassTileButton"),
-            Width = 111, Height = 102, Padding = new Thickness(6),
-            Margin = new Thickness(0, 0, 7, 7),
+            Style = (Style)FindResource(paged ? "FolderAppButton" : "GlassTileButton"),
+            Width = cellWidth, Height = cellHeight, Padding = new Thickness(paged ? 3 : 6),
+            Margin = paged ? new Thickness(0) : new Thickness(0, 0, 7, 7),
             IsEnabled = entry.IsOpenable && (!entry.IsDirectory || entry.IsNavigable),
             ToolTip = entry.Name
         };
@@ -345,7 +454,7 @@ public partial class FolderPopoverWindow : Window
         }
 
         LaunchService.Open(entry.Path);
-        Close();
+        CloseOnce();
     }
 
     private void UpdateNavigationChrome()
@@ -410,7 +519,7 @@ public partial class FolderPopoverWindow : Window
     {
         if (!FolderBrowserService.TryResolveLocation(_rootPath, _currentPath, out var safeLocation)) return;
         LaunchService.Open(safeLocation);
-        Close();
+        CloseOnce();
     }
 
     private void ShowState(string titleKey, string descriptionKey)
@@ -469,7 +578,17 @@ public partial class FolderPopoverWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            Close();
+            CloseOnce();
+            e.Handled = true;
+        }
+        else if (PageControls.Visibility == Visibility.Visible && e.Key is Key.Left or Key.PageUp)
+        {
+            MovePage(-1);
+            e.Handled = true;
+        }
+        else if (PageControls.Visibility == Visibility.Visible && e.Key is Key.Right or Key.PageDown)
+        {
+            MovePage(1);
             e.Handled = true;
         }
         else if (e.Key == Key.Back && BackButton.IsEnabled)

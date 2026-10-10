@@ -718,6 +718,7 @@ public partial class PreferencesWindow : VeliShellWindow
                             () => _app.Dock.AddProgramsToVirtualFolder(pin.Id));
                         AddTextButton(buttons, L("FolderPopover.RenameTitle"), displayName,
                             () => _app.Dock.RenameVirtualFolder(pin));
+                        AddFolderModeSelector(buttons, pin, displayName);
                     }
                     else if (Directory.Exists(pin.Target))
                         AddFolderModeSelector(buttons, pin, displayName);
@@ -742,7 +743,9 @@ public partial class PreferencesWindow : VeliShellWindow
         };
         AutomationProperties.SetName(selector, L("FolderPopover.DisplayMode") + ": " + displayName);
         var menu = new ContextMenu();
-        foreach (var mode in Enum.GetValues<FolderDisplayMode>())
+        foreach (var mode in Enum.GetValues<FolderDisplayMode>().Where(mode =>
+                     pin.Kind != PinKind.VirtualFolder ||
+                     mode is FolderDisplayMode.AppLauncher or FolderDisplayMode.CompactAppLauncher))
         {
             var choice = new MenuItem
             {

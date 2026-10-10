@@ -8,7 +8,8 @@
  Foreground="{DynamicResource TextPrimary}" ResizeMode="NoResize" ShowInTaskbar="False"
  WindowStartupLocation="Manual" UseLayoutRounding="True" SnapsToDevicePixels="True"
  AllowDrop="True" DragOver="VirtualFolder_DragOver" Drop="VirtualFolder_Drop"
- KeyDown="Window_KeyDown">
+ KeyDown="Window_KeyDown" PreviewMouseWheel="Window_PreviewMouseWheel"
+ PreviewTouchDown="Window_PreviewTouchDown" PreviewTouchUp="Window_PreviewTouchUp">
  <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect>
@@ -75,10 +76,23 @@
     </Grid>
 
     <Grid Grid.Row="3" Margin="2,12,2,0">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
      <TextBlock x:Name="StatusText" Foreground="{DynamicResource TextSecondary}"
                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="2,0,12,0" />
-     <Button x:Name="OpenExplorerButton" Grid.Column="1" Style="{StaticResource GlassTileButton}" Padding="12,7" Click="OpenExplorer_Click"
+     <StackPanel x:Name="PageControls" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                 Visibility="Collapsed">
+      <Button x:Name="PreviousPageButton" Style="{StaticResource GlassCircleButton}" Width="28" Height="28"
+              Padding="5" Click="PreviousPage_Click" AutomationProperties.Name="{services:Loc FolderPopover.PreviousPage}">
+       <controls:VeliSymbol Symbol="ArrowLeft" Width="13" Height="13" />
+      </Button>
+      <TextBlock x:Name="PageText" MinWidth="42" Margin="7,0" HorizontalAlignment="Center"
+                 VerticalAlignment="Center" TextAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+      <Button x:Name="NextPageButton" Style="{StaticResource GlassCircleButton}" Width="28" Height="28"
+              Padding="5" Click="NextPage_Click" AutomationProperties.Name="{services:Loc FolderPopover.NextPage}">
+       <controls:VeliSymbol Symbol="ChevronRight" Width="13" Height="13" />
+      </Button>
+     </StackPanel>
+     <Button x:Name="OpenExplorerButton" Grid.Column="2" HorizontalAlignment="Right" Style="{StaticResource GlassTileButton}" Padding="12,7" Click="OpenExplorer_Click"
              AutomationProperties.Name="{services:Loc FolderPopover.OpenExplorer}">
       <StackPanel Orientation="Horizontal">
        <controls:VeliSymbol Symbol="External" Width="15" Height="15" Margin="0,0,7,0"

@@ -6,6 +6,20 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-10
+
+### Neu
+
+- Dock-Ordner zeigen eine gläserne Vorschau ihrer enthaltenen Apps und den Ordnernamen direkt unter dem Symbol. Für virtuelle und echte App-Ordner gibt es eine kompakte 4×4-Ansicht ohne Kachelhintergründe; umfangreiche Ordner lassen sich seitenweise durchblättern.
+
+### Verbessert
+
+- Das Rechtsklickmenü eines Dock-Symbols enthält nur noch passende Aktionen für dieses Element. Allgemeine Befehle wie Anheften, Suche, Einstellungen und Beenden bleiben dem Kontextmenü der freien Dock-Fläche vorbehalten. Menüs schließen beim Klick außerhalb.
+
+### Behoben
+
+- „In Windows ändern“ im Audiogeräte-Panel beendet VeliShell nicht mehr durch ein doppeltes Schließen des Panels. Kontrollzentrum, Mitteilungszentrale und Ordnerfenster sind gegen denselben Fokuswechsel-Fehler abgesichert.
+
 ## [0.11.2] - 2026-10-10
 
 ### Behoben

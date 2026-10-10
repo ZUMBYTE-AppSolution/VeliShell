@@ -27,6 +27,8 @@ internal static class Program
     {
         if (args.Contains("--render-start-launcher", StringComparer.OrdinalIgnoreCase))
             return RenderStartLauncher();
+        if (args.Contains("--render-folder", StringComparer.OrdinalIgnoreCase))
+            return RenderFolderViews();
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         if (args.Contains("--live-workarea-reflow", StringComparer.OrdinalIgnoreCase))
             return RunLiveWorkAreaReflowProbe(application);
@@ -110,6 +112,7 @@ internal static class Program
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
             TestMenuBarCenters();
+            TestTransientAudioPanelClose(owner, anchor);
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
             RenderIconSurfaceContactSheet(iconSurfacesPath);
@@ -134,6 +137,7 @@ internal static class Program
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
             Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
+            Console.WriteLine("PASS: The audio-device panel closes without a reentrant deactivation crash.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             Console.WriteLine($"PASS: Rendered aligned freeform empty/full Recycle Bin surfaces to {trashSurfacesPath}");
             Console.WriteLine(hasSteamIconSample
@@ -266,6 +270,177 @@ internal static class Program
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static int RenderFolderViews()
+    {
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
+        });
+        var systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        var executables = new[] { "notepad.exe", "cmd.exe", "calc.exe", "mspaint.exe", "write.exe" };
+        var entries = Enumerable.Range(0, 20)
+            .Select(index => new VirtualFolderEntry(index.ToString(), $"App {index + 1}",
+                Path.Combine(systemDirectory, executables[index % executables.Length])))
+            .ToList();
+        var folder = Settings.CreateVirtualFolder("Kreativ & Arbeit") with { VirtualItems = entries };
+        var settings = new Settings { FirstRunCompleted = true, Pins = [folder] };
+        typeof(VeliShell.Desktop.App).GetProperty("Preferences")!.SetValue(application, settings);
+        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "folder-renders");
+        Directory.CreateDirectory(outputDirectory);
+        var popoverType = RequireType("VeliShell.Desktop.Views.FolderPopoverWindow");
+        var tileType = RequireType("VeliShell.Desktop.Controls.DockTile");
+        var itemType = RequireType("VeliShell.Desktop.Models.DockItem");
+        try
+        {
+            foreach (var dark in new[] { false, true })
+            {
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri($"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                foreach (var mode in new[] { FolderDisplayMode.AppLauncher, FolderDisplayMode.CompactAppLauncher })
+                {
+                    folder = folder with { FolderMode = mode };
+                    settings.Pins[0] = folder;
+                    var popover = (Window)(Activator.CreateInstance(popoverType,
+                        BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                        args: [application, folder], culture: null)
+                        ?? throw new InvalidOperationException("Could not create app folder."));
+                    RequireMethod(popoverType, "RenderVirtual").Invoke(popover, null);
+                    var grid = (WrapPanel)popoverType.GetField("GridItemsPanel",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(popover)!;
+                    Require(grid.Children.Count == (mode == FolderDisplayMode.CompactAppLauncher ? 16 : 9),
+                        "App folder did not fill exactly one grid page.");
+                    var pageControls = (FrameworkElement)popoverType.GetField("PageControls",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(popover)!;
+                    Require(pageControls.Visibility == Visibility.Visible,
+                        "A multi-page app folder lost its sideways navigation.");
+                    RequireMethod(popoverType, "MovePage").Invoke(popover, [1]);
+                    Require(grid.Children.Count == (mode == FolderDisplayMode.CompactAppLauncher ? 4 : 9),
+                        "The next app-folder page contains the wrong number of icons.");
+                    RequireMethod(popoverType, "MovePage").Invoke(popover, [-1]);
+                    RenderShellPanel(popover, Path.Combine(outputDirectory,
+                        $"app-folder-{(mode == FolderDisplayMode.CompactAppLauncher ? "4x4" : "3x3")}-{(dark ? "dark" : "light")}.png"), dark);
+                }
+
+                var item = Activator.CreateInstance(itemType)!;
+                itemType.GetProperty("Key")!.SetValue(item, "pin:" + folder.Id);
+                itemType.GetProperty("Name")!.SetValue(item, folder.Name);
+                itemType.GetProperty("Target")!.SetValue(item, folder.Target);
+                itemType.GetProperty("IconId")!.SetValue(item, "virtual-folder");
+                itemType.GetProperty("Pin")!.SetValue(item, folder);
+                var tile = (FrameworkElement)(Activator.CreateInstance(tileType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [item, 58d], culture: null)
+                    ?? throw new InvalidOperationException("Could not create dock folder tile."));
+                var preview = (FrameworkElement)RequireField(tileType, "_folderPreview").GetValue(tile)!;
+                var label = (TextBlock)RequireField(tileType, "_folderName").GetValue(tile)!;
+                Require(preview.Visibility == Visibility.Visible && label.Text == folder.Name,
+                    "The dock folder lost its live preview or caption.");
+                var dockStage = new Grid { Background = (Brush)application.FindResource("DockSurfaceGradient") };
+                dockStage.Children.Add(tile);
+                var tileWindow = new Window { Width = 180, Height = 145, Content = dockStage };
+                RenderShellPanel(tileWindow, Path.Combine(outputDirectory,
+                    $"dock-folder-{(dark ? "dark" : "light")}.png"), dark);
+            }
+            TestDockContextMenus(application);
+            Console.WriteLine($"PASS: Glass folder previews and paged 3×3/4×4 app grids rendered in both themes: {outputDirectory}");
+            Console.WriteLine("PASS: Dock-item menus contain only item actions; dock-wide actions stay on the plate, and menus are configured to dismiss on outside clicks.");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally { application.Shutdown(); }
+    }
+
+    private static void TestDockContextMenus(SafePreviewApp application)
+    {
+        var appPin = new Pin("menu-app", "Editor", "notepad.exe");
+        var folderPin = Settings.CreateVirtualFolder("Work");
+        application.Preferences.Pins = [appPin, folderPin];
+        var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
+        var itemType = RequireType("VeliShell.Desktop.Models.DockItem");
+        var tileType = RequireType("VeliShell.Desktop.Controls.DockTile");
+        var dock = Activator.CreateInstance(dockType, [application])!;
+        var buildItemMenu = RequireMethod(dockType, "BuildItemMenu");
+
+        object NewItem(string key, string name, string target = "", Pin? pin = null)
+        {
+            var item = Activator.CreateInstance(itemType)!;
+            itemType.GetProperty("Key")!.SetValue(item, key);
+            itemType.GetProperty("Name")!.SetValue(item, name);
+            itemType.GetProperty("Target")!.SetValue(item, target);
+            itemType.GetProperty("Pin")!.SetValue(item, pin);
+            return item;
+        }
+
+        ContextMenu BuildMenu(string key, string name, string target = "", Pin? pin = null)
+        {
+            var item = NewItem(key, name, target, pin);
+            var tile = Activator.CreateInstance(tileType, BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null, args: [item, 52d], culture: null)!;
+            return (ContextMenu)buildItemMenu.Invoke(dock, [tile])!;
+        }
+
+        static string[] Headers(ContextMenu menu) => menu.Items.OfType<MenuItem>()
+            .Select(entry => entry.Header?.ToString() ?? "").ToArray();
+        string Label(string key) => LocalizationService.Current.Get(key);
+        var globalLabels = new[] { "Dock.PinProgram", "Dock.PinFolder", "FolderPopover.CreateVirtual",
+            "Search.Open", "Dock.Settings", "Dock.Quit" }.Select(Label).ToHashSet();
+
+        var appMenu = BuildMenu("pin:" + appPin.Id, appPin.Name, appPin.Target, appPin);
+        var folderMenu = BuildMenu("pin:" + folderPin.Id, folderPin.Name, pin: folderPin);
+        var trashMenu = BuildMenu("trash", "Recycle Bin", "shell:RecycleBinFolder");
+        var startMenu = BuildMenu("start", "Start");
+        var veliMenu = BuildMenu("velishell", "VeliShell");
+        var overflow = NewItem("overflow", "More apps");
+        var overflowEntries = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(itemType))!;
+        overflowEntries.Add(NewItem("overflow:app", "Overflow App", "notepad.exe"));
+        itemType.GetProperty("Overflow")!.SetValue(overflow, overflowEntries);
+        var overflowMenu = (ContextMenu)RequireMethod(dockType, "BuildOverflowMenu")
+            .Invoke(dock, [overflow, new Border()])!;
+        foreach (var menu in new[] { appMenu, folderMenu, trashMenu, startMenu, veliMenu, overflowMenu })
+        {
+            Require(!Headers(menu).Any(globalLabels.Contains),
+                "A Dock icon still shows global Dock commands or VeliShell settings.");
+            Require(menu.Items.Count > 0 && menu.Items[^1] is not Separator,
+                "A Dock icon has an empty or trailing-separator menu.");
+        }
+        Require(Headers(appMenu).Contains(Label("Dock.Open")) &&
+                Headers(appMenu).Contains(Label("Dock.Remove")) &&
+                !Headers(appMenu).Contains(Label("Dock.Reopen")) &&
+                !Headers(appMenu).Contains(Label("Dock.MoveLeft")),
+            "A stopped first-position app has duplicate or impossible commands.");
+        Require(Headers(folderMenu).Contains(Label("FolderPopover.RenameTitle")) &&
+                Headers(folderMenu).Contains(Label("FolderPopover.DisplayMode")) &&
+                Headers(folderMenu).Contains(Label("Dock.MoveLeft")),
+            "The virtual app folder lost its own actions.");
+        Require(Headers(trashMenu).Contains(Label("Dock.RecycleOpen")) &&
+                Headers(startMenu).Contains(Label("Dock.WindowsStart")) &&
+                Headers(veliMenu).Contains(Label("Dock.RemoveVeliShell")) &&
+                Headers(overflowMenu).SequenceEqual(["Overflow App"]),
+            "A fixed Dock icon lost its contextual actions.");
+
+        var plateMenu = new ContextMenu();
+        RequireMethod(dockType, "AddCommonMenu").Invoke(dock, [plateMenu]);
+        Require(Headers(plateMenu).Contains(Label("Dock.Settings")),
+            "VeliShell settings are no longer available from the Dock plate.");
+        var anchor = new Border { Width = 50, Height = 50 };
+        RequireMethod(dockType, "OpenMenu").Invoke(dock, [plateMenu, anchor]);
+        Require(plateMenu.IsOpen && !plateMenu.StaysOpen,
+            "Dock context menus do not dismiss when the user clicks outside.");
+        plateMenu.IsOpen = false;
     }
 
     /// <summary>
@@ -654,6 +829,46 @@ internal static class Program
             DrainDispatcher();
             Require(!ghost.IsVisible, $"Disposed ghost at {size} DIP remained visible.");
         }
+
+        var folder = Settings.CreateVirtualFolder("Tools") with
+        {
+            VirtualItems = [new VirtualFolderEntry("editor", "Editor", "notepad.exe")]
+        };
+        var folderGhost = (Window)Activator.CreateInstance(ghostType,
+            BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+            args: [owner, folder, 58d], culture: null)!;
+        var folderShadow = (Grid)((Grid)folderGhost.Content).Children[0];
+        Require(folderShadow.Children[0].GetType().Name == "DockFolderPreview",
+            "Dragging a folder reverted to the obsolete static folder icon.");
+        Invoke(ghostType, folderGhost, "ShowAtCursor");
+        Require((bool)Invoke(ghostType, folderGhost, "SnapTo", anchor)!,
+            "The folder preview ghost did not snap to its insertion slot.");
+        ((IDisposable)folderGhost).Dispose();
+    }
+
+    private static void TestTransientAudioPanelClose(Window owner, FrameworkElement anchor)
+    {
+        var panelType = RequireType("VeliShell.Desktop.Views.AudioDevicesWindow");
+        var closeOnce = panelType.GetMethod("CloseOnce", BindingFlags.Instance | BindingFlags.Public)
+            ?? throw new MissingMethodException(panelType.FullName, "CloseOnce");
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var panel = (Window)(Activator.CreateInstance(panelType,
+                BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                args: [], culture: null)
+                ?? throw new InvalidOperationException("Could not construct the audio-device panel."));
+            RequireMethod(panelType, "ShowRelativeTo").Invoke(panel, [anchor, owner, false]);
+            DrainDispatcher();
+            Require(panel.IsVisible, "The audio-device panel did not open for its close-race test.");
+            if (attempt == 0)
+            {
+                closeOnce.Invoke(panel, null);
+                closeOnce.Invoke(panel, null);
+            }
+            else panel.Close(); // owner-driven close must also survive deactivation
+            DrainDispatcher();
+            Require(!panel.IsVisible, "The audio-device panel remained visible after closing.");
+        }
     }
 
     private static void TestDockTileHoverMask()
@@ -747,13 +962,14 @@ internal static class Program
             Require(surfaceType.IsInstanceOfType(tileSurface),
                 $"Dock tile at {size} DIP does not use the shared AppIconSurface.");
             Invoke(tileType, tile, "SetScale", 1.42d, false);
-            Require(tileSurface.RenderTransform is TransformGroup transformGroup
+            var artworkHost = VisualTreeHelper.GetParent(tileSurface) as FrameworkElement;
+            Require(artworkHost?.RenderTransform is TransformGroup transformGroup
                     && transformGroup.Children.Count == 2
                     && transformGroup.Children[0] is ScaleTransform scale
                     && transformGroup.Children[1] is TranslateTransform
                     && Math.Abs(scale.ScaleX - 1.42) < 0.001
                     && Math.Abs(scale.ScaleY - 1.42) < 0.001,
-                $"Dock tile at {size} DIP did not scale the common app-icon surface as one unit.");
+                $"Dock tile at {size} DIP did not scale its icon or folder preview as one unit.");
         }
     }
 

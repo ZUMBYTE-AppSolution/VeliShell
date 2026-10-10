@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using VeliShell.Core;
 using VeliShell.Desktop.Models;
 using VeliShell.Desktop.Services;
 
@@ -14,6 +15,8 @@ internal sealed class DockTile : Button
     private readonly ScaleTransform _scale = new(1, 1);
     private readonly TranslateTransform _launchOffset = new();
     private readonly AppIconSurface _iconSurface;
+    private readonly DockFolderPreview? _folderPreview;
+    private readonly TextBlock? _folderName;
     private readonly Border _folderDropHalo;
     private readonly Ellipse _indicator;
     internal DockItem Item { get; set; }
@@ -52,11 +55,35 @@ internal sealed class DockTile : Button
         var iconTransforms = new TransformGroup();
         iconTransforms.Children.Add(_scale);
         iconTransforms.Children.Add(_launchOffset);
-        _iconSurface = new AppIconSurface(iconSource, size, UsesFreeformArtwork(item))
+        var artwork = new Grid
         {
+            Width = size, Height = size,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             RenderTransformOrigin = new Point(0.5, 1), RenderTransform = iconTransforms
         };
-        grid.Children.Add(_iconSurface);
+        _iconSurface = new AppIconSurface(iconSource, size, UsesFreeformArtwork(item));
+        artwork.Children.Add(_iconSurface);
+        if (IsFolder(item))
+        {
+            _folderPreview = new DockFolderPreview(size);
+            artwork.Children.Add(_folderPreview);
+            artwork.VerticalAlignment = VerticalAlignment.Top;
+            _folderName = new TextBlock
+            {
+                Width = size + 22, Height = 17,
+                FontSize = Math.Clamp(size * 0.19, 9, 11),
+                FontWeight = FontWeights.Medium,
+                TextAlignment = TextAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                IsHitTestVisible = false
+            };
+            _folderName.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
+            grid.Children.Add(_folderName);
+        }
+        grid.Children.Add(artwork);
         _indicator = new Ellipse
         {
             Width = 4,
@@ -68,10 +95,12 @@ internal sealed class DockTile : Button
         _indicator.SetResourceReference(Shape.FillProperty, "DockIndicator");
         grid.Children.Add(_indicator);
         Content = grid;
+        UpdateFolder(item);
         UpdateIndicator();
     }
 
-    internal void UpdateIndicator() => _indicator.Visibility = Item.Windows.Count > 0 || Item.Key == "velishell" ? Visibility.Visible : Visibility.Hidden;
+    internal void UpdateIndicator() => _indicator.Visibility = !IsFolder(Item) &&
+        (Item.Windows.Count > 0 || Item.Key == "velishell") ? Visibility.Visible : Visibility.Hidden;
 
     internal void SetFolderDropTarget(bool active) =>
         _folderDropHalo.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
@@ -84,8 +113,23 @@ internal sealed class DockTile : Button
         UpdateAutomationStatus(item);
         var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
         _iconSurface.UpdateSource(iconSource, UsesFreeformArtwork(item));
+        UpdateFolder(item);
         UpdateIndicator();
     }
+
+    private void UpdateFolder(DockItem item)
+    {
+        if (_folderPreview is null || item.Pin is not { } pin) return;
+        // A chosen folder icon still takes precedence over the live preview.
+        _folderPreview.Visibility = pin.Icon is null ? Visibility.Visible : Visibility.Collapsed;
+        _iconSurface.Visibility = pin.Icon is null ? Visibility.Collapsed : Visibility.Visible;
+        if (_folderName is not null) _folderName.Text = item.Name;
+        if (pin.Icon is null) _folderPreview.UpdatePin(pin);
+    }
+
+    private static bool IsFolder(DockItem item) =>
+        item.Pin?.Kind == PinKind.VirtualFolder ||
+        (item.Pin is not null && System.IO.Directory.Exists(item.Target));
 
     private static bool UsesFreeformArtwork(DockItem item) =>
         item.Key == "trash" || item.IconId is "folder" or "virtual-folder" ||

@@ -15,7 +15,7 @@ public enum OnlineIconMode { Disabled, OnDemand, AutomaticExactMatches }
 
 public enum DockIconStyle { Mac, Windows }
 
-public enum FolderDisplayMode { List, Grid, AppLauncher }
+public enum FolderDisplayMode { List, Grid, AppLauncher, CompactAppLauncher }
 
 public enum PinKind { Item, VirtualFolder }
 
@@ -177,7 +177,9 @@ public sealed class Settings
             Target = kind == PinKind.VirtualFolder ? "velishell:folder:" + id : pin.Target,
             MatchProcess = kind == PinKind.VirtualFolder ? null : pin.MatchProcess,
             Icon = NormalizeIcon(pin.Icon),
-            FolderMode = kind == PinKind.VirtualFolder ? FolderDisplayMode.AppLauncher :
+            FolderMode = kind == PinKind.VirtualFolder ?
+                pin.FolderMode is FolderDisplayMode.AppLauncher or FolderDisplayMode.CompactAppLauncher
+                    ? pin.FolderMode : FolderDisplayMode.AppLauncher :
                 Enum.IsDefined(pin.FolderMode) ? pin.FolderMode : FolderDisplayMode.List,
             Kind = kind,
             VirtualItems = kind == PinKind.VirtualFolder

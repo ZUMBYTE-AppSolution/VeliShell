@@ -74,6 +74,7 @@ public partial class DockWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            if (_menu is { IsOpen: true } menu) menu.IsOpen = false;
             _pollTimer.Stop(); _hideTimer.Stop();
             _app.PreferencesChanged -= ApplyPreferences;
             _source?.RemoveHook(WindowHook);
@@ -392,16 +393,20 @@ public partial class DockWindow : Window
 
     private void OpenMenu(ContextMenu menu, FrameworkElement anchor)
     {
+        if (_menu is { IsOpen: true } previous) previous.IsOpen = false;
+        CloseWindowPreview();
         _hideTimer.Stop();
         SetHidden(false);
         _menu = menu;
+        menu.StaysOpen = false;
         menu.PlacementTarget = anchor;
         menu.Placement = PlacementMode.Top;
         menu.Closed += (_, _) =>
         {
+            if (!ReferenceEquals(_menu, menu)) return;
             CloseWindowPreview();
             _menu = null;
-            if (_app.Preferences.AutoHide) _hideTimer.Start();
+            if (!_closed && _app.Preferences.AutoHide) _hideTimer.Start();
         };
         menu.IsOpen = true;
     }
@@ -410,35 +415,48 @@ public partial class DockWindow : Window
     {
         var item = tile.Item;
         if (item.Key == "overflow") { ShowOverflow(item, tile); return; }
+        OpenMenu(BuildItemMenu(tile), tile);
+    }
+
+    private ContextMenu BuildItemMenu(DockTile tile)
+    {
+        var item = tile.Item;
         var menu = new ContextMenu();
         if (!item.IsUtility)
         {
             AddMenuItem(menu, item.Windows.Count > 0 ? L("Dock.ShowWindows") : L("Dock.Open"), () => ActivateItem(item, tile));
-            if (item.Target.Length > 0) AddMenuItem(menu, L("Dock.Reopen"), () => LaunchService.Open(item.Target));
+            if (item.Windows.Count > 0 && item.Target.Length > 0 &&
+                item.Pin?.Kind != PinKind.VirtualFolder && !Directory.Exists(item.Target))
+                AddMenuItem(menu, L("Dock.Reopen"), () => LaunchService.Open(item.Target));
             var showWindowPreviews = item.Windows.Count > 1;
-            if (showWindowPreviews) PrepareWindowPreview();
-            foreach (var window in item.Windows.Take(10))
+            if (showWindowPreviews)
             {
-                var title = window.Title.Length > 65 ? window.Title[..62] + "…" : window.Title;
-                var windowEntry = AddMenuItem(menu, title, () => WindowCatalog.Activate(window.Handle));
-                if (showWindowPreviews)
+                foreach (var window in item.Windows.Take(10))
                 {
-                    windowEntry.MouseEnter += (_, _) => ShowWindowPreview(window, windowEntry, item);
+                    var title = window.Title.Length > 65 ? window.Title[..62] + "…" : window.Title;
+                    var windowEntry = AddMenuItem(menu, title, () => WindowCatalog.Activate(window.Handle));
+                    windowEntry.MouseEnter += (_, _) =>
+                    {
+                        if (_windowPreview is null) PrepareWindowPreview();
+                        ShowWindowPreview(window, windowEntry, item);
+                    };
                     windowEntry.MouseLeave += (_, _) => _windowPreview?.HidePreview();
                 }
             }
-            menu.Items.Add(new Separator());
             if (item.Pin is { } pin)
             {
+                menu.Items.Add(new Separator());
                 if (pin.Kind == PinKind.VirtualFolder)
                 {
                     AddMenuItem(menu, L("FolderPopover.RenameTitle"), () => RenameVirtualFolder(pin));
                     AddMenuItem(menu, L("FolderPopover.AddApps"), () => AddProgramsToVirtualFolder(pin.Id));
                 }
-                if (Directory.Exists(pin.Target))
+                if (pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target))
                 {
                     var viewMenu = new MenuItem { Header = L("FolderPopover.DisplayMode") };
-                    foreach (var mode in Enum.GetValues<FolderDisplayMode>())
+                    foreach (var mode in Enum.GetValues<FolderDisplayMode>().Where(mode =>
+                                 pin.Kind != PinKind.VirtualFolder ||
+                                 mode is FolderDisplayMode.AppLauncher or FolderDisplayMode.CompactAppLauncher))
                     {
                         var choice = new MenuItem
                         {
@@ -451,13 +469,18 @@ public partial class DockWindow : Window
                     }
                     menu.Items.Add(viewMenu);
                 }
-                AddMenuItem(menu, L("Dock.MoveLeft"), () => MovePin(pin.Id, -1));
-                AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
+                var pinIndex = _app.Preferences.Pins.FindIndex(candidate =>
+                    string.Equals(candidate.Id, pin.Id, StringComparison.OrdinalIgnoreCase));
+                if (pinIndex > 0) AddMenuItem(menu, L("Dock.MoveLeft"), () => MovePin(pin.Id, -1));
+                if (pinIndex >= 0 && pinIndex < _app.Preferences.Pins.Count - 1)
+                    AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
                 AddMenuItem(menu, L("Dock.Remove"), () => RemovePin(pin));
             }
             else if (File.Exists(item.Target) || PackagedAppService.AppIdFromTarget(item.Target) is not null)
+            {
+                menu.Items.Add(new Separator());
                 AddMenuItem(menu, L("Dock.Keep"), () => AddPaths([item.Target]));
-            menu.Items.Add(new Separator());
+            }
         }
         else if (item.Key == "trash")
         {
@@ -467,13 +490,11 @@ public partial class DockWindow : Window
                 recycle.Available && recycle.ItemCount > 0 ? LF("Dock.EmptyRecycleCount", recycle.ItemCount) : L("Dock.EmptyRecycle"),
                 EmptyRecycleBin);
             empty.IsEnabled = recycle.Available && recycle.ItemCount > 0;
-            menu.Items.Add(new Separator());
         }
         else if (item.Key == "velishell")
         {
             AddMenuItem(menu, L("Dock.RemoveVeliShell"), () =>
                 _app.UpdatePreferences(settings => settings.ShowVeliShellDockItem = false));
-            menu.Items.Add(new Separator());
         }
         else if (item.Key == "start")
         {
@@ -481,26 +502,28 @@ public partial class DockWindow : Window
             AddMenuItem(menu, L("Start.WindowsMenu"), () => WindowsStartService.Open());
             AddMenuItem(menu, L("Dock.HideWindowsStart"), () =>
                 _app.UpdatePreferences(settings => settings.ShowWindowsStartDockItem = false));
-            menu.Items.Add(new Separator());
         }
         if (OnlineIconService.TryGetAttribution(item.Icon) is { } attribution)
         {
+            if (menu.Items.Count > 0) menu.Items.Add(new Separator());
             AddMenuItem(menu, attribution.Text, () => LaunchService.Open(
                 Uri.TryCreate(attribution.SourceUrl, UriKind.Absolute, out var uri) &&
                 uri.Scheme == Uri.UriSchemeHttps
                     ? uri.AbsoluteUri
                     : "https://apps.apple.com/"));
-            menu.Items.Add(new Separator());
         }
-        AddCommonMenu(menu);
-        OpenMenu(menu, tile);
+        return menu;
     }
 
     internal void SetFolderMode(string pinId, FolderDisplayMode mode) => _app.UpdatePreferences(settings =>
     {
         var index = settings.Pins.FindIndex(pin => string.Equals(pin.Id, pinId, StringComparison.OrdinalIgnoreCase));
-        if (index >= 0 && Directory.Exists(settings.Pins[index].Target))
-            settings.Pins[index] = settings.Pins[index] with { FolderMode = mode };
+        if (index < 0 || !Enum.IsDefined(mode)) return;
+        var pin = settings.Pins[index];
+        if ((pin.Kind == PinKind.VirtualFolder &&
+             mode is FolderDisplayMode.AppLauncher or FolderDisplayMode.CompactAppLauncher) ||
+            pin.Kind == PinKind.Item && Directory.Exists(pin.Target))
+            settings.Pins[index] = pin with { FolderMode = mode };
     });
 
     private void ShowFolderPopover(string path, FrameworkElement anchor, FolderDisplayMode mode)
@@ -634,7 +657,7 @@ public partial class DockWindow : Window
     {
         var popover = _folderPopover;
         _folderPopover = null;
-        popover?.Close();
+        popover?.CloseOnce();
     }
 
     private void ShowWindowPreview(NativeWindow window, FrameworkElement anchor, DockItem item)
@@ -680,12 +703,15 @@ public partial class DockWindow : Window
 
     private void ShowOverflow(DockItem item, FrameworkElement anchor)
     {
+        OpenMenu(BuildOverflowMenu(item, anchor), anchor);
+    }
+
+    private ContextMenu BuildOverflowMenu(DockItem item, FrameworkElement anchor)
+    {
         var menu = new ContextMenu();
         foreach (var entry in item.Overflow)
             AddMenuItem(menu, entry.Name + (entry.Windows.Count > 0 ? "  •" : ""), () => ActivateItem(entry, anchor));
-        menu.Items.Add(new Separator());
-        AddCommonMenu(menu);
-        OpenMenu(menu, anchor);
+        return menu;
     }
 
     private void AddCommonMenu(ContextMenu menu)
@@ -833,7 +859,8 @@ public partial class DockWindow : Window
             ShowDragGhost("pin:" + pin.Id,
                 IconService.For(pin.Kind == PinKind.VirtualFolder ? "virtual-folder" : pin.Id,
                     pin.Target, pin.Icon),
-                pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target));
+                pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target),
+                pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target) ? pin : null);
             System.Windows.DragDrop.DoDragDrop(
                 dragSource,
                 CreateDockPinDragData(pin.Id),
@@ -930,7 +957,7 @@ public partial class DockWindow : Window
         hasPin ? DragDropEffects.Move :
         hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
 
-    private void ShowDragGhost(string key, ImageSource source, bool freeform)
+    private void ShowDragGhost(string key, ImageSource source, bool freeform, Pin? folder = null)
     {
         if (_dragGhost is not null && string.Equals(_dragGhostKey, key, StringComparison.Ordinal))
         {
@@ -942,7 +969,9 @@ public partial class DockWindow : Window
         try
         {
             _dragGhostKey = key;
-            _dragGhost = new DragGhostWindow(this, source, _app.Preferences.IconSize, freeform);
+            _dragGhost = folder is null
+                ? new DragGhostWindow(this, source, _app.Preferences.IconSize, freeform)
+                : new DragGhostWindow(this, folder, _app.Preferences.IconSize);
             _dragGhost.ShowAtCursor();
         }
         catch (Exception exception) when (exception is InvalidOperationException or ExternalException)
@@ -1207,7 +1236,8 @@ public partial class DockWindow : Window
                     var ghostKey = "pin:" + pin.Id;
                     if (_dragGhost is null || !string.Equals(_dragGhostKey, ghostKey, StringComparison.Ordinal))
                         ShowDragGhost(ghostKey, IconService.For(pin.Id, pin.Target, pin.Icon),
-                            Directory.Exists(pin.Target));
+                            pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target),
+                            pin.Kind == PinKind.VirtualFolder || Directory.Exists(pin.Target) ? pin : null);
                 }
             }
             else if (_cachedDragPaths.Count > 0)

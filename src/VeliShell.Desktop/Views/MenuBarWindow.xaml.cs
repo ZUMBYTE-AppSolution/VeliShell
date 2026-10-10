@@ -529,7 +529,7 @@ public partial class MenuBarWindow : Window
     {
         if (_controlCenter is { IsVisible: true })
         {
-            _controlCenter.Close();
+            _controlCenter.CloseOnce();
             return;
         }
 
@@ -548,7 +548,7 @@ public partial class MenuBarWindow : Window
     {
         if (_audioDevices is { IsVisible: true })
         {
-            _audioDevices.Close();
+            _audioDevices.CloseOnce();
             return;
         }
 
@@ -566,7 +566,7 @@ public partial class MenuBarWindow : Window
     {
         if (_notificationCenter is { IsVisible: true })
         {
-            _notificationCenter.Close();
+            _notificationCenter.CloseOnce();
             return;
         }
 
@@ -593,7 +593,11 @@ public partial class MenuBarWindow : Window
     {
         var panel = _openPanel;
         _openPanel = null;
-        if (panel is { IsVisible: true }) panel.Close();
+        if (panel is { IsVisible: true })
+        {
+            if (panel is ITransientPanel transient) transient.CloseOnce();
+            else panel.Close();
+        }
         _controlCenter = null;
         _audioDevices = null;
         _notificationCenter = null;

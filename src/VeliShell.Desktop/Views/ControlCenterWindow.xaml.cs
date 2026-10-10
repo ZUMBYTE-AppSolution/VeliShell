@@ -5,11 +5,12 @@ using VeliShell.Desktop.Services;
 
 namespace VeliShell.Desktop.Views;
 
-public partial class ControlCenterWindow : Window
+public partial class ControlCenterWindow : Window, ITransientPanel
 {
     internal event Action? OpenAudioDevicesRequested;
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private bool _updatingStatus;
+    private bool _closing;
 
     internal ControlCenterWindow()
     {
@@ -20,8 +21,16 @@ public partial class ControlCenterWindow : Window
             _statusTimer.Start();
         };
         _statusTimer.Tick += (_, _) => RefreshStatus();
-        Deactivated += (_, _) => Close();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        Closing += (_, _) => _closing = true;
         Closed += (_, _) => _statusTimer.Stop();
+    }
+
+    public void CloseOnce()
+    {
+        if (_closing) return;
+        _closing = true;
+        Close();
     }
 
     internal void ShowRelativeTo(FrameworkElement anchor, Window owner, bool topmost)
@@ -106,6 +115,6 @@ public partial class ControlCenterWindow : Window
     private void AudioDevices_Click(object sender, RoutedEventArgs e) => OpenAudioDevicesRequested?.Invoke();
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) Close();
+        if (e.Key == Key.Escape) CloseOnce();
     }
 }

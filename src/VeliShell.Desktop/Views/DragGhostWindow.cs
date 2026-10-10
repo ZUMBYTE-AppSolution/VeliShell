@@ -7,6 +7,7 @@ using System.Windows.Media.Effects;
 using VeliShell.Desktop.Controls;
 using VeliShell.Desktop.Services;
 using VeliShell.Desktop.Native;
+using VeliShell.Core;
 
 namespace VeliShell.Desktop.Views;
 
@@ -19,7 +20,13 @@ internal sealed class DragGhostWindow : Window, IDisposable
     internal DragGhostWindow(Window owner, ImageSource source, double iconSize) :
         this(owner, source, iconSize, freeform: false) { }
 
-    internal DragGhostWindow(Window owner, ImageSource source, double iconSize, bool freeform)
+    internal DragGhostWindow(Window owner, ImageSource source, double iconSize, bool freeform) :
+        this(owner, new AppIconSurface(source, Math.Clamp(iconSize, 32, 96), freeform), iconSize) { }
+
+    internal DragGhostWindow(Window owner, Pin folder, double iconSize) :
+        this(owner, CreateFolderArtwork(folder, iconSize), iconSize) { }
+
+    private DragGhostWindow(Window owner, FrameworkElement artwork, double iconSize)
     {
         Owner = owner;
         Title = LocalizationService.Current.Get("Product.Name");
@@ -41,8 +48,6 @@ internal sealed class DragGhostWindow : Window, IDisposable
         Height = size + 20;
         Opacity = 0.72;
 
-        var iconSurface = new AppIconSurface(source, size, freeform);
-
         var shadowHost = new Grid
         {
             Width = size,
@@ -57,7 +62,7 @@ internal sealed class DragGhostWindow : Window, IDisposable
                 Opacity = 0.48,
                 Color = Colors.Black
             },
-            Children = { iconSurface }
+            Children = { artwork }
         };
 
         Content = new Grid
@@ -76,6 +81,19 @@ internal sealed class DragGhostWindow : Window, IDisposable
                 (nint)(style | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate | NativeMethods.WsExTransparent));
         };
         Closed += (_, _) => _handle = 0;
+    }
+
+    private static FrameworkElement CreateFolderArtwork(Pin folder, double iconSize)
+    {
+        var size = Math.Clamp(iconSize, 32, 96);
+        if (folder.Icon is not null)
+            return new AppIconSurface(IconService.For(
+                    folder.Kind == PinKind.VirtualFolder ? "virtual-folder" : folder.Id,
+                    folder.Target, folder.Icon), size,
+                freeform: true);
+        var preview = new DockFolderPreview(size);
+        preview.UpdatePin(folder);
+        return preview;
     }
 
     internal void ShowAtCursor()
