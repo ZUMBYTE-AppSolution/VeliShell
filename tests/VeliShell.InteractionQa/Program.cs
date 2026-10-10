@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -350,8 +351,12 @@ internal static class Program
                 RenderShellPanel(tileWindow, Path.Combine(outputDirectory,
                     $"dock-folder-{(dark ? "dark" : "light")}.png"), dark);
             }
+            TestDockFolderAlignment(folder);
+            TestFolderShortcutThumbnails(application, outputDirectory);
             TestDockContextMenus(application);
             Console.WriteLine($"PASS: Glass folder previews and paged 3×3/4×4 app grids rendered in both themes: {outputDirectory}");
+            Console.WriteLine("PASS: Folder shortcuts keep their folder artwork in virtual and physical dock previews; app shortcuts stay masked.");
+            Console.WriteLine("PASS: Dock folders share the app icon center, with their captions aligned to the activity-dot row at 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock-item menus contain only item actions; dock-wide actions stay on the plate, and menus are configured to dismiss on outside clicks.");
             return 0;
         }
@@ -361,6 +366,214 @@ internal static class Program
             return 1;
         }
         finally { application.Shutdown(); }
+    }
+
+    private static void TestFolderShortcutThumbnails(SafePreviewApp application, string outputDirectory)
+    {
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), "VeliShell-folder-shortcut-qa-" + Guid.NewGuid().ToString("N"));
+        var folderTarget = Path.Combine(temporaryRoot, "Zielordner");
+        var links = Path.Combine(temporaryRoot, "Verknuepfungen");
+        Directory.CreateDirectory(folderTarget);
+        Directory.CreateDirectory(links);
+        try
+        {
+            var folderLink = Path.Combine(links, "Ordner.lnk");
+            var appLink = Path.Combine(links, "Konsole.lnk");
+            var commandPrompt = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+            CreateQaShortcut(folderLink, folderTarget);
+            CreateQaShortcut(appLink, commandPrompt);
+
+            var resolver = RequireMethod(RequireType("VeliShell.Desktop.Services.FolderShortcutService"),
+                "ResolveFolderTarget");
+            Require(string.Equals((string?)resolver.Invoke(null, [folderLink]), folderTarget,
+                    StringComparison.OrdinalIgnoreCase), "A directory shortcut was not identified as a folder.");
+            Require(resolver.Invoke(null, [appLink]) is null,
+                "A regular app shortcut was incorrectly identified as a folder.");
+
+            var previewType = RequireType("VeliShell.Desktop.Controls.DockFolderPreview");
+            var surfaceType = RequireType("VeliShell.Desktop.Controls.AppIconSurface");
+            var thumbnailsField = RequireField(previewType, "_thumbnails");
+            var freeformField = RequireField(surfaceType, "_freeform");
+            var virtualFolder = Settings.CreateVirtualFolder("Verknuepfungen") with
+            {
+                VirtualItems =
+                [
+                    new VirtualFolderEntry("folder", "Ordner", folderLink),
+                    new VirtualFolderEntry("app", "Konsole", appLink)
+                ]
+            };
+            typeof(VeliShell.Desktop.App).GetProperty("Preferences")!.SetValue(application,
+                new Settings { FirstRunCompleted = true, Pins = [virtualFolder] });
+
+            foreach (var dark in new[] { false, true })
+            {
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri($"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                var preview = (FrameworkElement)Activator.CreateInstance(previewType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [80d], culture: null)!;
+                RequireMethod(previewType, "UpdatePin").Invoke(preview, [virtualFolder]);
+                var thumbnails = (UniformGrid)thumbnailsField.GetValue(preview)!;
+                Require(thumbnails.Children.Count == 2 &&
+                        freeformField.GetValue(thumbnails.Children[0]) is true &&
+                        freeformField.GetValue(thumbnails.Children[1]) is false,
+                    "Virtual folder thumbnails did not distinguish folder and app shortcuts.");
+                RenderShellPanel(new Window { Width = 132, Height = 132, Content = preview },
+                    Path.Combine(outputDirectory, $"dock-folder-shortcut-{(dark ? "dark" : "light")}.png"), dark);
+
+                var popoverType = RequireType("VeliShell.Desktop.Views.FolderPopoverWindow");
+                var popover = Activator.CreateInstance(popoverType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [application, virtualFolder], culture: null)!;
+                var folderButton = (Button)RequireMethod(popoverType, "CreateVirtualEntryButton")
+                    .Invoke(popover, [virtualFolder.VirtualItems![0]])!;
+                var appButton = (Button)RequireMethod(popoverType, "CreateVirtualEntryButton")
+                    .Invoke(popover, [virtualFolder.VirtualItems[1]])!;
+                var folderIcon = ((StackPanel)folderButton.Content).Children[0];
+                var appIcon = ((StackPanel)appButton.Content).Children[0];
+                Require(freeformField.GetValue(folderIcon) is true && freeformField.GetValue(appIcon) is false,
+                    "The expanded app folder masked a folder shortcut or unmasked an app shortcut.");
+                ((Window)popover).Close();
+            }
+
+            var physicalPreview = Activator.CreateInstance(previewType,
+                BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                args: [80d], culture: null)!;
+            var browserType = RequireType("VeliShell.Desktop.Services.FolderBrowserService");
+            var rootArgs = new object?[] { links, "" };
+            var rootAvailable = RequireMethod(browserType, "TryCreateRoot").Invoke(null, rootArgs);
+            Require(rootAvailable is true, "QA shortcut folder is not a valid browser root.");
+            var enumerateTask = (Task)RequireMethod(browserType, "EnumerateAsync")
+                .Invoke(null, [rootArgs[1], rootArgs[1], CancellationToken.None])!;
+            enumerateTask.GetAwaiter().GetResult();
+            var browserResult = enumerateTask.GetType().GetProperty("Result")!.GetValue(enumerateTask)!;
+            var entries = (System.Collections.IEnumerable)browserResult.GetType().GetProperty("Entries")!
+                .GetValue(browserResult)!;
+            var physicalEntries = entries.Cast<object>().ToArray();
+            Require(physicalEntries.Length == 2, "QA shortcut folder should enumerate both links.");
+            var physicalPopoverType = RequireType("VeliShell.Desktop.Views.FolderPopoverWindow");
+            var physicalPopover = Activator.CreateInstance(physicalPopoverType,
+                BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                args: [links, FolderDisplayMode.AppLauncher], culture: null)!;
+            foreach (var entry in physicalEntries)
+            {
+                var button = (Button)RequireMethod(physicalPopoverType, "CreateGridEntryButton")
+                    .Invoke(physicalPopover, [entry, true])!;
+                var icon = ((StackPanel)button.Content).Children[0];
+                var entryName = (string)entry.GetType().GetProperty("Name")!.GetValue(entry)!;
+                Require(freeformField.GetValue(icon) is bool freeform &&
+                        freeform == entryName.Equals("Ordner.lnk", StringComparison.OrdinalIgnoreCase),
+                    "The physical app-folder grid did not distinguish folder and app shortcuts.");
+            }
+            ((Window)physicalPopover).Close();
+            var previousContext = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(
+                new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            try
+            {
+                RequireMethod(previewType, "UpdatePin").Invoke(physicalPreview,
+                    [new Pin("physical-qa", "Verknuepfungen", links)]);
+                var physicalThumbnails = (UniformGrid)thumbnailsField.GetValue(physicalPreview)!;
+                var timeout = Stopwatch.StartNew();
+                while (physicalThumbnails.Children.Count < 2 && timeout.Elapsed < TimeSpan.FromSeconds(5))
+                {
+                    var frame = new DispatcherFrame();
+                    var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(20), DispatcherPriority.Background,
+                        (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
+                    Dispatcher.PushFrame(frame);
+                    timer.Stop();
+                }
+                Require(physicalThumbnails.Children.Count == 2 &&
+                        freeformField.GetValue(physicalThumbnails.Children[0]) is false &&
+                        freeformField.GetValue(physicalThumbnails.Children[1]) is true,
+                    $"A physical dock folder did not preview its directory shortcut as a folder " +
+                    $"(count={physicalThumbnails.Children.Count}, " +
+                    $"freeform={string.Join(',', physicalThumbnails.Children.Cast<object>().Select(freeformField.GetValue))}).");
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+        }
+        finally
+        {
+            var folderLink = Path.Combine(links, "Ordner.lnk");
+            var appLink = Path.Combine(links, "Konsole.lnk");
+            if (File.Exists(folderLink)) File.Delete(folderLink);
+            if (File.Exists(appLink)) File.Delete(appLink);
+            if (Directory.Exists(links)) Directory.Delete(links);
+            if (Directory.Exists(folderTarget)) Directory.Delete(folderTarget);
+            if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot);
+        }
+    }
+
+    private static void CreateQaShortcut(string shortcutPath, string target)
+    {
+        var instance = Activator.CreateInstance(RequireType("VeliShell.Desktop.Native.ShellLinkComObject"))!;
+        try
+        {
+            RequireType("VeliShell.Desktop.Native.IShellLinkW")
+                .GetMethod("SetPath")!.Invoke(instance, [target]);
+            RequireType("VeliShell.Desktop.Native.IPersistFile")
+                .GetMethod("Save")!.Invoke(instance, [shortcutPath, true]);
+        }
+        finally
+        {
+            if (Marshal.IsComObject(instance)) Marshal.FinalReleaseComObject(instance);
+        }
+    }
+
+    private static void TestDockFolderAlignment(Pin folder)
+    {
+        var itemType = RequireType("VeliShell.Desktop.Models.DockItem");
+        var tileType = RequireType("VeliShell.Desktop.Controls.DockTile");
+        object NewItem(string key, string name, string target, Pin? pin)
+        {
+            var item = Activator.CreateInstance(itemType)!;
+            itemType.GetProperty("Key")!.SetValue(item, key);
+            itemType.GetProperty("Name")!.SetValue(item, name);
+            itemType.GetProperty("Target")!.SetValue(item, target);
+            itemType.GetProperty("Pin")!.SetValue(item, pin);
+            return item;
+        }
+        static Rect Bounds(FrameworkElement element, FrameworkElement ancestor) =>
+            element.TransformToAncestor(ancestor).TransformBounds(
+                new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+        foreach (var size in new[] { 32d, 58d, 96d })
+        {
+            var folderItem = NewItem("pin:" + folder.Id, folder.Name, folder.Target, folder);
+            var appItem = NewItem("pin:qa-app", "Editor", "notepad.exe", new Pin("qa-app", "Editor", "notepad.exe"));
+            var folderTile = (FrameworkElement)Activator.CreateInstance(tileType,
+                BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                args: [folderItem, size], culture: null)!;
+            var appTile = (FrameworkElement)Activator.CreateInstance(tileType,
+                BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                args: [appItem, size], culture: null)!;
+            foreach (var tile in new[] { folderTile, appTile })
+            {
+                tile.Measure(new Size(size + 22, size + 22));
+                tile.Arrange(new Rect(0, 0, size + 22, size + 22));
+                tile.UpdateLayout();
+            }
+            var preview = (FrameworkElement)RequireField(tileType, "_folderPreview").GetValue(folderTile)!;
+            var appIcon = (FrameworkElement)RequireField(tileType, "_iconSurface").GetValue(appTile)!;
+            var folderArtwork = (FrameworkElement)VisualTreeHelper.GetParent(preview);
+            var appArtwork = (FrameworkElement)VisualTreeHelper.GetParent(appIcon);
+            var folderBounds = Bounds(folderArtwork, folderTile);
+            var appBounds = Bounds(appArtwork, appTile);
+            Require(Math.Abs(folderBounds.Left - appBounds.Left) <= 0.5 &&
+                    Math.Abs(folderBounds.Top - appBounds.Top) <= 0.5,
+                $"The folder icon is not centered with app icons at {size} DIP.");
+
+            var label = (FrameworkElement)RequireField(tileType, "_folderName").GetValue(folderTile)!;
+            var indicator = (FrameworkElement)RequireField(tileType, "_indicator").GetValue(folderTile)!;
+            var labelBounds = Bounds(label, folderTile);
+            var indicatorBounds = Bounds(indicator, folderTile);
+            Require(Math.Abs(labelBounds.Top + labelBounds.Height / 2 -
+                             indicatorBounds.Top - indicatorBounds.Height / 2) <= 0.5 &&
+                    labelBounds.Top >= folderBounds.Bottom,
+                $"The folder caption is not in the activity-dot row at {size} DIP.");
+        }
     }
 
     private static void TestDockContextMenus(SafePreviewApp application)

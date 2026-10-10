@@ -68,16 +68,16 @@ internal sealed class DockTile : Button
         {
             _folderPreview = new DockFolderPreview(size);
             artwork.Children.Add(_folderPreview);
-            artwork.VerticalAlignment = VerticalAlignment.Top;
             _folderName = new TextBlock
             {
-                Width = size + 22, Height = 17,
+                Width = size + 22, Height = 14,
                 FontSize = Math.Clamp(size * 0.19, 9, 11),
                 FontWeight = FontWeights.Medium,
                 TextAlignment = TextAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, 0, -4),
                 IsHitTestVisible = false
             };
             _folderName.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");

@@ -9,7 +9,7 @@ using VeliShell.Desktop.Services;
 
 namespace VeliShell.Desktop.Controls;
 
-/// <summary>A glass folder shape containing up to nine actual app thumbnails.</summary>
+/// <summary>A glass folder shape containing up to nine app or folder-shortcut thumbnails.</summary>
 internal sealed class DockFolderPreview : Grid
 {
     private readonly UniformGrid _thumbnails;
@@ -126,7 +126,10 @@ internal sealed class DockFolderPreview : Grid
         _thumbnails.Children.Clear();
         foreach (var (target, icon) in entries)
         {
-            _thumbnails.Children.Add(new AppIconSurface(IconService.For("app", target, icon), _thumbnailSize)
+            var folderTarget = FolderShortcutService.ResolveFolderTarget(target);
+            _thumbnails.Children.Add(new AppIconSurface(
+                IconService.For("app", folderTarget ?? target, icon), _thumbnailSize,
+                freeform: folderTarget is not null)
             {
                 Margin = new Thickness(0.5)
             });

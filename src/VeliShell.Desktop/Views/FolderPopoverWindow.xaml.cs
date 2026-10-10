@@ -266,7 +266,9 @@ public partial class FolderPopoverWindow : Window, ITransientPanel
         var compact = _mode == FolderDisplayMode.CompactAppLauncher;
         var cellWidth = compact ? 87d : 112d;
         var cellHeight = compact ? 80d : 104d;
-        var image = new AppIconSurface(IconService.For("app", entry.Target, entry.Icon), compact ? 40 : 56);
+        var folderTarget = FolderShortcutService.ResolveFolderTarget(entry.Target);
+        var image = new AppIconSurface(IconService.For("app", folderTarget ?? entry.Target, entry.Icon),
+            compact ? 40 : 56, folderTarget is not null);
         var button = new Button
         {
             Content = new StackPanel
@@ -349,9 +351,10 @@ public partial class FolderPopoverWindow : Window, ITransientPanel
         var compact = paged && _mode == FolderDisplayMode.CompactAppLauncher;
         var cellWidth = compact ? 87d : paged ? 112d : 111d;
         var cellHeight = compact ? 80d : paged ? 104d : 102d;
-        var image = new AppIconSurface(IconService.For("app", entry.Path),
+        var folderTarget = FolderShortcutService.ResolveFolderTarget(entry.Path);
+        var image = new AppIconSurface(IconService.For("app", folderTarget ?? entry.Path),
             compact ? 40 : paged ? 56 : 44,
-            entry.IsDirectory || !IsLaunchableApp(entry.Path));
+            folderTarget is not null || !IsLaunchableApp(entry.Path));
         var label = new TextBlock
         {
             Text = entry.Name, FontSize = compact ? 10.5 : 11.5, FontWeight = FontWeights.Medium,

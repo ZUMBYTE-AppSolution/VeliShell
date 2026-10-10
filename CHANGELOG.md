@@ -6,6 +6,13 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-10
+
+### Verbessert
+
+- Dock-Ordner sitzen jetzt auf derselben vertikalen Mitte wie App-Symbole. Der Ordnername steht darunter auf Höhe der Aktivitätspunkte.
+- Verknüpfungen zu Ordnern erscheinen sowohl in der gläsernen Dock-Vorschau als auch im geöffneten Ordnerraster als Ordner-Symbole ohne App-Maske. Normale Programm-Verknüpfungen behalten ihre gewohnte App-Darstellung.
+
 ## [0.12.0] - 2026-10-10
 
 ### Neu
