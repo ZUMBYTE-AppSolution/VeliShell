@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-10
+
+### Behoben
+
+- Im Dock-Kontextmenü öffnet „Darstellung beim Öffnen“ wieder seine Unterauswahl. Die gewählte Ansicht wird für den jeweiligen echten oder virtuellen Ordner gespeichert und beim nächsten Öffnen verwendet.
+
 ## [0.12.1] - 2026-10-10
 
 ### Verbessert

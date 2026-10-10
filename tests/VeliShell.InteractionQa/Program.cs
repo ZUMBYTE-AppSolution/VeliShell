@@ -353,11 +353,12 @@ internal static class Program
             }
             TestDockFolderAlignment(folder);
             TestFolderShortcutThumbnails(application, outputDirectory);
-            TestDockContextMenus(application);
+            TestDockContextMenus(application, outputDirectory);
             Console.WriteLine($"PASS: Glass folder previews and paged 3×3/4×4 app grids rendered in both themes: {outputDirectory}");
             Console.WriteLine("PASS: Folder shortcuts keep their folder artwork in virtual and physical dock previews; app shortcuts stay masked.");
             Console.WriteLine("PASS: Dock folders share the app icon center, with their captions aligned to the activity-dot row at 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock-item menus contain only item actions; dock-wide actions stay on the plate, and menus are configured to dismiss on outside clicks.");
+            Console.WriteLine("PASS: Folder-view submenus have a visible popup and save selections for virtual and physical folders.");
             return 0;
         }
         catch (Exception exception)
@@ -576,11 +577,13 @@ internal static class Program
         }
     }
 
-    private static void TestDockContextMenus(SafePreviewApp application)
+    private static void TestDockContextMenus(SafePreviewApp application, string outputDirectory)
     {
         var appPin = new Pin("menu-app", "Editor", "notepad.exe");
         var folderPin = Settings.CreateVirtualFolder("Work");
-        application.Preferences.Pins = [appPin, folderPin];
+        var physicalPin = new Pin("menu-physical-folder", "System",
+            Environment.GetFolderPath(Environment.SpecialFolder.System));
+        application.Preferences.Pins = [appPin, folderPin, physicalPin];
         var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
         var itemType = RequireType("VeliShell.Desktop.Models.DockItem");
         var tileType = RequireType("VeliShell.Desktop.Controls.DockTile");
@@ -613,6 +616,7 @@ internal static class Program
 
         var appMenu = BuildMenu("pin:" + appPin.Id, appPin.Name, appPin.Target, appPin);
         var folderMenu = BuildMenu("pin:" + folderPin.Id, folderPin.Name, pin: folderPin);
+        var physicalMenu = BuildMenu("pin:" + physicalPin.Id, physicalPin.Name, physicalPin.Target, physicalPin);
         var trashMenu = BuildMenu("trash", "Recycle Bin", "shell:RecycleBinFolder");
         var startMenu = BuildMenu("start", "Start");
         var veliMenu = BuildMenu("velishell", "VeliShell");
@@ -623,7 +627,7 @@ internal static class Program
         itemType.GetProperty("Overflow")!.SetValue(overflow, overflowEntries);
         var overflowMenu = (ContextMenu)RequireMethod(dockType, "BuildOverflowMenu")
             .Invoke(dock, [overflow, new Border()])!;
-        foreach (var menu in new[] { appMenu, folderMenu, trashMenu, startMenu, veliMenu, overflowMenu })
+        foreach (var menu in new[] { appMenu, folderMenu, physicalMenu, trashMenu, startMenu, veliMenu, overflowMenu })
         {
             Require(!Headers(menu).Any(globalLabels.Contains),
                 "A Dock icon still shows global Dock commands or VeliShell settings.");
@@ -639,6 +643,82 @@ internal static class Program
                 Headers(folderMenu).Contains(Label("FolderPopover.DisplayMode")) &&
                 Headers(folderMenu).Contains(Label("Dock.MoveLeft")),
             "The virtual app folder lost its own actions.");
+        var virtualViewMenu = folderMenu.Items.OfType<MenuItem>().Single(entry =>
+            Equals(entry.Header, Label("FolderPopover.DisplayMode")));
+        var physicalViewMenu = physicalMenu.Items.OfType<MenuItem>().Single(entry =>
+            Equals(entry.Header, Label("FolderPopover.DisplayMode")));
+        Require(virtualViewMenu.Items.Count == 2 && physicalViewMenu.Items.Count == 4,
+            "Dock folder view menus do not offer the supported layouts.");
+        virtualViewMenu.ApplyTemplate();
+        physicalViewMenu.ApplyTemplate();
+        Require(virtualViewMenu.Template.FindName("PART_Popup", virtualViewMenu) is Popup &&
+                physicalViewMenu.Template.FindName("PART_Popup", physicalViewMenu) is Popup,
+            "The shared menu template cannot show folder-view submenus.");
+        var themes = new ThemeService();
+        typeof(VeliShell.Desktop.App).GetProperty("Themes")!.SetValue(application, themes);
+        try
+        {
+            foreach (var appearance in new[] { Appearance.Light, Appearance.Dark })
+            {
+                themes.Apply(appearance);
+                var themedMenu = BuildMenu("pin:" + folderPin.Id, folderPin.Name, pin: folderPin);
+                var themedViewMenu = themedMenu.Items.OfType<MenuItem>().Single(entry =>
+                    Equals(entry.Header, Label("FolderPopover.DisplayMode")));
+                themedMenu.IsOpen = true;
+                themedViewMenu.ApplyTemplate();
+                var virtualPopup = themedViewMenu.Template.FindName("PART_Popup", themedViewMenu) as Popup;
+                themedViewMenu.IsSubmenuOpen = true;
+                DrainDispatcher();
+                Require(virtualPopup is { IsOpen: true, Child: FrameworkElement },
+                    "The folder-view submenu does not open when selected.");
+                var content = (FrameworkElement)virtualPopup!.Child;
+                content.UpdateLayout();
+                var width = (int)Math.Ceiling(content.ActualWidth);
+                var height = (int)Math.Ceiling(content.ActualHeight);
+                Require(width > 0 && height > 0, "The folder-view submenu has no visible content.");
+                var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(content);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using (var stream = File.Create(Path.Combine(outputDirectory,
+                           $"folder-view-menu-{(appearance == Appearance.Dark ? "dark" : "light")}.png")))
+                    encoder.Save(stream);
+                themedMenu.IsOpen = false;
+            }
+
+            var compactChoice = virtualViewMenu.Items.OfType<MenuItem>().Single(entry =>
+                Equals(entry.Header, Label("FolderPopover.Mode.CompactAppLauncher")));
+            compactChoice.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, compactChoice));
+            Require(application.Preferences.Pins.Single(pin => pin.Id == folderPin.Id).FolderMode ==
+                    FolderDisplayMode.CompactAppLauncher,
+                "Choosing 4×4 in the Dock menu did not save the virtual-folder layout.");
+
+            var gridChoice = physicalViewMenu.Items.OfType<MenuItem>().Single(entry =>
+                Equals(entry.Header, Label("FolderPopover.Mode.Grid")));
+            gridChoice.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, gridChoice));
+            Require(application.Preferences.Pins.Single(pin => pin.Id == physicalPin.Id).FolderMode ==
+                    FolderDisplayMode.Grid,
+                "Choosing grid in the Dock menu did not save the physical-folder layout.");
+            var rebuiltTiles = ((System.Collections.IEnumerable)RequireField(dockType, "_tiles")
+                .GetValue(dock)!).Cast<object>().ToArray();
+            foreach (var (pinId, mode) in new[]
+                     {
+                         (folderPin.Id, FolderDisplayMode.CompactAppLauncher),
+                         (physicalPin.Id, FolderDisplayMode.Grid)
+                     })
+            {
+                var tile = rebuiltTiles.Single(candidate =>
+                    (string)itemType.GetProperty("Key")!.GetValue(
+                        RequireProperty(tileType, "Item").GetValue(candidate)!)! == "pin:" + pinId);
+                var reopenedMenu = (ContextMenu)buildItemMenu.Invoke(dock, [tile])!;
+                var reopenedViewMenu = reopenedMenu.Items.OfType<MenuItem>().Single(entry =>
+                    Equals(entry.Header, Label("FolderPopover.DisplayMode")));
+                Require(reopenedViewMenu.Items.OfType<MenuItem>().Single(entry =>
+                            Equals(entry.Header, Label("FolderPopover.Mode." + mode))).IsChecked,
+                    "The Dock menu did not reflect the stored folder layout when reopened.");
+            }
+        }
+        finally { themes.Dispose(); }
         Require(Headers(trashMenu).Contains(Label("Dock.RecycleOpen")) &&
                 Headers(startMenu).Contains(Label("Dock.WindowsStart")) &&
                 Headers(veliMenu).Contains(Label("Dock.RemoveVeliShell")) &&

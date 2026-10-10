@@ -310,10 +310,43 @@
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="Padding" Value="10,7" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
-   <Border x:Name="Body" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
-    <ContentPresenter ContentSource="Header" RecognizesAccessKey="False" />
-   </Border>
+   <Grid>
+    <Border x:Name="Body" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
+     <Grid>
+      <Grid.ColumnDefinitions>
+       <ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="14" />
+      </Grid.ColumnDefinitions>
+      <TextBlock x:Name="Checkmark" Text="✓" Visibility="Collapsed" VerticalAlignment="Center"
+                 Foreground="{TemplateBinding Foreground}" />
+      <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False"
+                        VerticalAlignment="Center" />
+      <TextBlock x:Name="SubmenuArrow" Grid.Column="2" Text="›" FontSize="17"
+                 Visibility="Collapsed" VerticalAlignment="Center" TextAlignment="Right"
+                 Foreground="{TemplateBinding Foreground}" />
+     </Grid>
+    </Border>
+    <Popup x:Name="PART_Popup" Placement="Right"
+           PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+           HorizontalOffset="-3" VerticalOffset="-5"
+           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+           AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+     <Border MinWidth="210" Padding="5" CornerRadius="10"
+             Background="{DynamicResource CardSurfaceGradient}"
+             BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
+      <Border.Effect><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="22" ShadowDepth="5" Opacity="0.38" /></Border.Effect>
+      <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto">
+       <ItemsPresenter />
+      </ScrollViewer>
+     </Border>
+    </Popup>
+   </Grid>
    <ControlTemplate.Triggers>
+    <Trigger Property="HasItems" Value="True">
+     <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible" />
+    </Trigger>
+    <Trigger Property="IsChecked" Value="True">
+     <Setter TargetName="Checkmark" Property="Visibility" Value="Visible" />
+    </Trigger>
     <Trigger Property="IsHighlighted" Value="True">
      <Setter TargetName="Body" Property="Background" Value="{DynamicResource AccentGradient}" />
      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
