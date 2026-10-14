@@ -27,6 +27,7 @@ public partial class DockWindow : Window
     private const int MaximumDropPathLength = 32767;
     private readonly App _app;
     private readonly string? _displayDevice;
+    private readonly ShellBackdropHost _backdrop;
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(900) };
     private readonly List<DockTile> _tiles = [];
@@ -64,9 +65,11 @@ public partial class DockWindow : Window
         _app = app;
         _displayDevice = displayDevice;
         InitializeComponent();
+        _backdrop = new ShellBackdropHost(this, DockPlate, 11);
         _app.PreferencesChanged += ApplyPreferences;
+        if (_app.Themes is not null) _app.Themes.Changed += ApplyBackdrop;
         SourceInitialized += OnSourceInitialized;
-        Loaded += async (_, _) => { ApplyPreferences(); _pollTimer.Start(); await RefreshWindows(); };
+        Loaded += async (_, _) => { ApplyPreferences(); ApplyBackdrop(); _pollTimer.Start(); await RefreshWindows(); };
         _pollTimer.Tick += async (_, _) => await RefreshWindows();
         _hideTimer.Tick += (_, _) =>
         {
@@ -81,6 +84,8 @@ public partial class DockWindow : Window
             if (_menu is { IsOpen: true } menu) menu.IsOpen = false;
             _pollTimer.Stop(); _hideTimer.Stop();
             _app.PreferencesChanged -= ApplyPreferences;
+            if (_app.Themes is not null) _app.Themes.Changed -= ApplyBackdrop;
+            _backdrop.Dispose();
             _source?.RemoveHook(WindowHook);
             ClearDropSlot();
             CloseDragGhost();
@@ -163,6 +168,13 @@ public partial class DockWindow : Window
         Rebuild();
         SetHidden(false);
         if (_app.Preferences.AutoHide && _folderPopover?.IsVisible != true) _hideTimer.Start();
+    }
+
+    private void ApplyBackdrop()
+    {
+        if (_handle == 0 || _closed) return;
+        DockPlate.SetResourceReference(Border.BackgroundProperty,
+            _backdrop.Apply() ? "DockAcrylicSurfaceGradient" : "DockSurfaceGradient");
     }
 
     private async Task RefreshWindows()
@@ -353,6 +365,7 @@ public partial class DockWindow : Window
         NativeMethods.SetWindowPos(_handle, 0,
             area.Left + (area.Right - area.Left - width) / 2,
             area.Bottom - height, width, height, 0x0004 | 0x0010); // NOZORDER | NOACTIVATE
+        _backdrop.Sync();
     }
 
     private void ActivateItem(DockItem item, FrameworkElement anchor)
@@ -1227,6 +1240,8 @@ public partial class DockWindow : Window
         }
         else Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(target, TimeSpan.FromMilliseconds(170))
             { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        if (_app.Preferences.ReducedMotion) _backdrop.Sync();
+        else _backdrop.FollowMotion(170);
     }
     private void Dock_RightClick(object sender, MouseButtonEventArgs e)
     {

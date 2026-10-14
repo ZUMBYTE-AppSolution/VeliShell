@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-10-14
+
+### Verbessert
+
+- Dock und Menüleiste verwenden auf unterstützten Windows-11-Systemen eine deutlich stärkere native Hintergrundweichzeichnung. Der Effekt bleibt auf die sichtbare Dock- beziehungsweise Menüleistenfläche begrenzt; bei fehlender Unterstützung oder hohem Kontrast bleibt der bisherige lesbare Verlauf erhalten.
+
 ## [0.13.1] - 2026-10-14
 
 ### Hinzugefügt

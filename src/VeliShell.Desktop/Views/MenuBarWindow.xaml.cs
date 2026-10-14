@@ -26,6 +26,7 @@ public partial class MenuBarWindow : Window
     private const uint AppBarCallbackMessage = NativeMethods.WmApp + 0x56;
     private readonly App _app;
     private readonly string? _displayDevice;
+    private readonly ShellBackdropHost _backdrop;
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _windowTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(750) };
@@ -57,7 +58,9 @@ public partial class MenuBarWindow : Window
         _app = app;
         _displayDevice = displayDevice;
         InitializeComponent();
+        _backdrop = new ShellBackdropHost(this, MenuBody, 0);
         _app.PreferencesChanged += ApplyPreferences;
+        if (_app.Themes is not null) _app.Themes.Changed += ApplyBackdrop;
         _app.UpdateStateChanged += HandleUpdateStateChanged;
         NotificationCenterService.Current.Changed += UpdateNotificationIndicator;
         SourceInitialized += (_, _) =>
@@ -73,6 +76,7 @@ public partial class MenuBarWindow : Window
         Loaded += async (_, _) =>
         {
             ApplyPreferences();
+            ApplyBackdrop();
             UpdateClockAndIndicators();
             await RefreshWindowsAsync();
             _clockTimer.Start();
@@ -93,6 +97,8 @@ public partial class MenuBarWindow : Window
             _hideTimer.Stop();
             ClosePanels();
             _app.PreferencesChanged -= ApplyPreferences;
+            if (_app.Themes is not null) _app.Themes.Changed -= ApplyBackdrop;
+            _backdrop.Dispose();
             _app.UpdateStateChanged -= HandleUpdateStateChanged;
             NotificationCenterService.Current.Changed -= UpdateNotificationIndicator;
             if (_handle != 0) _app.Taskbars.ReleaseMenuBar(_handle);
@@ -116,6 +122,13 @@ public partial class MenuBarWindow : Window
         if (_app.Preferences.MenuBarAutoHide && _openPanel is null) _hideTimer.Start();
     }
 
+    private void ApplyBackdrop()
+    {
+        if (_handle == 0 || _closed) return;
+        MenuBody.SetResourceReference(Border.BackgroundProperty,
+            _backdrop.Apply() ? "MenuBarAcrylicSurface" : "MenuBarSurface");
+    }
+
     private void PositionBar()
     {
         if (_handle == 0 || _closed) return;
@@ -130,6 +143,7 @@ public partial class MenuBarWindow : Window
         var area = monitor.Monitor;
         NativeMethods.SetWindowPos(_handle, 0, area.Left, area.Top,
             area.Right - area.Left, height, 0x0004 | 0x0010);
+        _backdrop.Sync();
         var success = _workAreaReserved
             ? _app.Taskbars.UpdateMenuBar(_handle, height, out _)
             : _app.Taskbars.RegisterMenuBarOnDisplay(_handle, AppBarCallbackMessage, height,
@@ -757,6 +771,8 @@ public partial class MenuBarWindow : Window
                 new DoubleAnimation(target, TimeSpan.FromMilliseconds(150))
                 { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
         }
+        if (_app.Preferences.ReducedMotion) _backdrop.Sync();
+        else _backdrop.FollowMotion(150);
     }
 
     [StructLayout(LayoutKind.Sequential)]

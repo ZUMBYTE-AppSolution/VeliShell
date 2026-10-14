@@ -32,7 +32,8 @@ public sealed class ThemeService : IDisposable
                      {
                          "WindowSurface", "SidebarSurface", "CardSurface", "DockSurface", "MenuSurface",
                          "WindowBackdropGradient", "SidebarGradient", "CardSurfaceGradient",
-                         "DockSurfaceGradient", "DockMilkOverlay", "DockHover"
+                         "DockSurfaceGradient", "DockAcrylicSurfaceGradient", "DockMilkOverlay", "DockHover",
+                         "MenuBarAcrylicSurface"
                      })
                 dictionary[name] = SystemColors.WindowBrush;
             foreach (var name in new[]
@@ -57,6 +58,7 @@ public sealed class ThemeService : IDisposable
             dictionary["ControlThumbStroke"] = SystemColors.WindowTextBrush;
             dictionary["AccentGlowColor"] = Colors.Transparent;
             dictionary["SubtleShadowColor"] = Colors.Transparent;
+            dictionary["ShellAcrylicTint"] = Colors.Transparent;
         }
         Application.Current.Resources.MergedDictionaries[0] = dictionary;
         Changed?.Invoke();

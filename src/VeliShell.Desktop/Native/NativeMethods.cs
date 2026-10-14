@@ -69,6 +69,19 @@ internal static class NativeMethods
         public int Size;
         public nint Data;
     }
+    [StructLayout(LayoutKind.Sequential)] internal struct AccentPolicy
+    {
+        public int State;
+        public int Flags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+    [StructLayout(LayoutKind.Sequential)] internal struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public nint Data;
+        public int Size;
+    }
     [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput
     {
         public ushort VirtualKey;
@@ -291,6 +304,13 @@ internal static class NativeMethods
         out DataBlob dataOut);
     [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+    [DllImport("user32.dll", EntryPoint = "SetWindowCompositionAttribute", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowCompositionAttribute(nint hwnd, ref WindowCompositionAttributeData data);
+    [DllImport("gdi32.dll", SetLastError = true)] internal static extern nint CreateRoundRectRgn(
+        int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
+    [DllImport("user32.dll", SetLastError = true)] internal static extern int SetWindowRgn(
+        nint hwnd, nint region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
     [DllImport("dwmapi.dll")] internal static extern int DwmRegisterThumbnail(nint destination, nint source, out nint thumbnail);
     [DllImport("dwmapi.dll")] internal static extern int DwmUnregisterThumbnail(nint thumbnail);
     [DllImport("dwmapi.dll")] internal static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out NativeSize size);

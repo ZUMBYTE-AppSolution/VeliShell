@@ -47,7 +47,7 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
 - **Papierkorb im Dock:** Leer- und Vollzustand haben eigene Symbole; der Papierkorb lässt sich direkt über das Dock leeren.
-- **Milchiger Hintergrund:** Helles und dunkles Design, eine bewusst leichtere Glas-Transparenz für Dock und Menüleiste sowie eine zurückhaltende Vergrößerung beim Darüberfahren.
+- **Milchiger Hintergrund:** Dock und Menüleiste nutzen auf Windows 11 ab Build 22621 eine native, deutlich stärkere Hintergrundweichzeichnung, die auf ihre sichtbaren Flächen begrenzt ist. Auf älteren Systemen und bei hohem Kontrast bleibt ein gut lesbarer transparenter Verlauf. Helles und dunkles Design sowie eine zurückhaltende Vergrößerung beim Darüberfahren bleiben erhalten.
 - **Mehrere Bildschirme:** Dock und Menüleiste lassen sich unabhängig voneinander auf allen Displays anzeigen. Laufende Apps können global oder passend zum jeweiligen Bildschirm erscheinen.
 - **V-Menü für Systemaktionen:** Das monochrome V in der Menüleiste öffnet „Ausführen …“, eine bestätigungspflichtige Liste zum sofortigen Beenden laufender Apps und die Windows-Aktionen Sperren, Abmelden, Neustart und Herunterfahren.
 - **VeliShell-Farbwelt:** Einstellungen, Info und Update-Dialog passen sich mit gut lesbaren Blau-Cyan-Violett-Verläufen, sanftem Glow und eigener Hell-/Dunkelabstimmung an das Markensignet an.

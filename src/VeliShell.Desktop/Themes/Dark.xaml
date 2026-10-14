@@ -68,6 +68,12 @@
     <GradientStop Color="#9635353D" Offset="0.48" />
     <GradientStop Color="#8722232A" Offset="1" />
   </LinearGradientBrush>
+  <Color x:Key="ShellAcrylicTint">#68191B24</Color>
+  <LinearGradientBrush x:Key="DockAcrylicSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#704A4A54" Offset="0" />
+    <GradientStop Color="#6035353D" Offset="0.48" />
+    <GradientStop Color="#5222232A" Offset="1" />
+  </LinearGradientBrush>
   <RadialGradientBrush x:Key="DockMilkOverlay" Center="0.42,0.04" GradientOrigin="0.42,-0.2" RadiusX="0.8" RadiusY="0.98">
     <GradientStop Color="#24FFFFFF" Offset="0" />
     <GradientStop Color="#08FFFFFF" Offset="0.6" />
@@ -83,6 +89,11 @@
     <GradientStop Color="#AA3B3B40" Offset="0" />
     <GradientStop Color="#9633343A" Offset="0.48" />
     <GradientStop Color="#85292930" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="MenuBarAcrylicSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#703B3B40" Offset="0" />
+    <GradientStop Color="#6033343A" Offset="0.48" />
+    <GradientStop Color="#52292930" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="SwitchOff" Color="#606068" />
   <!-- Transient shell surfaces use a neutral, luminous material so the
