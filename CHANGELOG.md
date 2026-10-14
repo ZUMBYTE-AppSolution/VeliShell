@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-14
+
+### Hinzugefügt
+
+- Dock und Menüleiste können optional auf allen angeschlossenen Bildschirmen erscheinen. Laufende Apps lassen sich dabei global oder je Bildschirm anzeigen.
+- Das monochrome V-Menü in der Menüleiste bietet „Ausführen …“, eine Liste laufender Apps zum bestätigten „Sofort beenden …“ sowie Sperren, Abmelden, Neustart und Herunterfahren. Sitzungsaktionen fragen vorher nach; fremde Prozesse werden nicht automatisch beendet.
+
+### Verbessert
+
+- Dock und Menüleiste lassen mehr Hintergrundfarbe durch und wirken in Hell- und Dunkelmodus weicher. Eine echte dynamische Hintergrundweichzeichnung ist damit noch nicht verbunden.
+- Die obere Arbeitsfläche wird bei mehreren Menüleisten pro Bildschirm reserviert, damit maximierte Fenster nicht unter die Leiste rutschen.
+
 ## [0.12.3] - 2026-10-10
 
 ### Hinzugefügt

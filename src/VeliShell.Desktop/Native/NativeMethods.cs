@@ -22,6 +22,8 @@ internal static class NativeMethods
     internal const uint ShcnfIdList = 0x0000, ShcnfFlushNoWait = 0x2000;
     internal const uint ModAlt = 0x0001, ModControl = 0x0002, ModShift = 0x0004, ModWin = 0x0008, ModNoRepeat = 0x4000;
     internal const uint KeyEventKeyUp = 0x0002;
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool LockWorkStation();
     internal delegate bool EnumWindowsCallback(nint hwnd, nint parameter);
     internal delegate bool EnumChildWindowsCallback(nint hwnd, nint parameter);
     internal delegate bool MonitorEnumCallback(nint monitor, nint deviceContext, ref Rect bounds, nint parameter);
@@ -323,6 +325,23 @@ internal static class NativeMethods
             result.Work = result.Monitor = new Rect { Right = 1920, Bottom = 1080 };
         return result;
     }
+
+    internal static bool TryMonitorForDevice(string? device, out MonitorInfo info)
+    {
+        if (string.IsNullOrWhiteSpace(device))
+        {
+            info = PrimaryMonitor();
+            return true;
+        }
+        info = TryAllMonitors(out var monitors)
+            ? monitors.FirstOrDefault(item => string.Equals(item.Info.Device, device,
+                StringComparison.OrdinalIgnoreCase)).Info
+            : default;
+        return info.Size > 0;
+    }
+
+    internal static MonitorInfo MonitorForDevice(string? device) =>
+        TryMonitorForDevice(device, out var info) ? info : PrimaryMonitor();
 
     internal static bool TryAllMonitors(out IReadOnlyList<(nint Handle, MonitorInfo Info)> result)
     {

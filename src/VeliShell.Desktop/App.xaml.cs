@@ -1,9 +1,11 @@
 using System.IO;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using VeliShell.Core;
 using VeliShell.Desktop.Services;
 using VeliShell.Desktop.Views;
+using VeliShell.Desktop.Native;
 
 namespace VeliShell.Desktop;
 
@@ -20,12 +22,16 @@ public partial class App : Application
     private PreferencesWindow? _preferencesWindow;
     private SearchWindow? _searchWindow;
     private MenuBarWindow? _menuBarWindow;
+    private readonly Dictionary<string, DockWindow> _secondaryDocks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MenuBarWindow> _secondaryMenuBars = new(StringComparer.OrdinalIgnoreCase);
     private bool _saveErrorShown;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _updateCheckGate = new(1, 1);
     private readonly SemaphoreSlim _shellLayoutGate = new(1, 1);
     private int _emergencyRestoreRequests;
     private readonly GitHubReleaseUpdateService _updates = new();
+    private Task<List<NativeWindow>>? _windowSnapshotTask;
+    private long _windowSnapshotStartedAt;
     internal SearchCatalogIndex ProgramIndex { get; } = new();
     private UpdateWindow? _updateWindow;
     private SemanticVersion? _lastOfferedVersion;
@@ -47,6 +53,18 @@ public partial class App : Application
     internal SemanticVersion? AvailableUpdateVersion { get; private set; }
     public event Action? PreferencesChanged;
     public event Action? UpdateStateChanged;
+
+    internal Task<List<NativeWindow>> ReadWindowsAsync()
+    {
+        var now = Environment.TickCount64;
+        if (_windowSnapshotTask is null ||
+            (_windowSnapshotTask.IsCompleted && now - _windowSnapshotStartedAt >= 1000))
+        {
+            _windowSnapshotStartedAt = now;
+            _windowSnapshotTask = Task.Run(WindowCatalog.Read);
+        }
+        return _windowSnapshotTask;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -138,6 +156,15 @@ public partial class App : Application
             SaveNow();
             Log("The saved menu-bar preference was disabled because Windows did not accept its work-area reservation.");
         }
+        SyncDisplayWindows();
+        if (Preferences.MenuBarEnabled && Preferences.MenuBarOnAllDisplays &&
+            !AllMenuBarReservationsConfirmed())
+        {
+            Preferences.MenuBarOnAllDisplays = false;
+            SyncDisplayWindows();
+            SaveNow();
+            Log("The saved all-display menu-bar preference was disabled because Windows did not reserve every display.");
+        }
         if (PackageIdentityService.HasIdentity)
         {
             SetUpdateState(UpdateUiState.StoreManaged);
@@ -206,6 +233,7 @@ public partial class App : Application
         Themes.Apply(Preferences.Appearance);
         PreferencesChanged?.Invoke();
         SyncMenuBar();
+        SyncDisplayWindows();
         _saveTimer?.Stop();
         _saveTimer?.Start();
     }
@@ -259,7 +287,94 @@ public partial class App : Application
             _menuBarWindow = null;
             window.Close();
         }
+        if (!Preferences.MenuBarEnabled)
+        {
+            foreach (var window in _secondaryMenuBars.Values.ToArray()) window.Close();
+            _secondaryMenuBars.Clear();
+        }
         return true;
+    }
+
+    internal void SyncDisplayWindows()
+    {
+        if (_exiting || Dock is null || !NativeMethods.TryAllMonitors(out var monitors)) return;
+        var secondaryDevices = monitors.Where(monitor => (monitor.Info.Flags & 1) == 0)
+            .Select(monitor => monitor.Info.Device)
+            .Where(device => !string.IsNullOrWhiteSpace(device))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (device, window) in _secondaryDocks.ToArray())
+            if (!Preferences.DockOnAllDisplays || !secondaryDevices.Contains(device))
+            {
+                _secondaryDocks.Remove(device);
+                window.Close();
+            }
+        if (Preferences.DockOnAllDisplays)
+            foreach (var device in secondaryDevices)
+                if (!_secondaryDocks.ContainsKey(device))
+                {
+                    DockWindow? window = null;
+                    try
+                    {
+                        window = new DockWindow(this, device);
+                        window.Closed += (_, _) =>
+                        {
+                            if (_secondaryDocks.TryGetValue(device, out var current) &&
+                                ReferenceEquals(current, window)) _secondaryDocks.Remove(device);
+                        };
+                        window.Show();
+                        _secondaryDocks[device] = window;
+                    }
+                    catch (Exception exception)
+                    {
+                        Log($"Dock could not open on {device}", exception);
+                        window?.Close();
+                    }
+                }
+
+        foreach (var (device, window) in _secondaryMenuBars.ToArray())
+            if (!Preferences.MenuBarEnabled || !Preferences.MenuBarOnAllDisplays ||
+                !secondaryDevices.Contains(device) || !window.WorkAreaReserved)
+            {
+                _secondaryMenuBars.Remove(device);
+                window.Close();
+            }
+        if (Preferences.MenuBarEnabled && Preferences.MenuBarOnAllDisplays)
+            foreach (var device in secondaryDevices)
+                if (!_secondaryMenuBars.ContainsKey(device))
+                {
+                    MenuBarWindow? window = null;
+                    try
+                    {
+                        window = new MenuBarWindow(this, device);
+                        window.Closed += (_, _) =>
+                        {
+                            if (_secondaryMenuBars.TryGetValue(device, out var current) &&
+                                ReferenceEquals(current, window)) _secondaryMenuBars.Remove(device);
+                        };
+                        window.Show();
+                        if (window.WorkAreaReserved) _secondaryMenuBars[device] = window;
+                        else
+                        {
+                            window.Close();
+                            Log($"Menu bar could not reserve space on {device}.");
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        Log($"Menu bar could not open on {device}", exception);
+                        window?.Close();
+                    }
+                }
+    }
+
+    private bool AllMenuBarReservationsConfirmed()
+    {
+        if (_menuBarWindow?.WorkAreaReserved != true) return false;
+        if (!NativeMethods.TryAllMonitors(out var monitors)) return false;
+        return monitors.Where(monitor => (monitor.Info.Flags & 1) == 0)
+            .All(monitor => _secondaryMenuBars.TryGetValue(monitor.Info.Device, out var bar) &&
+                            bar.WorkAreaReserved);
     }
 
     internal string GetUpdateStatusText() => UpdateState switch
@@ -538,6 +653,53 @@ public partial class App : Application
         }
     }
 
+    internal async Task<bool> SetMenuBarOnAllDisplaysAsync(bool enabled)
+    {
+        if (!Preferences.MenuBarEnabled)
+        {
+            UpdatePreferences(settings => settings.MenuBarOnAllDisplays = enabled);
+            return true;
+        }
+        var gateEntered = false;
+        try
+        {
+            await _shellLayoutGate.WaitAsync(_shutdown.Token);
+            gateEntered = true;
+            if (Preferences.MenuBarOnAllDisplays == enabled) return true;
+            var rehideTaskbar = Preferences.HideTaskbar || Taskbars.IsHidden;
+            if (Taskbars.IsHidden && !await Taskbars.RestoreAsync())
+            {
+                MessageBox.Show(Taskbars.LastStatus, L("Common.ErrorTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            UpdatePreferences(settings => settings.MenuBarOnAllDisplays = enabled);
+            var reserved = !enabled ? _menuBarWindow?.WorkAreaReserved == true
+                : AllMenuBarReservationsConfirmed();
+            if (!reserved)
+            {
+                UpdatePreferences(settings => settings.MenuBarOnAllDisplays = false);
+                MessageBox.Show(L("MenuBar.ReservationFailed"), L("Common.ErrorTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            var shouldRehide = ShouldRehideTaskbarAfterMenuBarChange(rehideTaskbar,
+                Volatile.Read(ref _emergencyRestoreRequests) > 0);
+            if (rehideTaskbar && !shouldRehide && Preferences.HideTaskbar)
+                UpdatePreferences(settings => settings.HideTaskbar = false);
+            var taskbarConfirmed = !shouldRehide || await SetTaskbarHiddenCoreAsync(true,
+                showError: true, recoverExistingHiddenTaskbars: false);
+            if (ShouldUndoMenuBarRehide(shouldRehide,
+                Volatile.Read(ref _emergencyRestoreRequests) > 0))
+            {
+                taskbarConfirmed = await Taskbars.RestoreAsync(recoverCurrentShellTaskbars: true);
+                UpdatePreferences(settings => settings.HideTaskbar = !taskbarConfirmed && Taskbars.IsHidden);
+            }
+            return reserved && taskbarConfirmed;
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { return false; }
+        finally { if (gateEntered) _shellLayoutGate.Release(); }
+    }
+
     private static bool ShouldRehideTaskbarAfterMenuBarChange(
         bool taskbarWasRequestedHidden,
         bool emergencyRestorePending) =>
@@ -600,6 +762,55 @@ public partial class App : Application
     }
 
     private bool _exiting;
+    internal bool IsExiting => _exiting;
+    internal async Task PerformSessionActionAsync(string arguments)
+    {
+        // Only the fixed commands presented by the menu are accepted. Never
+        // forward user-provided command text to the session manager.
+        if (arguments is not ("/l" or "/r /t 0" or "/s /t 0") || _exiting) return;
+        _exiting = true;
+        bool taskbarRestored;
+        bool desktopRestored;
+        try
+        {
+            taskbarRestored = await Taskbars.RestoreAsync();
+            desktopRestored = DesktopIcons.Restore();
+        }
+        catch (Exception exception)
+        {
+            Log("Shell restoration before Windows session action failed", exception);
+            taskbarRestored = false;
+            desktopRestored = false;
+        }
+        if (!taskbarRestored || !desktopRestored)
+        {
+            _exiting = false;
+            MessageBox.Show(LF("App.ShutdownBlocked", Taskbars.IsHidden
+                    ? Taskbars.LastStatus : DesktopIcons.LastStatus),
+                L("App.ShutdownBlockedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        try
+        {
+            var shutdownExecutable = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "shutdown.exe");
+            using var process = Process.Start(new ProcessStartInfo(shutdownExecutable, arguments)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            if (process is null) throw new InvalidOperationException("Windows did not accept the session action.");
+            Shutdown();
+        }
+        catch (Exception exception)
+        {
+            _exiting = false;
+            Log("Windows session action failed", exception);
+            MessageBox.Show(L("MenuBar.SystemActionFailed"), L("Common.ErrorTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     public async void RequestExit(int exitCode = 0, bool forceAfterRestoreFailure = false)
     {
         if (_exiting) return;

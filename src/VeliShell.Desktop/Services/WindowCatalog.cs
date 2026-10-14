@@ -164,7 +164,21 @@ internal static class WindowCatalog
         return NativeMethods.SetForegroundWindow(hwnd);
     }
 
-    internal static bool ForegroundIsFullscreenOnPrimary()
+    internal static List<NativeWindow> OnDisplay(IReadOnlyList<NativeWindow> windows, string? device)
+    {
+        var monitor = NativeMethods.MonitorForDevice(device).Monitor;
+        var monitorHandle = NativeMethods.MonitorFromPoint(new NativeMethods.Point
+        {
+            X = monitor.Left + 1,
+            Y = monitor.Top + 1
+        }, 2);
+        return windows.Where(window => NativeMethods.MonitorFromWindow(window.Handle, 2) == monitorHandle)
+            .ToList();
+    }
+
+    internal static bool ForegroundIsFullscreenOnPrimary() => ForegroundIsFullscreenOnDisplay(null);
+
+    internal static bool ForegroundIsFullscreenOnDisplay(string? device)
     {
         var hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == 0) return false;
@@ -173,7 +187,7 @@ internal static class WindowCatalog
         var cls = new StringBuilder(128);
         NativeMethods.GetClassName(hwnd, cls, cls.Capacity);
         if (cls.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
-        var monitor = NativeMethods.PrimaryMonitor().Monitor;
+        var monitor = NativeMethods.MonitorForDevice(device).Monitor;
         if (!NativeMethods.GetWindowRect(hwnd, out var rect)) return false;
         return Math.Abs(rect.Left - monitor.Left) <= 2 && Math.Abs(rect.Top - monitor.Top) <= 2
             && Math.Abs(rect.Right - monitor.Right) <= 2 && Math.Abs(rect.Bottom - monitor.Bottom) <= 2;

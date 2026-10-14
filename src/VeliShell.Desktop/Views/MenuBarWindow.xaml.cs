@@ -1,4 +1,6 @@
 using System.Net.NetworkInformation;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -23,12 +25,14 @@ public partial class MenuBarWindow : Window
 {
     private const uint AppBarCallbackMessage = NativeMethods.WmApp + 0x56;
     private readonly App _app;
+    private readonly string? _displayDevice;
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _windowTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(750) };
     private List<NativeWindow> _windows = [];
     private readonly BackgroundAppTracker _backgroundApps = BackgroundAppTracker.ForCurrentSession();
     private string _backgroundAppsSignature = "";
+    private IReadOnlyList<BackgroundApp> _lastBackgroundApps = [];
     private bool _refreshInProgress;
     private SteamClient? _steam;
     private string? _steamIconPath;
@@ -46,9 +50,12 @@ public partial class MenuBarWindow : Window
 
     private static string L(string key) => LocalizationService.Current.Get(key);
 
-    internal MenuBarWindow(App app)
+    internal MenuBarWindow(App app) : this(app, null) { }
+
+    internal MenuBarWindow(App app, string? displayDevice)
     {
         _app = app;
+        _displayDevice = displayDevice;
         InitializeComponent();
         _app.PreferencesChanged += ApplyPreferences;
         _app.UpdateStateChanged += HandleUpdateStateChanged;
@@ -114,9 +121,19 @@ public partial class MenuBarWindow : Window
         if (_handle == 0 || _closed) return;
         var dpi = VisualTreeHelper.GetDpi(this);
         var height = (int)Math.Ceiling(Height * dpi.DpiScaleY);
+        if (!NativeMethods.TryMonitorForDevice(_displayDevice, out var monitor))
+        {
+            _workAreaReserved = false;
+            Visibility = Visibility.Hidden;
+            return;
+        }
+        var area = monitor.Monitor;
+        NativeMethods.SetWindowPos(_handle, 0, area.Left, area.Top,
+            area.Right - area.Left, height, 0x0004 | 0x0010);
         var success = _workAreaReserved
             ? _app.Taskbars.UpdateMenuBar(_handle, height, out _)
-            : _app.Taskbars.RegisterMenuBar(_handle, AppBarCallbackMessage, height, out _);
+            : _app.Taskbars.RegisterMenuBarOnDisplay(_handle, AppBarCallbackMessage, height,
+                _displayDevice, out _);
         if (success)
         {
             _workAreaReserved = true;
@@ -147,13 +164,12 @@ public partial class MenuBarWindow : Window
         _refreshInProgress = true;
         try
         {
-            var (windows, steam, background) = await Task.Run(() =>
-            {
-                var windows = WindowCatalog.Read();
-                return (windows, SteamClientService.ReadRunning(), _backgroundApps.Update(windows));
-            });
+            var windows = await _app.ReadWindowsAsync();
+            var (steam, background) = await Task.Run(() =>
+                (SteamClientService.ReadRunning(), _backgroundApps.Update(windows)));
             if (_closed) return;
             _windows = windows;
+            _lastBackgroundApps = background;
             RenderBackgroundApps(background);
             _steam = steam;
             if (steam is null)
@@ -169,11 +185,11 @@ public partial class MenuBarWindow : Window
             SteamButton.Visibility = steam is not null && SteamIcon.Source is not null
                 ? Visibility.Visible : Visibility.Collapsed;
             var foreground = NativeMethods.GetForegroundWindow();
-            _activeWindow = windows.FirstOrDefault(window => window.Handle == foreground);
+            _activeWindow = VisibleWindows().FirstOrDefault(window => window.Handle == foreground);
             ActiveAppLabel.Text = _activeWindow is null
                 ? L("Product.Name")
                 : FriendlyProcessName(_activeWindow);
-            var fullscreen = WindowCatalog.ForegroundIsFullscreenOnPrimary();
+            var fullscreen = WindowCatalog.ForegroundIsFullscreenOnDisplay(_displayDevice);
             if (fullscreen) ClosePanels();
             Visibility = fullscreen || !_workAreaReserved ? Visibility.Hidden : Visibility.Visible;
         }
@@ -360,7 +376,7 @@ public partial class MenuBarWindow : Window
 
     private void HandleUpdateStateChanged()
     {
-        if (_app.UpdateState == UpdateUiState.Available && _app.AvailableUpdateVersion is { } version)
+        if (_displayDevice is null && _app.UpdateState == UpdateUiState.Available && _app.AvailableUpdateVersion is { } version)
         {
             var versionText = version.ToString();
             if (!string.Equals(_lastNotifiedUpdateVersion, versionText, StringComparison.Ordinal))
@@ -433,11 +449,116 @@ public partial class MenuBarWindow : Window
         Add(menu, L("MenuBar.Settings"), _app.ShowPreferences);
         Add(menu, L("MenuBar.CheckUpdates"), () => _ = _app.CheckForUpdatesAsync(true, this));
         menu.Items.Add(new Separator());
+        var forceQuit = new MenuItem { Header = L("MenuBar.ForceQuitApps") };
+        var running = _backgroundApps.VisibleApps(_windows)
+            .Concat(_lastBackgroundApps)
+            .Concat(SteamForceQuitEntry() is { } steamEntry ? [steamEntry] : [])
+            .DistinctBy(app => app.ProcessId)
+            .OrderBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Take(40).ToArray();
+        foreach (var app in running)
+            Add(forceQuit, app.Name, () => _ = ForceQuitBackgroundAppAsync(app));
+        if (running.Length == 0)
+            Add(forceQuit, L("MenuBar.NoForceQuitApps"), () => { }, enabled: false);
+        menu.Items.Add(forceQuit);
+        Add(menu, L("MenuBar.Run"), ShowRunDialog);
+        menu.Items.Add(new Separator());
+        Add(menu, L("MenuBar.Lock"), () =>
+        {
+            if (!NativeMethods.LockWorkStation())
+                MessageBox.Show(this, L("MenuBar.SystemActionFailed"), L("Common.ErrorTitle"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+        });
+        Add(menu, L("MenuBar.SignOut"), () => _ = ConfirmSystemActionAsync("MenuBar.SignOut", "/l"));
+        Add(menu, L("MenuBar.Restart"), () => _ = ConfirmSystemActionAsync("MenuBar.Restart", "/r /t 0"));
+        Add(menu, L("MenuBar.Shutdown"), () => _ = ConfirmSystemActionAsync("MenuBar.Shutdown", "/s /t 0"));
+        menu.Items.Add(new Separator());
         Add(menu, L("MenuBar.RestoreTaskbar"),
             () => _ = _app.SetTaskbarHiddenAsync(false), _app.Preferences.HideTaskbar || _app.Taskbars.IsHidden);
         menu.Items.Add(new Separator());
         Add(menu, L("MenuBar.Quit"), () => _app.RequestExit());
         menu.IsOpen = true;
+    }
+
+    private BackgroundApp? SteamForceQuitEntry()
+    {
+        var steam = SteamClientService.ReadRunning();
+        if (steam is null) return null;
+        try
+        {
+            using var process = Process.GetProcessById(steam.ProcessId);
+            using var current = Process.GetCurrentProcess();
+            if (process.HasExited || process.SessionId != current.SessionId) return null;
+            return new BackgroundApp(steam.ProcessId, process.StartTime.ToUniversalTime().Ticks,
+                L("MenuBar.Steam"), steam.Executable, steam.Executable, steam.Executable);
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or
+                                          ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private void ShowRunDialog()
+    {
+        var dialog = new RunWindow { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        var (target, arguments) = ParseRunCommand(
+            Environment.ExpandEnvironmentVariables(dialog.Command));
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(target)
+            {
+                Arguments = arguments,
+                UseShellExecute = true
+            });
+            if (process is null) throw new InvalidOperationException("Windows did not open the target.");
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or
+                                          FileNotFoundException or ArgumentException or NotSupportedException or
+                                          System.Security.SecurityException)
+        {
+            App.Log("Run target could not be opened", exception);
+            MessageBox.Show(this, L("MenuBar.RunFailed"), L("Common.ErrorTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private static (string Target, string Arguments) ParseRunCommand(string command)
+    {
+        command = command.Trim();
+        if (File.Exists(command) || Directory.Exists(command) ||
+            (Uri.TryCreate(command, UriKind.Absolute, out var uri) && !uri.IsFile))
+            return (command, "");
+        if (command.StartsWith('"'))
+        {
+            var closing = command.IndexOf('"', 1);
+            if (closing > 1)
+                return (command[1..closing], command[(closing + 1)..].Trim());
+        }
+        // An unquoted existing path can contain spaces. Prefer the longest
+        // existing prefix before falling back to a bare executable name.
+        for (var index = command.Length - 1; index > 0; index--)
+            if (char.IsWhiteSpace(command[index]))
+            {
+                var prefix = command[..index].Trim();
+                if (File.Exists(prefix) || Directory.Exists(prefix))
+                    return (prefix, command[(index + 1)..].Trim());
+            }
+        var split = command.IndexOfAny([' ', '\t']);
+        return split > 0
+            ? (command[..split], command[(split + 1)..].Trim())
+            : (command, "");
+    }
+
+    private async Task ConfirmSystemActionAsync(string labelKey, string arguments)
+    {
+        var label = L(labelKey).TrimEnd(' ', '…');
+        var question = string.Format(LocalizationService.Current.ActiveCulture,
+            L("MenuBar.SystemActionConfirm"), label);
+        if (MessageBox.Show(this, question, L("Product.Name"), MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        await _app.PerformSessionActionAsync(arguments);
     }
 
     private void Search_Click(object sender, RoutedEventArgs e) => _app.ShowSearch();
@@ -494,7 +615,7 @@ public partial class MenuBarWindow : Window
         }
         else
         {
-            var matching = _windows.Where(window => string.Equals(
+            var matching = VisibleWindows().Where(window => string.Equals(
                 window.Executable.Length > 0 ? window.Executable : window.ProcessName,
                 _activeWindow.Executable.Length > 0 ? _activeWindow.Executable : _activeWindow.ProcessName,
                 StringComparison.OrdinalIgnoreCase)).Take(15).ToList();
@@ -509,7 +630,7 @@ public partial class MenuBarWindow : Window
         var anchor = (FrameworkElement)sender;
         var menu = NewMenu(anchor);
         var foreground = NativeMethods.GetForegroundWindow();
-        foreach (var window in _windows.Take(24))
+        foreach (var window in VisibleWindows().Take(24))
         {
             var prefix = window.Handle == foreground ? "•  " : "   ";
             Add(menu, prefix + TrimTitle(window.Title), () => WindowCatalog.Activate(window.Handle));
@@ -519,6 +640,11 @@ public partial class MenuBarWindow : Window
     }
 
     private static string TrimTitle(string title) => title.Length > 72 ? title[..69] + "…" : title;
+
+    private IReadOnlyList<NativeWindow> VisibleWindows() =>
+        _app.Preferences.MenuBarOnAllDisplays && _app.Preferences.RunningAppsPerDisplay
+            ? WindowCatalog.OnDisplay(_windows, _displayDevice)
+            : _windows;
 
     private void Network_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:network-status");
     private void Sound_Click(object sender, RoutedEventArgs e) => ShowAudioDevices();

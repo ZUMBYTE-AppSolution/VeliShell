@@ -48,6 +48,8 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
 - **Papierkorb im Dock:** Leer- und Vollzustand haben eigene Symbole; der Papierkorb lässt sich direkt über das Dock leeren.
 - **Milchiger Hintergrund:** Helles und dunkles Design, eine bewusst leichtere Glas-Transparenz für Dock und Menüleiste sowie eine zurückhaltende Vergrößerung beim Darüberfahren.
+- **Mehrere Bildschirme:** Dock und Menüleiste lassen sich unabhängig voneinander auf allen Displays anzeigen. Laufende Apps können global oder passend zum jeweiligen Bildschirm erscheinen.
+- **V-Menü für Systemaktionen:** Das monochrome V in der Menüleiste öffnet „Ausführen …“, eine bestätigungspflichtige Liste zum sofortigen Beenden laufender Apps und die Windows-Aktionen Sperren, Abmelden, Neustart und Herunterfahren.
 - **VeliShell-Farbwelt:** Einstellungen, Info und Update-Dialog passen sich mit gut lesbaren Blau-Cyan-Violett-Verläufen, sanftem Glow und eigener Hell-/Dunkelabstimmung an das Markensignet an.
 - **Skalierbar:** Die Icongröße lässt sich von 32 bis 96 DIP einstellen und bleibt auch bei Windows-Skalierung sauber zentriert.
 - **Windows-Taskleiste optional ausblenden:** Nur nach ausdrücklicher Aktivierung. Der freigegebene Arbeitsbereich reicht wirklich bis zum Bildschirmrand – ohne reservierten schwarzen Streifen – und wird beim Einblenden, Beenden oder nach einem unterbrochenen Lauf wiederhergestellt.

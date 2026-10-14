@@ -72,6 +72,10 @@ public partial class PreferencesWindow : VeliShellWindow
         MagnificationSwitch.IsChecked = s.Magnification;
         MagnificationSwitch.IsEnabled = !s.ReducedMotion;
         RunningSwitch.IsChecked = s.ShowRunningApps;
+        RunningPerDisplaySwitch.IsChecked = s.RunningAppsPerDisplay;
+        RunningPerDisplaySwitch.IsEnabled = s.DockOnAllDisplays ||
+                                           (s.MenuBarEnabled && s.MenuBarOnAllDisplays);
+        DockAllDisplaysSwitch.IsChecked = s.DockOnAllDisplays;
         AutoHideSwitch.IsChecked = s.AutoHide;
         TopmostSwitch.IsChecked = s.AlwaysOnTop;
         HideTaskbarSwitch.IsChecked = s.HideTaskbar;
@@ -81,6 +85,8 @@ public partial class PreferencesWindow : VeliShellWindow
         MenuBarAutoHideSwitch.IsEnabled = s.MenuBarEnabled;
         MenuBarTopmostSwitch.IsChecked = s.MenuBarAlwaysOnTop;
         MenuBarTopmostSwitch.IsEnabled = s.MenuBarEnabled;
+        MenuBarAllDisplaysSwitch.IsChecked = s.MenuBarOnAllDisplays;
+        MenuBarAllDisplaysSwitch.IsEnabled = s.MenuBarEnabled;
         WindowsNotificationsSwitch.IsChecked = s.WindowsNotificationsEnabled;
         _ = SyncStartupUiAsync();
         TaskbarStatus.Text = _app.Taskbars.LastStatus;
@@ -214,6 +220,8 @@ public partial class PreferencesWindow : VeliShellWindow
     private void ReducedMotion_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.ReducedMotion = ReducedMotionSwitch.IsChecked == true);
     private void Magnification_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.Magnification = MagnificationSwitch.IsChecked == true);
     private void Running_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.ShowRunningApps = RunningSwitch.IsChecked == true);
+    private void RunningPerDisplay_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.RunningAppsPerDisplay = RunningPerDisplaySwitch.IsChecked == true);
+    private void DockAllDisplays_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.DockOnAllDisplays = DockAllDisplaysSwitch.IsChecked == true);
     private void AutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AutoHide = AutoHideSwitch.IsChecked == true);
     private void Topmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.AlwaysOnTop = TopmostSwitch.IsChecked == true);
     private void OpenSearch_Click(object sender, RoutedEventArgs e) => _app.ShowSearch();
@@ -232,6 +240,13 @@ public partial class PreferencesWindow : VeliShellWindow
     }
     private void MenuBarAutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAutoHide = MenuBarAutoHideSwitch.IsChecked == true);
     private void MenuBarTopmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAlwaysOnTop = MenuBarTopmostSwitch.IsChecked == true);
+    private async void MenuBarAllDisplays_Click(object sender, RoutedEventArgs e)
+    {
+        MenuBarAllDisplaysSwitch.IsEnabled = false;
+        try { await _app.SetMenuBarOnAllDisplaysAsync(MenuBarAllDisplaysSwitch.IsChecked == true); }
+        finally { MenuBarAllDisplaysSwitch.IsChecked = _app.Preferences.MenuBarOnAllDisplays;
+                  MenuBarAllDisplaysSwitch.IsEnabled = _app.Preferences.MenuBarEnabled; }
+    }
     private async void WindowsNotifications_Click(object sender, RoutedEventArgs e)
     {
         if (_loading) return;

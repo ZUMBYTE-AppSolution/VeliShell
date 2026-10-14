@@ -12,6 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using VeliShell.Core;
 using VeliShell.Desktop.Services;
+using VeliShell.Desktop.Native;
 
 internal static class Program
 {
@@ -30,11 +31,17 @@ internal static class Program
             return RenderStartLauncher();
         if (args.Contains("--render-folder", StringComparer.OrdinalIgnoreCase))
             return RenderFolderViews();
+        if (args.Contains("--live-multidisplay-dock", StringComparer.OrdinalIgnoreCase))
+            return RunLiveMultiDisplayDockProbe();
+        if (args.Contains("--live-real-multidisplay-menu", StringComparer.OrdinalIgnoreCase))
+            return RunLiveRealMultiDisplayMenuProbe();
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         if (args.Contains("--live-workarea-reflow", StringComparer.OrdinalIgnoreCase))
             return RunLiveWorkAreaReflowProbe(application);
         if (args.Contains("--live-menubar-reservation", StringComparer.OrdinalIgnoreCase))
             return RunLiveMenuBarReservationProbe(application);
+        if (args.Contains("--live-multidisplay-menubar", StringComparer.OrdinalIgnoreCase))
+            return RunLiveMultiDisplayMenuBarProbe(application);
         application.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
@@ -113,6 +120,7 @@ internal static class Program
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
             TestMenuBarCenters();
+            TestRunCommandParser();
             TestTransientAudioPanelClose(owner, anchor);
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
@@ -137,6 +145,7 @@ internal static class Program
             Console.WriteLine("PASS: Folder pins use a bounded root-confined popover; desktop icons and the VeliShell dock item remain explicit, reversible preferences.");
             Console.WriteLine("PASS: Taskbar rollback preserves pre-hidden windows; work-area recovery is edge-scoped, topology-safe, idempotent, and repairs journaled Explorer drift without removing the menu-bar reservation.");
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
+            Console.WriteLine("PASS: VeliShell Run keeps executable paths and arguments separate without invoking a command shell.");
             Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
             Console.WriteLine("PASS: The audio-device panel closes without a reentrant deactivation crash.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
@@ -899,6 +908,175 @@ internal static class Program
                 Console.WriteLine($"LIVE RESTORE VERIFIED: work={Format(verified.Work)}");
             }
             window.Close();
+            application.Shutdown();
+        }
+    }
+
+    private static int RunLiveRealMultiDisplayMenuProbe()
+    {
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
+        });
+        typeof(VeliShell.Desktop.App).GetProperty("Preferences")!.SetValue(application,
+            new Settings { FirstRunCompleted = true, MenuBarEnabled = true, MenuBarOnAllDisplays = true });
+        var bars = new List<Window>();
+        try
+        {
+            Require(NativeMethods.TryAllMonitors(out var monitors), "Could not enumerate displays.");
+            foreach (var monitor in monitors.Where(item => (item.Info.Flags & 1) == 0))
+            {
+                var bar = new VeliShell.Desktop.Views.MenuBarWindow(application, monitor.Info.Device);
+                bars.Add(bar);
+                bar.Show();
+                SettleUi();
+                Require(bar.WorkAreaReserved, $"Actual menu bar did not reserve {monitor.Info.Device}.");
+                var handle = new WindowInteropHelper(bar).Handle;
+                Require(NativeMethods.GetWindowRect(handle, out var rect),
+                    "Could not inspect an actual secondary menu bar.");
+                var width = monitor.Info.Monitor.Right - monitor.Info.Monitor.Left;
+                Require(rect.Left == monitor.Info.Monitor.Left && rect.Right - rect.Left == width,
+                    $"Actual menu bar does not span {monitor.Info.Device}.");
+                var scale = VisualTreeHelper.GetDpi(bar).DpiScaleX;
+                Require(Math.Abs(bar.ActualWidth * scale - width) <= 3,
+                    $"The WPF content does not fill {monitor.Info.Device}'s reserved width.");
+                Console.WriteLine($"REAL MENU {monitor.Info.Device}: HWND width={rect.Right - rect.Left}, WPF width={bar.ActualWidth:0.0}.");
+            }
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            foreach (var bar in bars) if (bar.IsVisible) bar.Close();
+            application.Shutdown();
+        }
+    }
+
+    private static int RunLiveMultiDisplayDockProbe()
+    {
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
+        });
+        typeof(VeliShell.Desktop.App).GetProperty("Preferences")!.SetValue(application,
+            new Settings { FirstRunCompleted = true, DockOnAllDisplays = true,
+                ShowRunningApps = false, ShowVeliShellDockItem = false, Pins = [] });
+        using var themes = new ThemeService();
+        typeof(VeliShell.Desktop.App).GetProperty("Themes")!.SetValue(application, themes);
+        var docks = new List<Window>();
+        try
+        {
+            Require(NativeMethods.TryAllMonitors(out var monitors), "Could not enumerate displays.");
+            foreach (var monitor in monitors.Where(item => (item.Info.Flags & 1) == 0))
+            {
+                var dock = new VeliShell.Desktop.Views.DockWindow(application, monitor.Info.Device);
+                docks.Add(dock);
+                dock.Show();
+                SettleUi();
+                var handle = new WindowInteropHelper(dock).Handle;
+                Require(NativeMethods.GetWindowRect(handle, out var bounds),
+                    "Could not inspect a secondary dock.");
+                var area = monitor.Info.Work;
+                Require(Math.Abs((bounds.Left + bounds.Right) / 2 - (area.Left + area.Right) / 2) <= 3 &&
+                        Math.Abs(bounds.Bottom - area.Bottom) <= 3,
+                    $"Dock is not centered at the bottom of {monitor.Info.Device}.");
+            }
+            Console.WriteLine($"LIVE MULTI-DISPLAY DOCK VERIFIED: {docks.Count} secondary dock(s) positioned.");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            foreach (var dock in docks) if (dock.IsVisible) dock.Close();
+            application.Shutdown();
+        }
+    }
+
+    private static int RunLiveMultiDisplayMenuBarProbe(Application application)
+    {
+        if (!NativeMethods.TryAllMonitors(out var monitors) || monitors.Count < 2)
+        {
+            Console.WriteLine("SKIP: No second display is connected.");
+            application.Shutdown();
+            return 0;
+        }
+        var windows = new List<(Window Window, nint Handle, string Device, NativeMethods.Rect Original)>();
+        using var service = new TaskbarVisibilityService();
+        try
+        {
+            foreach (var (monitorHandle, info) in monitors.Where(item => (item.Info.Flags & 1) == 0))
+            {
+                var window = new Window
+                {
+                    Title = "VeliShell secondary appbar probe",
+                    Width = 200, Height = 30, WindowStyle = WindowStyle.None,
+                    ShowInTaskbar = false, ShowActivated = false, Opacity = 0.05
+                };
+                window.Show();
+                var handle = new WindowInteropHelper(window).Handle;
+                NativeMethods.SetWindowPos(handle, 0, info.Monitor.Left, info.Monitor.Top,
+                    info.Monitor.Right - info.Monitor.Left, 30, 0x0004 | 0x0010);
+                var before = new NativeMethods.MonitorInfo { Size = Marshal.SizeOf<NativeMethods.MonitorInfo>() };
+                Require(NativeMethods.GetMonitorInfo(monitorHandle, ref before), "Could not inspect the secondary display.");
+                windows.Add((window, handle, info.Device, before.Work));
+                Require(service.RegisterMenuBarOnDisplay(handle, 0x8057, 30, info.Device, out var reserved),
+                    $"Windows rejected the secondary appbar on {info.Device}.");
+                SettleUi();
+                var after = new NativeMethods.MonitorInfo { Size = Marshal.SizeOf<NativeMethods.MonitorInfo>() };
+                Require(NativeMethods.GetMonitorInfo(monitorHandle, ref after) && after.Work.Top >= reserved.Bottom,
+                    $"The secondary appbar did not reserve space on {info.Device}.");
+            }
+            Console.WriteLine($"LIVE MULTI-DISPLAY MENU BAR VERIFIED: {windows.Count} secondary display(s) reserved independently.");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+        finally
+        {
+            foreach (var item in windows)
+            {
+                service.ReleaseMenuBar(item.Handle);
+                item.Window.Close();
+            }
+            SettleUi();
+            foreach (var item in windows)
+            {
+                var restored = false;
+                var last = default(NativeMethods.Rect);
+                for (var attempt = 0; attempt < 20 && !restored; attempt++)
+                {
+                    var monitor = NativeMethods.MonitorForDevice(item.Device);
+                    last = monitor.Work;
+                    // Windows may independently show or hide a secondary
+                    // taskbar while this probe runs. Only our top edge is ours
+                    // to verify; a bottom-edge change is unrelated.
+                    restored = monitor.Work.Top == item.Original.Top;
+                    if (!restored) { DrainDispatcher(); Thread.Sleep(100); }
+                }
+                Require(restored,
+                    $"The secondary appbar did not release {item.Device}'s top edge. Before={item.Original.Top}; after={last.Top}.");
+            }
             application.Shutdown();
         }
     }
@@ -1919,6 +2097,37 @@ internal static class Program
         Require(notificationField.GetValue(service) is false,
             "A partial work-area SET rollback retained an uncommitted reflow/broadcast operation.");
         ((IDisposable)service).Dispose();
+    }
+
+    private static void TestRunCommandParser()
+    {
+        var parse = RequireMethod(RequireType("VeliShell.Desktop.Views.MenuBarWindow"),
+            "ParseRunCommand");
+        (string Target, string Arguments) Parse(string value) =>
+            ((string Target, string Arguments))parse.Invoke(null, [value])!;
+        Require(Parse("notepad.exe /A") is { Target: "notepad.exe", Arguments: "/A" },
+            "Run did not separate an executable name from arguments.");
+        Require(Parse("\"C:\\Program Files\\App.exe\" --help") is
+            { Target: "C:\\Program Files\\App.exe", Arguments: "--help" },
+            "Run did not parse a quoted executable path.");
+        Require(Parse("ms-settings:display") is { Target: "ms-settings:display", Arguments: "" },
+            "Run split a Windows settings URI.");
+        var folder = Path.Combine(Path.GetTempPath(), "VeliShell Run QA " + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var executable = Path.Combine(folder, "Test App.exe");
+            File.WriteAllBytes(executable, []);
+            var result = Parse(executable + " --help");
+            Require(result.Target == executable && result.Arguments == "--help",
+                "Run split an unquoted existing executable path at its first space.");
+        }
+        finally
+        {
+            var executable = Path.Combine(folder, "Test App.exe");
+            if (File.Exists(executable)) File.Delete(executable);
+            Directory.Delete(folder);
+        }
     }
 
     private static void TestMenuBarCenters()

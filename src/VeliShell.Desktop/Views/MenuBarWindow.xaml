@@ -11,6 +11,7 @@
   <Border x:Name="MenuBody" Height="30" VerticalAlignment="Top"
           Background="{DynamicResource MenuBarSurface}"
           BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="0,0,0,1">
+   <Border.Effect><DropShadowEffect BlurRadius="22" ShadowDepth="2" Opacity="0.12" /></Border.Effect>
    <Border.RenderTransform><TranslateTransform x:Name="Slide" /></Border.RenderTransform>
    <Grid Margin="7,0">
     <Grid.ColumnDefinitions>
@@ -23,8 +24,12 @@
     <StackPanel Orientation="Horizontal">
      <Button x:Name="AppMenuButton" Style="{StaticResource MenuBarButton}" Click="AppMenu_Click" Padding="8,4"
              ToolTip="{services:Loc MenuBar.AppMenu}" AutomationProperties.Name="{services:Loc MenuBar.AppMenu}">
-      <Image Width="18" Height="18" Source="/VeliShell;component/Assets/VeliShellMark.png"
-             RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
+      <Border Width="18" Height="18" Background="{DynamicResource TextPrimary}"
+              RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True">
+       <Border.OpacityMask>
+        <ImageBrush ImageSource="/VeliShell;component/Assets/VeliShellMark.png" Stretch="Uniform" />
+       </Border.OpacityMask>
+      </Border>
      </Button>
     </StackPanel>
     <Button x:Name="ActiveAppButton" Grid.Column="1" Style="{StaticResource MenuBarButton}"

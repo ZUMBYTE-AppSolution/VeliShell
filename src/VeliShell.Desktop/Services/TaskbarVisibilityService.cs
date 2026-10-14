@@ -36,8 +36,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
     private readonly Dictionary<string, TaskbarRecoverySnapshot> _taskbarRecovery = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TaskbarRecoveryMiss> _taskbarRecoveryMisses = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<WindowReflowTarget> _pendingWindowReflow = [];
-    private nint _menuBarHandle;
-    private bool _menuBarRegistered;
+    private readonly Dictionary<nint, string?> _menuBars = [];
     private bool _workAreaNotificationPending;
     private bool _hideRequested;
     private bool _ownershipConfirmed;
@@ -99,6 +98,14 @@ internal sealed class TaskbarVisibilityService : IDisposable
         uint callbackMessage,
         int requestedHeight,
         out NativeMethods.Rect reservedBounds)
+        => RegisterMenuBarOnDisplay(handle, callbackMessage, requestedHeight, null, out reservedBounds);
+
+    internal bool RegisterMenuBarOnDisplay(
+        nint handle,
+        uint callbackMessage,
+        int requestedHeight,
+        string? displayDevice,
+        out NativeMethods.Rect reservedBounds)
     {
         reservedBounds = default;
         lock (_gate)
@@ -107,19 +114,15 @@ internal sealed class TaskbarVisibilityService : IDisposable
                 callbackMessage < NativeMethods.WmApp || requestedHeight <= 0)
                 return false;
 
-            if (_menuBarRegistered && _menuBarHandle != handle)
-                ReleaseMenuBarCore(_menuBarHandle);
-
-            if (!_menuBarRegistered)
+            if (!_menuBars.ContainsKey(handle))
             {
                 var registration = CreateAppBarData(handle, callbackMessage);
                 if (NativeMethods.SHAppBarMessage(NativeMethods.AbmNew, ref registration) == 0)
                     return false;
-                _menuBarHandle = handle;
-                _menuBarRegistered = true;
+                _menuBars[handle] = displayDevice;
             }
 
-            if (UpdateMenuBarCore(handle, requestedHeight, out reservedBounds)) return true;
+            if (UpdateMenuBarCore(handle, requestedHeight, _menuBars[handle], out reservedBounds)) return true;
             ReleaseMenuBarCore(handle);
             return false;
         }
@@ -133,15 +136,15 @@ internal sealed class TaskbarVisibilityService : IDisposable
     {
         reservedBounds = default;
         lock (_gate)
-            return !_disposed && _menuBarRegistered && _menuBarHandle == handle &&
-                   UpdateMenuBarCore(handle, requestedHeight, out reservedBounds);
+            return !_disposed && _menuBars.TryGetValue(handle, out var displayDevice) &&
+                   UpdateMenuBarCore(handle, requestedHeight, displayDevice, out reservedBounds);
     }
 
     internal void ReleaseMenuBar(nint handle)
     {
         lock (_gate)
         {
-            if (!_menuBarRegistered || _menuBarHandle != handle) return;
+            if (!_menuBars.ContainsKey(handle)) return;
             ReleaseMenuBarCore(handle);
         }
     }
@@ -1401,15 +1404,16 @@ internal sealed class TaskbarVisibilityService : IDisposable
     private bool UpdateMenuBarCore(
         nint handle,
         int requestedHeight,
+        string? displayDevice,
         out NativeMethods.Rect reservedBounds)
     {
         reservedBounds = default;
         if (requestedHeight <= 0 || handle == 0 || !NativeMethods.IsWindow(handle)) return false;
 
-        // VeliShell currently presents one global menu bar on the primary
-        // display. Supplying that monitor's actual virtual-desktop rectangle is
-        // important for negative coordinates and mixed multi-monitor layouts.
-        var monitor = NativeMethods.PrimaryMonitor().Monitor;
+        // Each appbar reserves space only on its selected monitor, including
+        // monitors with negative virtual-desktop coordinates.
+        if (!NativeMethods.TryMonitorForDevice(displayDevice, out var monitorInfo)) return false;
+        var monitor = monitorInfo.Monitor;
         var query = CreateAppBarData(handle);
         query.Bounds = monitor;
         if (NativeMethods.SHAppBarMessage(NativeMethods.AbmQueryPos, ref query) == 0 ||
@@ -1464,13 +1468,11 @@ internal sealed class TaskbarVisibilityService : IDisposable
 
     private void ReleaseMenuBarCore(nint handle)
     {
-        if (_menuBarRegistered && _menuBarHandle == handle)
+        if (_menuBars.Remove(handle))
         {
             var removal = CreateAppBarData(handle);
             _ = NativeMethods.SHAppBarMessage(NativeMethods.AbmRemove, ref removal);
         }
-        _menuBarRegistered = false;
-        _menuBarHandle = 0;
     }
 
     private bool EnsureUsable()
@@ -1487,7 +1489,7 @@ internal sealed class TaskbarVisibilityService : IDisposable
             if (_disposed) return;
             _hideRequested = false;
             RestoreCore();
-            if (_menuBarRegistered) ReleaseMenuBarCore(_menuBarHandle);
+            foreach (var handle in _menuBars.Keys.ToArray()) ReleaseMenuBarCore(handle);
             _disposed = true;
         }
         FlushWorkAreaEffects();

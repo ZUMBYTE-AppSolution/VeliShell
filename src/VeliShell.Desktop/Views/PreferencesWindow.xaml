@@ -144,6 +144,7 @@
        <CheckBox x:Name="ReducedMotionSwitch" Content="{services:Loc Dock.ReducedMotion}" Style="{StaticResource ToggleSwitch}" Click="ReducedMotion_Click" />
        <CheckBox x:Name="AutoHideSwitch" Content="{services:Loc Dock.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="AutoHide_Click" />
        <CheckBox x:Name="TopmostSwitch" Content="{services:Loc Dock.Topmost}" Style="{StaticResource ToggleSwitch}" Click="Topmost_Click" />
+       <CheckBox x:Name="DockAllDisplaysSwitch" Content="{services:Loc Dock.AllDisplays}" Style="{StaticResource ToggleSwitch}" Click="DockAllDisplays_Click" />
        <TextBlock Text="{services:Loc Dock.BehaviorHint}" Style="{StaticResource SecondaryText}" Margin="0,10,0,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Search.Title}" Style="{StaticResource SectionLabel}" />
@@ -165,6 +166,8 @@
       <TextBlock Text="{services:Loc Apps.RunningSection}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <CheckBox x:Name="RunningSwitch" Content="{services:Loc Apps.ShowRunning}" Style="{StaticResource ToggleSwitch}" Click="Running_Click" />
+       <CheckBox x:Name="RunningPerDisplaySwitch" Content="{services:Loc Apps.RunningPerDisplay}" Style="{StaticResource ToggleSwitch}" Click="RunningPerDisplay_Click" />
+       <TextBlock Text="{services:Loc Apps.RunningPerDisplayDescription}" Style="{StaticResource SecondaryText}" Margin="0,5,44,0" />
        <TextBlock Text="{services:Loc Apps.RunningDescription}" Style="{StaticResource SecondaryText}" Margin="0,5,44,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Apps.IconStyleSection}" Style="{StaticResource SectionLabel}" />
@@ -271,6 +274,7 @@
        <CheckBox x:Name="MenuBarSwitch" Content="{services:Loc MenuBar.Enable}" Style="{StaticResource ToggleSwitch}" Click="MenuBar_Click" />
        <CheckBox x:Name="MenuBarAutoHideSwitch" Content="{services:Loc MenuBar.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAutoHide_Click" />
        <CheckBox x:Name="MenuBarTopmostSwitch" Content="{services:Loc MenuBar.Topmost}" Style="{StaticResource ToggleSwitch}" Click="MenuBarTopmost_Click" />
+       <CheckBox x:Name="MenuBarAllDisplaysSwitch" Content="{services:Loc MenuBar.AllDisplays}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAllDisplays_Click" />
        <TextBlock Text="{services:Loc MenuBar.Description}" Style="{StaticResource SecondaryText}" Margin="0,7,44,0" />
       </StackPanel></Border>
       <TextBlock Text="{services:Loc Notifications.SettingsSection}" Style="{StaticResource SectionLabel}" />

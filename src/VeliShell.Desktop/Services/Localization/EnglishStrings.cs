@@ -4,6 +4,21 @@ internal static class EnglishStrings
 {
     internal static readonly IReadOnlyDictionary<string, string> Values = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        ["Dock.AllDisplays"] = "Show the dock on all displays",
+        ["Apps.RunningPerDisplay"] = "Show running apps only from this display",
+        ["Apps.RunningPerDisplayDescription"] = "Off: open windows appear everywhere. On: the dock and menu bar show windows from their own display; windowless background apps remain global.",
+        ["MenuBar.AllDisplays"] = "Show the menu bar on all displays",
+        ["MenuBar.ForceQuitApps"] = "Force quit …",
+        ["MenuBar.NoForceQuitApps"] = "No eligible apps open",
+        ["MenuBar.Run"] = "Run …",
+        ["MenuBar.RunPrompt"] = "Enter a program, file or address:",
+        ["MenuBar.RunFailed"] = "The specified target could not be opened.",
+        ["MenuBar.SignOut"] = "Sign out …",
+        ["MenuBar.Lock"] = "Lock screen",
+        ["MenuBar.Restart"] = "Restart …",
+        ["MenuBar.Shutdown"] = "Shut down …",
+        ["MenuBar.SystemActionConfirm"] = "{0}? Unsaved changes in other programs may be lost.",
+        ["MenuBar.SystemActionFailed"] = "Windows could not complete the selected system action.",
         ["Product.Name"] = "VeliShell", ["Product.SettingsTitle"] = "VeliShell Settings", ["Product.Preview"] = "Development preview", ["Product.VersionPreview"] = "PREVIEW 0.10.0", ["Product.ApprovalOnly"] = "System changes only with your approval.",
         ["Apps.MacOsIconsKey"] = "macOSicons (optional): save your own API key in Windows Credential Manager. VeliShell does not bundle a shared key.",
         ["Apps.MaskFallbackTitle"] = "Send the Windows icon to macOSicons?",

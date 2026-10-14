@@ -109,6 +109,24 @@ internal sealed class BackgroundAppTracker
                string.Equals(current.Executable, app.Executable, StringComparison.OrdinalIgnoreCase);
     }
 
+    internal IReadOnlyList<BackgroundApp> VisibleApps(IReadOnlyList<NativeWindow> windows) =>
+        windows.Where(IsEligibleWindow)
+            .GroupBy(window => window.ProcessId)
+            .Select(group =>
+            {
+                var window = group.FirstOrDefault(candidate => candidate.WebApp is not null) ?? group.First();
+                var process = _readProcess(group.Key);
+                if (!MatchesWindow(process, window)) return null;
+                var name = window.WebApp?.Name ?? window.DisplayName;
+                if (string.IsNullOrWhiteSpace(name))
+                    name = Path.GetFileNameWithoutExtension(process!.Executable).Replace('_', ' ');
+                var target = window.WebApp?.ShortcutPath ?? window.IconTarget ?? process!.Executable;
+                return new BackgroundApp(process!.ProcessId, process.StartTimeUtcTicks,
+                    name.Trim(), process.Executable, target, target);
+            })
+            .Where(app => app is not null).Cast<BackgroundApp>()
+            .ToArray();
+
     internal static bool IsEligibleWindow(NativeWindow window) =>
         window.ProcessId > 0 &&
         Path.IsPathFullyQualified(window.Executable) &&

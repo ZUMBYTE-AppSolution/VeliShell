@@ -39,7 +39,7 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
     public const int CurrentOnlineIconConsentVersion = 4;
     public const double MinimumIconSize = 32;
     public const double DefaultIconSize = 52;
@@ -57,6 +57,8 @@ public sealed class Settings
     public bool Magnification { get; set; } = true;
     public bool ReducedMotion { get; set; }
     public bool ShowRunningApps { get; set; } = true;
+    public bool DockOnAllDisplays { get; set; }
+    public bool RunningAppsPerDisplay { get; set; }
     public bool AutoHide { get; set; }
     public bool AlwaysOnTop { get; set; } = true;
     public bool HideTaskbar { get; set; }
@@ -66,6 +68,7 @@ public sealed class Settings
     public bool WindowsNotificationsEnabled { get; set; }
     public DockIconStyle IconStyle { get; set; } = DockIconStyle.Mac;
     public bool MenuBarEnabled { get; set; }
+    public bool MenuBarOnAllDisplays { get; set; }
     public bool MenuBarAutoHide { get; set; }
     public bool MenuBarAlwaysOnTop { get; set; } = true;
     public OnlineIconMode OnlineIcons { get; set; } = OnlineIconMode.Disabled;

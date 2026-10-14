@@ -26,6 +26,7 @@ public partial class DockWindow : Window
     private const int MaximumDropItems = Settings.MaximumPins;
     private const int MaximumDropPathLength = 32767;
     private readonly App _app;
+    private readonly string? _displayDevice;
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(900) };
     private readonly List<DockTile> _tiles = [];
@@ -56,9 +57,12 @@ public partial class DockWindow : Window
     private double _baseDockWidth;
     internal bool TaskbarRecoveryHotkeyAvailable { get; private set; }
 
-    public DockWindow(App app)
+    public DockWindow(App app) : this(app, null) { }
+
+    internal DockWindow(App app, string? displayDevice)
     {
         _app = app;
+        _displayDevice = displayDevice;
         InitializeComponent();
         _app.PreferencesChanged += ApplyPreferences;
         SourceInitialized += OnSourceInitialized;
@@ -83,12 +87,15 @@ public partial class DockWindow : Window
             CloseWindowPreview();
             CloseFolderPopover();
             _startLauncher?.CloseOnce();
-            NativeMethods.UnregisterHotKey(_handle, 1);
-            NativeMethods.UnregisterHotKey(_handle, 2);
-            NativeMethods.UnregisterHotKey(_handle, 3);
-            NativeMethods.UnregisterHotKey(_handle, 4);
-            NativeMethods.UnregisterHotKey(_handle, 5);
-            _app.RequestExit();
+            if (_displayDevice is null)
+            {
+                NativeMethods.UnregisterHotKey(_handle, 1);
+                NativeMethods.UnregisterHotKey(_handle, 2);
+                NativeMethods.UnregisterHotKey(_handle, 3);
+                NativeMethods.UnregisterHotKey(_handle, 4);
+                NativeMethods.UnregisterHotKey(_handle, 5);
+                _app.RequestExit();
+            }
         };
     }
 
@@ -99,6 +106,7 @@ public partial class DockWindow : Window
         NativeMethods.SetWindowLongPtr(_handle, NativeMethods.GwlExStyle, (nint)(style | NativeMethods.WsExToolWindow));
         _source = HwndSource.FromHwnd(_handle);
         _source?.AddHook(WindowHook);
+        if (_displayDevice is not null) return;
         var open = NativeMethods.RegisterHotKey(_handle, 1, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModNoRepeat, 0x56);
         var exit = NativeMethods.RegisterHotKey(_handle, 2, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModShift | NativeMethods.ModNoRepeat, 0x51);
         TaskbarRecoveryHotkeyAvailable = NativeMethods.RegisterHotKey(_handle, 3, NativeMethods.ModControl | NativeMethods.ModAlt | NativeMethods.ModShift | NativeMethods.ModNoRepeat, 0x7A);
@@ -143,6 +151,7 @@ public partial class DockWindow : Window
                 if (_app.Preferences.HideDesktopIcons) _app.DesktopIcons.ReconcileHidden();
                 Rebuild();
                 PositionDock();
+                if (_displayDevice is null) _app.SyncDisplayWindows();
             }));
         return 0;
     }
@@ -158,18 +167,18 @@ public partial class DockWindow : Window
 
     private async Task RefreshWindows()
     {
-        if (_refreshing || _closed || _dragInProgress || _dragPayloadCached) return;
+        if (_refreshing || _closed || _app.IsExiting || _dragInProgress || _dragPayloadCached) return;
         _refreshing = true;
         try
         {
-            var windows = await Task.Run(WindowCatalog.Read);
+            var windows = await _app.ReadWindowsAsync();
             if (_closed || _dragInProgress || _dragPayloadCached) return;
             _windows = windows;
             if (_app.Preferences.HideTaskbar) _app.Taskbars.Reconcile();
             if (_app.Preferences.HideDesktopIcons) _app.DesktopIcons.ReconcileHidden();
             Rebuild();
             StopCompletedLaunches();
-            var fullscreen = WindowCatalog.ForegroundIsFullscreenOnPrimary();
+            var fullscreen = WindowCatalog.ForegroundIsFullscreenOnDisplay(_displayDevice);
             Visibility = fullscreen ? Visibility.Hidden : Visibility.Visible;
             PositionDock();
             // Polling is a fallback for system theme changes that don't raise a preference event.
@@ -182,15 +191,23 @@ public partial class DockWindow : Window
     private void Rebuild()
     {
         var preferences = _app.Preferences;
+        if (!NativeMethods.TryMonitorForDevice(_displayDevice, out var monitor))
+        {
+            Visibility = Visibility.Hidden;
+            return;
+        }
+        var displayWindows = preferences.DockOnAllDisplays && preferences.RunningAppsPerDisplay
+            ? WindowCatalog.OnDisplay(_windows, _displayDevice)
+            : _windows;
         var items = new List<DockItem>();
         foreach (var pin in preferences.Pins)
             items.Add(new DockItem { Key = "pin:" + pin.Id, Name = LocalizationService.Current.DisplayPinName(pin), Target = pin.Target,
                 IconId = IconService.IdForPin(pin),
                 Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
-                Pin = pin, Windows = _windows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
+                Pin = pin, Windows = displayWindows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
         if (preferences.ShowRunningApps)
         {
-            var running = _windows.Where(w => !preferences.Pins.Any(p => WindowCatalog.Matches(w, p)))
+            var running = displayWindows.Where(w => !preferences.Pins.Any(p => WindowCatalog.Matches(w, p)))
                 .GroupBy(w => w.WebApp?.AppUserModelId ?? (w.IconTarget is null ? null : w.AppUserModelId) ??
                     (string.IsNullOrEmpty(w.Executable) ? w.ProcessName : w.Executable),
                     StringComparer.OrdinalIgnoreCase)
@@ -210,7 +227,6 @@ public partial class DockWindow : Window
                     Windows = group.ToList() });
             }
         }
-        var monitor = NativeMethods.PrimaryMonitor();
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var capacity = DockMath.VisibleCapacity((monitor.Work.Right - monitor.Work.Left) / dpi, preferences.IconSize);
         var utilityCount = (preferences.ShowVeliShellDockItem ? 1 : 0) +
@@ -325,7 +341,11 @@ public partial class DockWindow : Window
     private void PositionDock()
     {
         if (_handle == 0 || _closed) return;
-        var monitor = NativeMethods.PrimaryMonitor();
+        if (!NativeMethods.TryMonitorForDevice(_displayDevice, out var monitor))
+        {
+            Visibility = Visibility.Hidden;
+            return;
+        }
         var dpi = VisualTreeHelper.GetDpi(this);
         var width = (int)Math.Round(Width * dpi.DpiScaleX);
         var height = (int)Math.Round(Height * dpi.DpiScaleY);
