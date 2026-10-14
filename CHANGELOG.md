@@ -6,7 +6,7 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
-## [0.13.0] - 2026-10-14
+## [0.13.1] - 2026-10-14
 
 ### Hinzugefügt
 
@@ -17,6 +17,7 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 - Dock und Menüleiste lassen mehr Hintergrundfarbe durch und wirken in Hell- und Dunkelmodus weicher. Eine echte dynamische Hintergrundweichzeichnung ist damit noch nicht verbunden.
 - Die obere Arbeitsfläche wird bei mehreren Menüleisten pro Bildschirm reserviert, damit maximierte Fenster nicht unter die Leiste rutschen.
+- Die self-contained Ausgabe enthält die aktuelle .NET-Laufzeit 10.0.13 mit den zugehörigen Lizenzhinweisen. Der erste 0.13.0-Build wurde wegen abweichender Runtime-Hinweise nicht veröffentlicht.
 
 ## [0.12.3] - 2026-10-10
 

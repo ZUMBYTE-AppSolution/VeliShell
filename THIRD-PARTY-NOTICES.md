@@ -10,7 +10,7 @@ Die portable Anwendung und der Installer können Bestandteile der .NET-Laufzeit
 mitliefern. .NET ist ein Microsoft-Projekt unter der MIT-Lizenz.
 
 Die zum Self-contained-Paket gehörenden, unveränderten Originaltexte für
-`.NET 10.0.12` und `Microsoft.WindowsDesktop.App/WPF 10.0.12` werden zusammen
+`.NET 10.0.13` und `Microsoft.WindowsDesktop.App/WPF 10.0.13` werden zusammen
 mit der Anwendung im Ordner [`THIRD-PARTY-LICENSES`](THIRD-PARTY-LICENSES/README.md)
 ausgeliefert. Damit bleiben die Hinweise auch in der Portable-ZIP und nach einer
 MSI-Installation offline einsehbar.
