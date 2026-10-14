@@ -189,6 +189,18 @@ jobs:
           msstore apps get $env:STORE_PRODUCT_ID | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'The configured Entra application cannot retrieve the Store product.' }
 
+      - name: Inspect pending Store draft structure
+        if: ${{ inputs.access_check_only }}
+        run: |
+          $draft = (msstore submission get $env:STORE_PRODUCT_ID | Out-String) | ConvertFrom-Json -AsHashtable
+          if ($LASTEXITCODE -ne 0) { throw 'The pending Store draft could not be inspected.' }
+          Write-Host "Draft top-level fields: $(@($draft.Keys) -join ', ')"
+          foreach ($field in @('data', 'responseData', 'submission', 'package')) {
+            if ($draft.Contains($field) -and $draft[$field] -is [System.Collections.IDictionary]) {
+              Write-Host "Draft $field fields: $(@($draft[$field].Keys) -join ', ')"
+            }
+          }
+
       - name: Upload MSIX into Store draft
         if: ${{ !inputs.access_check_only }}
         env:
