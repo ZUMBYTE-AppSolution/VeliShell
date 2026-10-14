@@ -66,6 +66,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Check out Store listing assets
+        if: ${{ !inputs.access_check_only }}
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          path: store-listing
+          persist-credentials: false
+
       - name: Install .NET 10 SDK
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
@@ -181,13 +189,35 @@ jobs:
           msstore apps get $env:STORE_PRODUCT_ID | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'The configured Entra application cannot retrieve the Store product.' }
 
-      - name: Publish MSIX submission
+      - name: Upload MSIX into Store draft
         if: ${{ !inputs.access_check_only }}
         env:
           MSIX_PATH: ${{ steps.package.outputs.msix_path }}
         run: |
-          msstore publish $env:MSIX_PATH -id $env:STORE_PRODUCT_ID
-          if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the MSIX submission.' }
+          msstore publish $env:MSIX_PATH -id $env:STORE_PRODUCT_ID --noCommit
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the draft MSIX upload.' }
+
+      - name: Add Windows desktop screenshot to Store listings
+        if: ${{ !inputs.access_check_only }}
+        env:
+          MSIX_PATH: ${{ steps.package.outputs.msix_path }}
+          STORE_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          STORE_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+        run: |
+          ./store-listing/tools/Update-StoreScreenshot.ps1 `
+            -ProductId $env:STORE_PRODUCT_ID `
+            -MsixPath $env:MSIX_PATH `
+            -ScreenshotPath ./store-listing/assets/store/velishell-windows-desktop.png `
+            -TenantId $env:STORE_TENANT_ID `
+            -ClientId $env:STORE_CLIENT_ID `
+            -ClientSecret $env:STORE_CLIENT_SECRET
+
+      - name: Submit updated package and listing for certification
+        if: ${{ !inputs.access_check_only }}
+        run: |
+          msstore submission publish $env:STORE_PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the Store submission.' }
           msstore submission status $env:STORE_PRODUCT_ID
           if ($LASTEXITCODE -ne 0) { throw 'The submitted Store status could not be read.' }
 
@@ -199,7 +229,7 @@ jobs:
           @(
             '## Microsoft Store MSIX submitted',
             '',
-            "VeliShell $env:RELEASE_VERSION was submitted to Partner Center for certification.",
+            "VeliShell $env:RELEASE_VERSION and the Windows desktop screenshot were submitted to Partner Center for certification.",
             '',
             'Microsoft signs the Store-delivered package after certification.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
