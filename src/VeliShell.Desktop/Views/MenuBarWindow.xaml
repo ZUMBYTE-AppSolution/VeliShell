@@ -54,8 +54,8 @@
              ContextMenuOpening="Steam_ContextMenuOpening"
              ToolTip="{services:Loc MenuBar.SteamRunning}"
              AutomationProperties.Name="{services:Loc MenuBar.SteamRunning}">
-      <Border x:Name="SteamGlyph" Width="17" Height="17"
-              Background="{DynamicResource TextPrimary}" SnapsToDevicePixels="True" />
+      <Image x:Name="SteamGlyph" Width="17" Height="17" Stretch="Uniform"
+             RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" />
      </Button>
      <Button Style="{StaticResource MenuBarButton}" Click="Search_Click"
              ToolTip="{services:Loc Search.Open}" AutomationProperties.Name="{services:Loc Search.Open}">

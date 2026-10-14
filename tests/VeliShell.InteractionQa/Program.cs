@@ -129,6 +129,7 @@ internal static class Program
             var trashSurfacesPath = Path.Combine(AppContext.BaseDirectory, "trash-surfaces.png");
             RenderTrashSurfaceContactSheet(trashSurfacesPath);
             TestSteamIconDesaturation();
+            TestMenuBarIconDesaturation();
             var steamStatusPath = Path.Combine(AppContext.BaseDirectory, "steam-status-light-dark.png");
             var hasSteamIconSample = RenderInstalledSteamStatusIcon(steamStatusPath);
             Console.WriteLine("PASS: DWM thumbnail registered, hidden and released cleanly across 12 cycles.");
@@ -2804,6 +2805,25 @@ internal static class Program
                 pixels[4] == 255 && pixels[5] == 255 && pixels[6] == 255 && pixels[7] == 77 &&
                 sourcePixels[0] == 220,
             "Steam artwork must keep its original alpha and shape while only removing color.");
+    }
+
+    private static void TestMenuBarIconDesaturation()
+    {
+        var menuBarType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
+        var steamGlyph = menuBarType.GetField("SteamGlyph", BindingFlags.Instance | BindingFlags.NonPublic);
+        Require(steamGlyph?.FieldType == typeof(Image),
+            "The Steam menu-bar glyph must render its desaturated artwork as an image.");
+        var sourcePixels = new byte[] { 220, 70, 20, 255, 255, 255, 255, 77 };
+        var source = BitmapSource.Create(2, 1, 96, 96, PixelFormats.Bgra32, null, sourcePixels, 8);
+        var create = RequireMethod(menuBarType, "DesaturatedIcon");
+        var icon = (Image)create.Invoke(null, [source])!;
+        Require(icon.OpacityMask is null && icon.Source is BitmapSource,
+            "Menu-bar app icons must render their desaturated pixels, not use them as a solid-color opacity mask.");
+        var pixels = new byte[8];
+        ((BitmapSource)icon.Source).CopyPixels(pixels, 8, 0);
+        Require(pixels[0] == pixels[1] && pixels[1] == pixels[2] && pixels[0] != pixels[4] &&
+                pixels[3] == 255 && pixels[7] == 77,
+            "Menu-bar app icons must preserve artwork contrast and transparency while removing only color.");
     }
 
     private static bool RenderInstalledSteamStatusIcon(string path)

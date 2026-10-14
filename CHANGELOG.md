@@ -6,6 +6,12 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.4] - 2026-10-14
+
+### Behoben
+
+- Menüleisten-Symbole laufender Apps und Windows-Infosymbole zeigen nach der Entsättigung wieder die Details ihrer Originalgrafik statt einer einfarbigen Silhouette. Insbesondere bleibt das Steam-Logo innerhalb seines Kreises erkennbar.
+
 ## [0.13.3] - 2026-10-14
 
 ### Hinzugefügt
@@ -280,8 +286,9 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.3...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.4...HEAD
 
+[0.13.4]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.3...v0.13.4
 [0.13.3]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.2...v0.13.3
 [0.10.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...v0.9.0

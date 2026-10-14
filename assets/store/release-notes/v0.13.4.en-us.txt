@@ -1,0 +1,3 @@
+New in VeliShell 0.13.4:
+
+Icons for running apps and Windows notification-area apps in the menu bar are now desaturated without losing the details and brightness variations of the original artwork. For example, the Steam logo is visible inside its circle again.

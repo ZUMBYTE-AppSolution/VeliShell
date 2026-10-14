@@ -203,15 +203,16 @@ public partial class MenuBarWindow : Window
             if (steam is null)
             {
                 _steamIconPath = null;
-                SteamGlyph.OpacityMask = null;
+                SteamGlyph.Source = null;
             }
-            else if (!string.Equals(_steamIconPath, steam.Executable, StringComparison.OrdinalIgnoreCase))
+            else if (SteamGlyph.Source is null ||
+                     !string.Equals(_steamIconPath, steam.Executable, StringComparison.OrdinalIgnoreCase))
             {
                 _steamIconPath = steam.Executable;
                 var icon = SteamIconService.FromExecutable(steam.Executable);
-                SteamGlyph.OpacityMask = icon is null ? null : new ImageBrush(icon) { Stretch = Stretch.Uniform };
+                SteamGlyph.Source = icon;
             }
-            SteamButton.Visibility = steam is not null && SteamGlyph.OpacityMask is not null &&
+            SteamButton.Visibility = steam is not null && SteamGlyph.Source is not null &&
                                      !_trayIcons.Any(icon => string.Equals(icon.Executable, steam.Executable,
                                          StringComparison.OrdinalIgnoreCase))
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -243,7 +244,7 @@ public partial class MenuBarWindow : Window
             RenderTrayIcons();
             RenderBackgroundApps(_lastBackgroundApps);
             if (_steam is { } steam)
-                SteamButton.Visibility = SteamGlyph.OpacityMask is not null &&
+                SteamButton.Visibility = SteamGlyph.Source is not null &&
                     !icons.Any(icon => string.Equals(icon.Executable, steam.Executable,
                         StringComparison.OrdinalIgnoreCase)) ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -303,7 +304,7 @@ public partial class MenuBarWindow : Window
                 ToolTip = hidden ? $"{icon.Name} · {L("MenuBar.TrayShow")}" :
                     string.Format(LocalizationService.Current.ActiveCulture,
                         L("MenuBar.TrayRunning"), icon.Name),
-                Content = MonochromeIcon(image)
+                Content = DesaturatedIcon(image)
             };
             if (hidden) button.Width = button.Height = 32;
             System.Windows.Automation.AutomationProperties.SetName(button, icon.Name);
@@ -332,15 +333,14 @@ public partial class MenuBarWindow : Window
         }
     }
 
-    private Border MonochromeIcon(ImageSource source)
+    private static Image DesaturatedIcon(BitmapSource source)
     {
-        var glyph = new Border
+        var glyph = new Image
         {
-            Width = 17, Height = 17,
-            OpacityMask = new ImageBrush(source) { Stretch = Stretch.Uniform },
+            Width = 17, Height = 17, Stretch = Stretch.Uniform,
+            Source = SteamIconService.Desaturate(source),
             SnapsToDevicePixels = true
         };
-        glyph.SetResourceReference(Border.BackgroundProperty, "TextPrimary");
         RenderOptions.SetBitmapScalingMode(glyph, BitmapScalingMode.HighQuality);
         return glyph;
     }
@@ -433,7 +433,7 @@ public partial class MenuBarWindow : Window
                 // Use the actual installed app or web-app shortcut icon. No
                 // synthetic menu-bar artwork is generated or bundled.
                 var icon = IconService.ForOriginalWindowsIcon("app", app.IconTarget);
-                if (icon is null)
+                if (icon is not BitmapSource bitmap)
                 {
                     overflow.Add(app);
                     continue;
@@ -444,7 +444,7 @@ public partial class MenuBarWindow : Window
                     Padding = new Thickness(6, 4, 6, 4),
                     ToolTip = string.Format(LocalizationService.Current.ActiveCulture,
                         L("MenuBar.BackgroundAppRunning"), app.Name),
-                    Content = MonochromeIcon(icon)
+                    Content = DesaturatedIcon(bitmap)
                 };
                 System.Windows.Automation.AutomationProperties.SetName(button, app.Name);
                 button.Click += (_, _) => OpenBackgroundApp(app);

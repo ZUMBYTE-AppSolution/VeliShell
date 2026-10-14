@@ -1,0 +1,3 @@
+Neu in VeliShell 0.13.4:
+
+Symbole laufender Apps und Windows-Infosymbole in der Menüleiste werden jetzt nur noch entsättigt. Die Details und Helligkeitsabstufungen der Originalgrafik bleiben sichtbar. So ist beispielsweise das Steam-Logo wieder innerhalb seines Kreises erkennbar.
