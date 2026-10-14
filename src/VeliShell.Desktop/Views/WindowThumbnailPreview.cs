@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Services;
 
@@ -85,13 +84,6 @@ internal sealed class WindowThumbnailPreview : Window, IDisposable
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             ClipToBounds = true,
-            Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                BlurRadius = 24,
-                ShadowDepth = 7,
-                Opacity = 0.36
-            },
             Child = _fallback
         };
         frame.SetResourceReference(Border.BackgroundProperty, "MenuSurface");
@@ -99,6 +91,7 @@ internal sealed class WindowThumbnailPreview : Window, IDisposable
         Content = frame;
 
         SourceInitialized += OnSourceInitialized;
+        SourceInitialized += (_, _) => WindowShapeService.ApplyRoundedRegion(this, 12);
         Closed += (_, _) =>
         {
             ReleaseThumbnail();

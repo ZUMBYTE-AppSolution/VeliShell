@@ -13,7 +13,7 @@
  <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect>
-   <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="34" ShadowDepth="9" Opacity="0.58" />
+   <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.42" />
   </Border.Effect>
   <Grid ClipToBounds="True">
    <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />

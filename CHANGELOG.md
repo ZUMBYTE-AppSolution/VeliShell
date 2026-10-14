@@ -6,6 +6,16 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-10-14
+
+### Hinzugefügt
+
+- Die Menüleiste spiegelt erkannte Windows-Infosymbole laufender Apps aus dem lokalen Explorer-Iconcache. Sie färbt diese im Hell- und Dunkelmodus einfarbig ein. Symbole können per Rechtsklick hinter einem Chevron verborgen und dort wieder eingeblendet werden; die Überlaufansicht schließt nach zehn Sekunden oder bei Fokusverlust. Bei ausgeblendeter Taskleiste bleibt die Spiegelung technisch bestmöglich und ersetzt keine Original-Traymenüs.
+
+### Behoben
+
+- Dock, schwebende Panels, Vorschauen und reguläre VeliShell-Fenster schneiden ihre weichen Schatten nicht mehr an rechteckigen Fenstergrenzen ab; reguläre Fenster haben eine abgerundete Silhouette.
+
 ## [0.13.2] - 2026-10-14
 
 ### Verbessert
@@ -270,7 +280,9 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.3...HEAD
+
+[0.13.3]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.2...v0.13.3
 [0.10.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.7.0...v0.8.0

@@ -39,7 +39,7 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
     public const int CurrentOnlineIconConsentVersion = 4;
     public const double MinimumIconSize = 32;
     public const double DefaultIconSize = 52;
@@ -71,6 +71,8 @@ public sealed class Settings
     public bool MenuBarOnAllDisplays { get; set; }
     public bool MenuBarAutoHide { get; set; }
     public bool MenuBarAlwaysOnTop { get; set; } = true;
+    public List<string> HiddenTrayIconIds { get; set; } = [];
+    public List<string> PreferredTrayIconIds { get; set; } = [];
     public OnlineIconMode OnlineIcons { get; set; } = OnlineIconMode.Disabled;
     public int OnlineIconConsentVersion { get; set; }
     public bool FirstRunCompleted { get; set; }
@@ -120,6 +122,18 @@ public sealed class Settings
                 pair => pair.Key!,
                 pair => pair.Icon!,
                 StringComparer.OrdinalIgnoreCase);
+        HiddenTrayIconIds = (HiddenTrayIconIds ?? [])
+            .Where(id => id is { Length: 64 } && id.All(Uri.IsHexDigit))
+            .Select(id => id.ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Take(128)
+            .ToList();
+        PreferredTrayIconIds = (PreferredTrayIconIds ?? [])
+            .Where(id => id is { Length: 64 } && id.All(Uri.IsHexDigit))
+            .Select(id => id.ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .Take(128)
+            .ToList();
     }
 
     public IconReference? GetDockIconOverride(string key) =>

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Shell;
 using VeliShell.Desktop.Native;
+using VeliShell.Desktop.Services;
 
 namespace VeliShell.Desktop.Controls;
 
@@ -31,7 +32,10 @@ public class VeliShellWindow : Window
             _source?.AddHook(WindowHook);
             var rounded = 2;
             NativeMethods.DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
+            WindowShapeService.ApplyRoundedRegion(this, 12);
         };
+        SizeChanged += (_, _) => WindowShapeService.ApplyRoundedRegion(this, 12);
+        StateChanged += (_, _) => WindowShapeService.ApplyRoundedRegion(this, 12);
         Closed += (_, _) => _source?.RemoveHook(WindowHook);
     }
 

@@ -120,6 +120,7 @@ internal static class Program
             TestTaskbarRecoveryPolicy();
             TestMenuBarReservationPolicy();
             TestMenuBarCenters();
+            TestTrayIconMirror();
             TestRunCommandParser();
             TestTransientAudioPanelClose(owner, anchor);
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
@@ -147,6 +148,7 @@ internal static class Program
             Console.WriteLine("PASS: Menu bar reserves a reversible top-edge appbar without overwriting foreign reservations; emergency taskbar restore wins deterministic layout interleavings.");
             Console.WriteLine("PASS: VeliShell Run keeps executable paths and arguments separate without invoking a command shell.");
             Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
+            Console.WriteLine("PASS: The Windows tray mirror returns bounded, stable icons from running apps without changing Explorer settings.");
             Console.WriteLine("PASS: The audio-device panel closes without a reentrant deactivation crash.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             Console.WriteLine($"PASS: Rendered aligned freeform empty/full Recycle Bin surfaces to {trashSurfacesPath}");
@@ -2303,6 +2305,36 @@ internal static class Program
         }
         Require(outputCount <= 32 && defaultCount <= 1,
             "Audio-device enumeration is unbounded or marked multiple default outputs.");
+    }
+
+    private static void TestTrayIconMirror()
+    {
+        var catalog = RequireType("VeliShell.Desktop.Services.TrayIconCatalog");
+        var read = RequireMethod(catalog, "Read");
+        var first = ((System.Collections.IEnumerable)read.Invoke(null, null)!).Cast<object>().ToArray();
+        var cached = ((System.Collections.IEnumerable)read.Invoke(null, null)!).Cast<object>().ToArray();
+        Require(first.Length <= 48 && first.Length == cached.Length,
+            "The tray mirror is unbounded or unstable between consecutive reads.");
+        for (var index = 0; index < first.Length; index++)
+        {
+            var icon = first[index];
+            var type = icon.GetType();
+            var id = (string)type.GetProperty("Id")!.GetValue(icon)!;
+            var name = (string)type.GetProperty("Name")!.GetValue(icon)!;
+            var executable = (string)type.GetProperty("Executable")!.GetValue(icon)!;
+            var snapshot = (byte[])type.GetProperty("Snapshot")!.GetValue(icon)!;
+            Require(ReferenceEquals(icon, cached[index]) && id.Length == 64 &&
+                    id.All(Uri.IsHexDigit) && !string.IsNullOrWhiteSpace(name) &&
+                    Path.IsPathFullyQualified(executable) && snapshot.Length is >= 32 and <= 262144 &&
+                    snapshot.AsSpan().StartsWith(new byte[] { 0x89, 0x50, 0x4e, 0x47 }),
+                "A mirrored tray icon is stale, malformed or not backed by a local PNG snapshot.");
+        }
+
+        var menuType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
+        Require(menuType.GetMethod("TrayOverflow_Opened", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetMethod("TrayOverflow_Closed", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetField("_trayCollapseTimer", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
+            "The tray overflow lost its automatic-collapse lifecycle.");
     }
 
     private static int RenderShellPanels(Application application)

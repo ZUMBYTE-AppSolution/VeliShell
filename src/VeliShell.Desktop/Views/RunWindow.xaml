@@ -8,7 +8,7 @@
  WindowStartupLocation="CenterOwner" KeyDown="Window_KeyDown">
  <Border Margin="9" Background="{DynamicResource GlassPanelSurface}" CornerRadius="21"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="22">
-  <Border.Effect><DropShadowEffect BlurRadius="32" ShadowDepth="7" Opacity="0.5" /></Border.Effect>
+  <Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.42" /></Border.Effect>
   <StackPanel>
    <TextBlock Text="{services:Loc MenuBar.Run}" FontSize="19" FontWeight="SemiBold" />
    <TextBlock Text="{services:Loc MenuBar.RunPrompt}" Foreground="{DynamicResource TextSecondary}"

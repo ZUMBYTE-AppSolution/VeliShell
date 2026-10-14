@@ -14,7 +14,7 @@
    <Border x:Name="DockPlate" VerticalAlignment="Bottom" Height="80" Margin="0,0,0,4"
    Background="{DynamicResource DockSurfaceGradient}" BorderBrush="{DynamicResource DockStroke}"
     BorderThickness="1" CornerRadius="11">
-    <Border.Effect><DropShadowEffect BlurRadius="31" ShadowDepth="4" Opacity="0.19" /></Border.Effect>
+    <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.22" /></Border.Effect>
     <Grid ClipToBounds="True">
      <Border Margin="1" Background="{DynamicResource DockMilkOverlay}"
       CornerRadius="9.5" IsHitTestVisible="False" />

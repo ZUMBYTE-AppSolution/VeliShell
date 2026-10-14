@@ -10,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Services;
@@ -29,11 +30,16 @@ public partial class MenuBarWindow : Window
     private readonly ShellBackdropHost _backdrop;
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _windowTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
+    private readonly DispatcherTimer _trayTimer = new() { Interval = TimeSpan.FromSeconds(10) };
+    private readonly DispatcherTimer _trayCollapseTimer = new() { Interval = TimeSpan.FromSeconds(10) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(750) };
     private List<NativeWindow> _windows = [];
     private readonly BackgroundAppTracker _backgroundApps = BackgroundAppTracker.ForCurrentSession();
     private string _backgroundAppsSignature = "";
     private IReadOnlyList<BackgroundApp> _lastBackgroundApps = [];
+    private IReadOnlyList<TrayAppIcon> _trayIcons = [];
+    private string _traySignature = "";
+    private bool _trayRefreshInProgress;
     private bool _refreshInProgress;
     private SteamClient? _steam;
     private string? _steamIconPath;
@@ -79,11 +85,15 @@ public partial class MenuBarWindow : Window
             ApplyBackdrop();
             UpdateClockAndIndicators();
             await RefreshWindowsAsync();
+            await RefreshTrayIconsAsync();
             _clockTimer.Start();
             _windowTimer.Start();
+            _trayTimer.Start();
         };
         _clockTimer.Tick += (_, _) => UpdateClockAndIndicators();
         _windowTimer.Tick += async (_, _) => await RefreshWindowsAsync();
+        _trayTimer.Tick += async (_, _) => await RefreshTrayIconsAsync();
+        _trayCollapseTimer.Tick += (_, _) => TrayOverflowPopup.IsOpen = false;
         _hideTimer.Tick += (_, _) =>
         {
             _hideTimer.Stop();
@@ -94,6 +104,8 @@ public partial class MenuBarWindow : Window
             _closed = true;
             _clockTimer.Stop();
             _windowTimer.Stop();
+            _trayTimer.Stop();
+            _trayCollapseTimer.Stop();
             _hideTimer.Stop();
             ClosePanels();
             _app.PreferencesChanged -= ApplyPreferences;
@@ -115,6 +127,8 @@ public partial class MenuBarWindow : Window
     {
         if (_closed) return;
         _backgroundAppsSignature = "\0";
+        _traySignature = "\0";
+        RenderTrayIcons();
         Topmost = _app.Preferences.MenuBarAlwaysOnTop;
         if (_openPanel is not null) _openPanel.Topmost = Topmost;
         PositionBar();
@@ -189,14 +203,17 @@ public partial class MenuBarWindow : Window
             if (steam is null)
             {
                 _steamIconPath = null;
-                SteamIcon.Source = null;
+                SteamGlyph.OpacityMask = null;
             }
             else if (!string.Equals(_steamIconPath, steam.Executable, StringComparison.OrdinalIgnoreCase))
             {
                 _steamIconPath = steam.Executable;
-                SteamIcon.Source = SteamIconService.FromExecutable(steam.Executable);
+                var icon = SteamIconService.FromExecutable(steam.Executable);
+                SteamGlyph.OpacityMask = icon is null ? null : new ImageBrush(icon) { Stretch = Stretch.Uniform };
             }
-            SteamButton.Visibility = steam is not null && SteamIcon.Source is not null
+            SteamButton.Visibility = steam is not null && SteamGlyph.OpacityMask is not null &&
+                                     !_trayIcons.Any(icon => string.Equals(icon.Executable, steam.Executable,
+                                         StringComparison.OrdinalIgnoreCase))
                 ? Visibility.Visible : Visibility.Collapsed;
             var foreground = NativeMethods.GetForegroundWindow();
             _activeWindow = VisibleWindows().FirstOrDefault(window => window.Handle == foreground);
@@ -214,10 +231,189 @@ public partial class MenuBarWindow : Window
         finally { _refreshInProgress = false; }
     }
 
+    private async Task RefreshTrayIconsAsync()
+    {
+        if (_closed || _trayRefreshInProgress) return;
+        _trayRefreshInProgress = true;
+        try
+        {
+            var icons = await Task.Run(TrayIconCatalog.Read);
+            if (_closed) return;
+            _trayIcons = icons;
+            RenderTrayIcons();
+            RenderBackgroundApps(_lastBackgroundApps);
+            if (_steam is { } steam)
+                SteamButton.Visibility = SteamGlyph.OpacityMask is not null &&
+                    !icons.Any(icon => string.Equals(icon.Executable, steam.Executable,
+                        StringComparison.OrdinalIgnoreCase)) ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception error) { App.Log("Tray icon mirror refresh failed", error); }
+        finally { _trayRefreshInProgress = false; }
+    }
+
+    private void RenderTrayIcons()
+    {
+        var maximumVisibleIcons = ActualWidth is > 0 and < 1100 ? 3 : 6;
+        var hiddenIds = _app.Preferences.HiddenTrayIconIds.ToHashSet(StringComparer.Ordinal);
+        var preferredIds = _app.Preferences.PreferredTrayIconIds
+            .Select((id, index) => (id, index))
+            .ToDictionary(item => item.id, item => item.index, StringComparer.Ordinal);
+        var orderedIcons = _trayIcons.OrderBy(icon => preferredIds.GetValueOrDefault(icon.Id, int.MaxValue))
+            .ToArray();
+        var signature = $"{maximumVisibleIcons}|" + string.Join("|", orderedIcons.Select(icon =>
+            $"{icon.Id}:{icon.Name}:{icon.SnapshotHash}:{hiddenIds.Contains(icon.Id)}"));
+        if (signature == _traySignature) return;
+        _traySignature = signature;
+        TrayIconsPanel.Children.Clear();
+        TrayOverflowItemsPanel.Children.Clear();
+        var visibleCount = 0;
+        foreach (var icon in orderedIcons)
+        {
+            var hidden = hiddenIds.Contains(icon.Id) || visibleCount >= maximumVisibleIcons;
+            var button = CreateTrayIconButton(icon, hidden);
+            if (button is null) continue;
+            if (hidden) TrayOverflowItemsPanel.Children.Add(button);
+            else
+            {
+                TrayIconsPanel.Children.Add(button);
+                visibleCount++;
+            }
+        }
+        TrayChevronButton.Visibility = TrayOverflowItemsPanel.Children.Count > 0
+            ? Visibility.Visible : Visibility.Collapsed;
+        if (TrayChevronButton.Visibility != Visibility.Visible) TrayOverflowPopup.IsOpen = false;
+    }
+
+    private Button? CreateTrayIconButton(TrayAppIcon icon, bool hidden)
+    {
+        try
+        {
+            using var stream = new MemoryStream(icon.Snapshot, writable: false);
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.DecodePixelWidth = 64;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            var button = new Button
+            {
+                Style = (Style)FindResource("MenuBarButton"),
+                Padding = new Thickness(6, 4, 6, 4),
+                ToolTip = hidden ? $"{icon.Name} · {L("MenuBar.TrayShow")}" :
+                    string.Format(LocalizationService.Current.ActiveCulture,
+                        L("MenuBar.TrayRunning"), icon.Name),
+                Content = MonochromeIcon(image)
+            };
+            if (hidden) button.Width = button.Height = 32;
+            System.Windows.Automation.AutomationProperties.SetName(button, icon.Name);
+            button.Click += (_, _) =>
+            {
+                TrayOverflowPopup.IsOpen = false;
+                if (File.Exists(icon.Executable)) LaunchService.Open(icon.Executable);
+            };
+            button.PreviewMouseRightButtonUp += (_, args) =>
+            {
+                args.Handled = true;
+                ShowTrayIconMenu(button, icon, hidden);
+            };
+            button.ContextMenuOpening += (_, args) =>
+            {
+                args.Handled = true;
+                ShowTrayIconMenu(button, icon, hidden);
+            };
+            return button;
+        }
+        catch (Exception error) when (error is NotSupportedException or IOException or ArgumentException or
+                                      InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            App.Log("Could not render a cached Windows notification icon", error);
+            return null;
+        }
+    }
+
+    private Border MonochromeIcon(ImageSource source)
+    {
+        var glyph = new Border
+        {
+            Width = 17, Height = 17,
+            OpacityMask = new ImageBrush(source) { Stretch = Stretch.Uniform },
+            SnapsToDevicePixels = true
+        };
+        glyph.SetResourceReference(Border.BackgroundProperty, "TextPrimary");
+        RenderOptions.SetBitmapScalingMode(glyph, BitmapScalingMode.HighQuality);
+        return glyph;
+    }
+
+    private void ShowTrayIconMenu(FrameworkElement anchor, TrayAppIcon icon, bool hidden)
+    {
+        if (hidden)
+        {
+            ToggleTrayIcon(icon.Id, hide: false);
+            TrayOverflowPopup.IsOpen = false;
+            return;
+        }
+        var menu = NewMenu(anchor);
+        var observedApp = _lastBackgroundApps.FirstOrDefault(app =>
+            string.Equals(app.Executable, icon.Executable, StringComparison.OrdinalIgnoreCase));
+        if (observedApp is not null) AddBackgroundAppActions(menu, observedApp);
+        else
+        {
+            Add(menu, L("MenuBar.TrayOpen"), () =>
+            {
+                if (File.Exists(icon.Executable)) LaunchService.Open(icon.Executable);
+            }, File.Exists(icon.Executable));
+            var folder = Path.GetDirectoryName(icon.Executable);
+            Add(menu, L("MenuBar.BackgroundAppFolder"), () =>
+            {
+                if (folder is not null && Directory.Exists(folder)) LaunchService.Open(folder);
+            }, folder is not null && Directory.Exists(folder));
+        }
+        menu.Items.Add(new Separator());
+        Add(menu, L("MenuBar.TrayHide"), () => ToggleTrayIcon(icon.Id, hide: true));
+        menu.IsOpen = true;
+    }
+
+    private void ToggleTrayIcon(string id, bool hide)
+    {
+        _app.UpdatePreferences(settings =>
+        {
+            settings.HiddenTrayIconIds.RemoveAll(candidate =>
+                string.Equals(candidate, id, StringComparison.Ordinal));
+            settings.PreferredTrayIconIds.RemoveAll(candidate =>
+                string.Equals(candidate, id, StringComparison.Ordinal));
+            if (hide) settings.HiddenTrayIconIds.Add(id);
+            else settings.PreferredTrayIconIds.Insert(0, id);
+        });
+    }
+
+    private void TrayChevron_Click(object sender, RoutedEventArgs e) =>
+        TrayOverflowPopup.IsOpen = !TrayOverflowPopup.IsOpen;
+
+    private void TrayOverflow_Opened(object sender, EventArgs e)
+    {
+        _hideTimer.Stop();
+        SetHidden(false);
+        _trayCollapseTimer.Stop();
+        _trayCollapseTimer.Start();
+    }
+
+    private void TrayOverflow_Closed(object sender, EventArgs e)
+    {
+        _trayCollapseTimer.Stop();
+        if (_app.Preferences.MenuBarAutoHide && !IsMouseOver) _hideTimer.Start();
+    }
+
+    private void MenuBar_Deactivated(object sender, EventArgs e) => TrayOverflowPopup.IsOpen = false;
+
     private void RenderBackgroundApps(IReadOnlyList<BackgroundApp> apps)
     {
-        const int maximumVisibleIcons = 6;
-        var signature = string.Join("|", apps.Select(app =>
+        var totalIconBudget = ActualWidth is > 0 and < 1100 ? 4 : 6;
+        var maximumVisibleIcons = Math.Max(1, totalIconBudget - TrayIconsPanel.Children.Count);
+        var trayExecutables = _trayIcons.Select(icon => icon.Executable)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var otherApps = apps.Where(app => !trayExecutables.Contains(app.Executable)).ToArray();
+        var signature = $"{maximumVisibleIcons}|" + string.Join("|", otherApps.Select(app =>
             $"{app.ProcessId}:{app.StartTimeUtcTicks}:{app.Name}:{app.IconTarget}"));
         if (signature == _backgroundAppsSignature) return;
         _backgroundAppsSignature = signature;
@@ -225,7 +421,7 @@ public partial class MenuBarWindow : Window
         var overflow = new List<BackgroundApp>();
         var visibleCount = 0;
 
-        foreach (var app in apps)
+        foreach (var app in otherApps)
         {
             if (visibleCount >= maximumVisibleIcons)
             {
@@ -248,16 +444,8 @@ public partial class MenuBarWindow : Window
                     Padding = new Thickness(6, 4, 6, 4),
                     ToolTip = string.Format(LocalizationService.Current.ActiveCulture,
                         L("MenuBar.BackgroundAppRunning"), app.Name),
-                    Content = new Image
-                    {
-                        Source = icon,
-                        Width = 17,
-                        Height = 17,
-                        Stretch = Stretch.Uniform,
-                        SnapsToDevicePixels = true
-                    }
+                    Content = MonochromeIcon(icon)
                 };
-                RenderOptions.SetBitmapScalingMode((Image)button.Content, BitmapScalingMode.HighQuality);
                 System.Windows.Automation.AutomationProperties.SetName(button, app.Name);
                 button.Click += (_, _) => OpenBackgroundApp(app);
                 button.MouseRightButtonUp += (_, args) =>
@@ -731,6 +919,7 @@ public partial class MenuBarWindow : Window
 
     private void ClosePanels()
     {
+        TrayOverflowPopup.IsOpen = false;
         var panel = _openPanel;
         _openPanel = null;
         if (panel is { IsVisible: true })

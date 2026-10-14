@@ -32,6 +32,18 @@ try
         Check(!new Settings().ShowWindowsStartDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
+    Test("Tray icon hiding is opt-in and normalizes stable identities", () =>
+    {
+        var id = new string('a', 64);
+        var settings = new Settings
+        {
+            HiddenTrayIconIds = [id.ToUpperInvariant(), id, "bad"],
+            PreferredTrayIconIds = [id.ToUpperInvariant(), id, "bad"]
+        };
+        settings.Normalize();
+        Check(settings.HiddenTrayIconIds.SequenceEqual([id]) &&
+              settings.PreferredTrayIconIds.SequenceEqual([id]));
+    });
     Test("Multi-display surfaces and per-display apps are opt-in", () =>
         Check(!new Settings().DockOnAllDisplays && !new Settings().MenuBarOnAllDisplays &&
               !new Settings().RunningAppsPerDisplay));

@@ -57,8 +57,8 @@ internal sealed class DragGhostWindow : Window, IDisposable
             IsHitTestVisible = false,
             Effect = new DropShadowEffect
             {
-                BlurRadius = 16,
-                ShadowDepth = 5,
+                BlurRadius = 12,
+                ShadowDepth = 2,
                 Opacity = 0.48,
                 Color = Colors.Black
             },
