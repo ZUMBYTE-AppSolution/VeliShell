@@ -1,0 +1,7 @@
+Neu in VeliShell 0.13.3:
+
+Die Menüleiste kann jetzt erkannte Infosymbole laufender Windows-Apps anzeigen. Passend zum hellen oder dunklen Erscheinungsbild erscheinen sie einfarbig. Einzelne Symbole lassen sich hinter einem ausklappbaren Chevron verbergen; die Ansicht schließt sich nach zehn Sekunden ohne Auswahl oder bei Fokusverlust.
+
+Außerdem wirken die Schatten von Dock, Panels, Vorschauen und VeliShell-Fenstern jetzt durchgehend weich. Abgerundete Fensterkonturen werden nicht mehr von rechteckigen Schattenkanten unterbrochen.
+
+Hinweis: Bei ausgeblendeter Windows-Taskleiste ist die Anzeige fremder Infosymbole eine bestmögliche Spiegelung und ersetzt nicht deren originale Kontextmenüs.

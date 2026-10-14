@@ -119,6 +119,23 @@ jobs:
           "msix_path=$msixPath" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
 
+      - name: Validate localized release notes
+        if: ${{ !inputs.access_check_only }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          foreach ($locale in @('de-de', 'en-us')) {
+            $path = "./store-listing/assets/store/release-notes/$env:RELEASE_TAG.$locale.txt"
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing $locale Store release notes for $env:RELEASE_TAG."
+            }
+            $notes = (Get-Content -LiteralPath $path -Raw -Encoding utf8).Trim()
+            if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 1500) {
+              throw "$locale Store release notes must contain 1 to 1500 characters."
+            }
+            Write-Host "$locale Store release notes validated ($($notes.Length) characters)."
+          }
+
       - name: Test and publish self-contained application
         if: ${{ !inputs.access_check_only }}
         run: ./tools/Build.ps1 -Portable
@@ -215,7 +232,7 @@ jobs:
           msstore publish $env:MSIX_PATH -id $env:STORE_PRODUCT_ID --noCommit
           if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the draft MSIX upload.' }
 
-      - name: Add Windows desktop screenshot to Store listings
+      - name: Update Windows screenshot and localized Store release notes
         if: ${{ !inputs.access_check_only }}
         env:
           MSIX_PATH: ${{ steps.package.outputs.msix_path }}
@@ -227,6 +244,8 @@ jobs:
             -ProductId $env:STORE_PRODUCT_ID `
             -MsixPath $env:MSIX_PATH `
             -ScreenshotPath ./store-listing/assets/store/velishell-windows-desktop.png `
+            -GermanReleaseNotesPath ./store-listing/assets/store/release-notes/${{ inputs.tag }}.de-de.txt `
+            -EnglishReleaseNotesPath ./store-listing/assets/store/release-notes/${{ inputs.tag }}.en-us.txt `
             -TenantId $env:STORE_TENANT_ID `
             -ClientId $env:STORE_CLIENT_ID `
             -ClientSecret $env:STORE_CLIENT_SECRET
@@ -247,7 +266,7 @@ jobs:
           @(
             '## Microsoft Store MSIX submitted',
             '',
-            "VeliShell $env:RELEASE_VERSION and the Windows desktop screenshot were submitted to Partner Center for certification.",
+            "VeliShell $env:RELEASE_VERSION, the Windows desktop screenshot, and German/English release notes were submitted to Partner Center for certification.",
             '',
             'Microsoft signs the Store-delivered package after certification.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8

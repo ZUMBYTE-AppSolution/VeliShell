@@ -1,0 +1,7 @@
+New in VeliShell 0.13.3:
+
+The menu bar can now show detected notification-area icons from running Windows apps. They appear in a monochrome style that adapts to the light or dark theme. Individual icons can be tucked behind an expandable chevron; the overflow closes after ten seconds without a selection or when it loses focus.
+
+Shadows around the Dock, panels, previews, and VeliShell windows now look consistently soft. Rounded window outlines are no longer interrupted by rectangular shadow edges.
+
+Note: When the Windows taskbar is hidden, third-party notification-area icons are mirrored on a best-effort basis. This does not replace their original context menus.

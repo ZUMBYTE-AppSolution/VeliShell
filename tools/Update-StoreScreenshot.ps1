@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ProductId,
     [Parameter(Mandatory = $true)][string]$MsixPath,
     [Parameter(Mandatory = $true)][string]$ScreenshotPath,
+    [Parameter(Mandatory = $true)][string]$GermanReleaseNotesPath,
+    [Parameter(Mandatory = $true)][string]$EnglishReleaseNotesPath,
     [Parameter(Mandatory = $true)][string]$TenantId,
     [Parameter(Mandatory = $true)][string]$ClientId,
     [Parameter(Mandatory = $true)][string]$ClientSecret
@@ -9,9 +11,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-foreach ($path in @($MsixPath, $ScreenshotPath)) {
+foreach ($path in @($MsixPath, $ScreenshotPath, $GermanReleaseNotesPath, $EnglishReleaseNotesPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required Store submission file is missing: $path"
+    }
+}
+
+$releaseNotes = @{
+    'de-de' = (Get-Content -LiteralPath $GermanReleaseNotesPath -Raw -Encoding utf8).Trim()
+    'en-us' = (Get-Content -LiteralPath $EnglishReleaseNotesPath -Raw -Encoding utf8).Trim()
+}
+foreach ($entry in $releaseNotes.GetEnumerator()) {
+    if ([string]::IsNullOrWhiteSpace($entry.Value) -or $entry.Value.Length -gt 1500) {
+        throw "The $($entry.Key) Store release notes must contain 1 to 1500 characters."
     }
 }
 
@@ -58,7 +70,26 @@ foreach ($locale in $listings.Keys) {
     if (-not $baseListing) {
         throw "The Store listing for $locale has no base listing."
     }
+    $localeKey = $locale.ToLowerInvariant()
+    if (-not $releaseNotes.ContainsKey($localeKey)) {
+        throw "There are no release notes for Store listing locale $locale."
+    }
+    $baseListing['ReleaseNotes'] = $releaseNotes[$localeKey]
+
     $existingImages = @($baseListing['Images'] | Where-Object { $null -ne $_ })
+    $imageName = "velishell-windows-desktop-$localeKey.png"
+    $matchingImage = @($existingImages | Where-Object {
+        $_['FileName'] -eq $imageName -and $_['FileStatus'] -ne 'PendingDelete'
+    })
+    if ($matchingImage.Count -gt 1) {
+        throw "The Store screenshot occurs more than once in the $locale listing."
+    }
+    if ($matchingImage.Count -eq 1) {
+        if ($matchingImage[0]['FileStatus'] -eq 'PendingUpload') {
+            $newImages += $imageName
+        }
+        continue
+    }
     $desktopScreenshots = @($existingImages | Where-Object {
         $_['ImageType'] -eq 'Screenshot' -and $_['FileStatus'] -ne 'PendingDelete'
     })
@@ -66,10 +97,6 @@ foreach ($locale in $listings.Keys) {
         throw "The Store listing for $locale already has ten desktop screenshots."
     }
 
-    $imageName = "velishell-windows-desktop-$($locale.ToLowerInvariant()).png"
-    if ($existingImages | Where-Object { $_['FileName'] -eq $imageName }) {
-        throw "The Store screenshot already exists in the $locale listing."
-    }
     $caption = if ($locale -match '^de([_-]|$)') {
         'VeliShell-Menüleiste und Dock auf einem Windows-Desktop neben den Windows-Einstellungen.'
     } else {
@@ -147,4 +174,4 @@ try {
     throw 'The combined MSIX and screenshot archive could not be uploaded; the draft was not submitted.'
 }
 
-Write-Host "Added the Windows screenshot to $($newImages.Count) Store listing(s)."
+Write-Host "Updated localized release notes in $($listings.Count) Store listing(s); uploaded $($newImages.Count) Windows screenshot(s)."
