@@ -195,6 +195,12 @@ jobs:
           $draft = (msstore submission get $env:STORE_PRODUCT_ID | Out-String) | ConvertFrom-Json -AsHashtable
           if ($LASTEXITCODE -ne 0) { throw 'The pending Store draft could not be inspected.' }
           Write-Host "Draft top-level fields: $(@($draft.Keys) -join ', ')"
+          Write-Host "Draft status: $($draft['Status']); price: $($draft['Pricing']['PriceId'])"
+          Write-Host "Draft locales: $(@($draft['Listings'].Keys) -join ', ')"
+          $firstLocale = @($draft['Listings'].Keys)[0]
+          Write-Host "First listing fields: $(@($draft['Listings'][$firstLocale].Keys) -join ', ')"
+          Write-Host "First base listing fields: $(@($draft['Listings'][$firstLocale]['BaseListing'].Keys) -join ', ')"
+          Write-Host "Draft packages: $(@($draft['ApplicationPackages'] | ForEach-Object { $_['FileName'] + ':' + $_['FileStatus'] }) -join ', ')"
           foreach ($field in @('data', 'responseData', 'submission', 'package')) {
             if ($draft.Contains($field) -and $draft[$field] -is [System.Collections.IDictionary]) {
               Write-Host "Draft $field fields: $(@($draft[$field].Keys) -join ', ')"
