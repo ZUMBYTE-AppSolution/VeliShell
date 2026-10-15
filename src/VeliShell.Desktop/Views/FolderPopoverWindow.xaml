@@ -10,12 +10,12 @@
  AllowDrop="True" DragOver="VirtualFolder_DragOver" Drop="VirtualFolder_Drop"
  KeyDown="Window_KeyDown" PreviewMouseWheel="Window_PreviewMouseWheel"
  PreviewTouchDown="Window_PreviewTouchDown" PreviewTouchUp="Window_PreviewTouchUp">
- <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
+ <Border x:Name="GlassPlate" Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect>
    <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.42" />
   </Border.Effect>
-  <Grid ClipToBounds="True">
+  <Grid ClipToBounds="True" controls:RoundedClip.Radius="23">
    <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />
    <Ellipse Width="300" Height="300" HorizontalAlignment="Right" VerticalAlignment="Top"
             Margin="0,-205,-140,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.14"

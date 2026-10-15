@@ -50,6 +50,7 @@ public partial class MenuBarWindow : Window
     private bool _closed;
     private bool _hidden;
     private bool _trayExpanded;
+    private bool _trayPinnedOpen;
     private ControlCenterWindow? _controlCenter;
     private AudioDevicesWindow? _audioDevices;
     private NotificationCenterWindow? _notificationCenter;
@@ -256,16 +257,20 @@ public partial class MenuBarWindow : Window
     private void RenderTrayIcons()
     {
         var maximumVisibleIcons = ActualWidth is > 0 and < 1100 ? 3 : 6;
+        var alwaysShow = _app.Preferences.MenuBarAlwaysShowTrayApps;
         var hiddenIds = _app.Preferences.HiddenTrayIconIds.ToHashSet(StringComparer.Ordinal);
         var preferredIds = _app.Preferences.PreferredTrayIconIds
             .Select((id, index) => (id, index))
             .ToDictionary(item => item.id, item => item.index, StringComparer.Ordinal);
         var orderedIcons = _trayIcons.OrderBy(icon => preferredIds.GetValueOrDefault(icon.Id, int.MaxValue))
+            .DistinctBy(icon => icon.Executable, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var signature = $"{maximumVisibleIcons}|" + string.Join("|", orderedIcons.Select(icon =>
+        var signature = $"{maximumVisibleIcons}:{alwaysShow}|" + string.Join("|", orderedIcons.Select(icon =>
             $"{icon.Id}:{icon.Name}:{icon.SnapshotHash}:{hiddenIds.Contains(icon.Id)}"));
         if (signature == _traySignature) return;
         _traySignature = signature;
+        var wasPinnedOpen = _trayPinnedOpen;
+        _trayPinnedOpen = alwaysShow;
         TrayIconsPanel.Children.Clear();
         TrayOverflowItemsPanel.Children.Clear();
         TrayOverflowScroller.ScrollToHorizontalOffset(0);
@@ -273,7 +278,7 @@ public partial class MenuBarWindow : Window
         foreach (var icon in orderedIcons)
         {
             var hidden = hiddenIds.Contains(icon.Id) || visibleCount >= maximumVisibleIcons;
-            var button = CreateTrayIconButton(icon, hidden);
+            var button = CreateTrayIconButton(icon, hidden && !alwaysShow);
             if (button is null) continue;
             if (hidden) TrayOverflowItemsPanel.Children.Add(button);
             else
@@ -282,9 +287,11 @@ public partial class MenuBarWindow : Window
                 visibleCount++;
             }
         }
-        TrayChevronButton.Visibility = TrayOverflowItemsPanel.Children.Count > 0
+        TrayChevronButton.Visibility = !alwaysShow && TrayOverflowItemsPanel.Children.Count > 0
             ? Visibility.Visible : Visibility.Collapsed;
-        if (TrayChevronButton.Visibility != Visibility.Visible) SetTrayExpanded(false);
+        if (TrayOverflowItemsPanel.Children.Count == 0 || (wasPinnedOpen && !alwaysShow))
+            SetTrayExpanded(false);
+        else if (alwaysShow) SetTrayExpanded(true);
         else if (_trayExpanded) AnimateTrayReveal(TrayOverflowItemsPanel.Children.Count * 32d);
     }
 
@@ -313,7 +320,7 @@ public partial class MenuBarWindow : Window
             System.Windows.Automation.AutomationProperties.SetName(button, icon.Name);
             button.Click += (_, _) =>
             {
-                SetTrayExpanded(false);
+                if (!_trayPinnedOpen) SetTrayExpanded(false);
                 if (File.Exists(icon.Executable)) LaunchService.Open(icon.Executable);
             };
             button.PreviewMouseRightButtonUp += (_, args) =>
@@ -398,8 +405,12 @@ public partial class MenuBarWindow : Window
         TrayOverflowScroller.ScrollToHorizontalOffset(
             TrayOverflowScroller.HorizontalOffset + (e.Delta > 0 ? -96 : 96));
         e.Handled = true;
+    }
+
+    private void RestartTrayCollapseCountdown()
+    {
         _trayCollapseTimer.Stop();
-        _trayCollapseTimer.Start();
+        if (_trayExpanded && !_trayPinnedOpen && !_closed) _trayCollapseTimer.Start();
     }
 
     private void SetTrayExpanded(bool expanded)
@@ -410,7 +421,6 @@ public partial class MenuBarWindow : Window
         {
             _hideTimer.Stop();
             SetHidden(false);
-            _trayCollapseTimer.Start();
         }
         AnimateTrayReveal(_trayExpanded ? TrayOverflowItemsPanel.Children.Count * 32d : 0d);
         var currentAngle = TrayChevronRotation.Angle;
@@ -436,7 +446,7 @@ public partial class MenuBarWindow : Window
         var available = ActualWidth - AppMenuButton.ActualWidth -
                         ActiveAppButton.ActualWidth - WindowsMenuButton.ActualWidth -
                         fixedRightWidth - 30;
-        width = Math.Min(width, Math.Min(320, Math.Max(0, available)));
+        width = Math.Min(width, Math.Min(_trayPinnedOpen ? 480 : 320, Math.Max(0, available)));
         var currentWidth = TrayOverflowReveal.ActualWidth;
         TrayOverflowReveal.BeginAnimation(WidthProperty, null);
         TrayOverflowReveal.Width = currentWidth;
@@ -444,11 +454,14 @@ public partial class MenuBarWindow : Window
             TrayOverflowReveal.Width = width;
         else
             TrayOverflowReveal.BeginAnimation(WidthProperty,
-                new DoubleAnimation(currentWidth, width, TimeSpan.FromMilliseconds(190))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                new DoubleAnimation(currentWidth, width,
+                    TimeSpan.FromMilliseconds(width <= 0 ? 300 : 190))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
     }
 
-    private void MenuBar_Deactivated(object sender, EventArgs e) => SetTrayExpanded(false);
+    private void MenuBar_Deactivated(object sender, EventArgs e) => RestartTrayCollapseCountdown();
+
+    private void MenuBar_Activated(object sender, EventArgs e) => _trayCollapseTimer.Stop();
 
     private void RenderBackgroundApps(IReadOnlyList<BackgroundApp> apps)
     {
@@ -963,7 +976,7 @@ public partial class MenuBarWindow : Window
 
     private void ClosePanels()
     {
-        SetTrayExpanded(false);
+        if (!_trayPinnedOpen) SetTrayExpanded(false);
         var panel = _openPanel;
         _openPanel = null;
         if (panel is { IsVisible: true })
@@ -980,11 +993,16 @@ public partial class MenuBarWindow : Window
     {
         _hideTimer.Stop();
         SetHidden(false);
+        _trayCollapseTimer.Stop();
     }
 
     private void Window_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        if (_trayExpanded) SetTrayExpanded(false);
+        if (_trayExpanded && !_trayPinnedOpen)
+        {
+            RestartTrayCollapseCountdown();
+            return;
+        }
         if (_app.Preferences.MenuBarAutoHide && _openPanel is null) _hideTimer.Start();
     }
 

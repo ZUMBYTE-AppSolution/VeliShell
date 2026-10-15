@@ -67,7 +67,7 @@ public partial class AudioMixerWindow : Window
             return;
         }
         var sessions = AudioSessionService.Read(device.Id);
-        var groups = sessions.GroupBy(session => session.IsSystemSound ? "\u0001system" : session.Name,
+        var groups = sessions.GroupBy(session => session.GroupKey,
                 StringComparer.CurrentCultureIgnoreCase)
             .Select(group => group.ToArray()).ToArray();
         _sessionGroupCount = groups.Length;
@@ -77,7 +77,7 @@ public partial class AudioMixerWindow : Window
         {
             var empty = new TextBlock { Text = L("AudioDevices.NoSessions"),
                 TextWrapping = TextWrapping.Wrap, Margin = new Thickness(5, 8, 5, 8) };
-            empty.SetResourceReference(ForegroundProperty, "TextSecondary");
+            empty.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
             SessionsPanel.Children.Add(empty);
         }
         foreach (var group in groups) AddSession(device.Id, group);
@@ -87,18 +87,29 @@ public partial class AudioMixerWindow : Window
     {
         var session = group[0];
         var sessionIds = group.Select(item => item.Id).ToArray();
+        var active = group.Where(item => item.IsActive).ToArray();
         var content = new StackPanel();
-        content.Children.Add(new TextBlock { Text = session.Name, FontWeight = FontWeights.SemiBold,
-            FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
+        var heading = new DockPanel();
+        var levelLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        levelLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+        DockPanel.SetDock(levelLabel, Dock.Right);
+        heading.Children.Add(levelLabel);
+        var nameLabel = new TextBlock { Text = session.Name, FontWeight = FontWeights.SemiBold,
+            FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
+        nameLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
+        heading.Children.Add(nameLabel);
+        content.Children.Add(heading);
         var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var slider = new Slider { Minimum = 0, Maximum = 100,
-            Value = group.Average(item => item.VolumePercent),
+            Value = (active.Length > 0 ? active : group).Average(item => item.VolumePercent),
             IsMoveToPointEnabled = true, Margin = new Thickness(0, 0, 14, 0) };
+        levelLabel.Text = $"{slider.Value:0}%";
         AutomationProperties.SetName(slider, session.Name + " · " + L("ControlCenter.Volume"));
         slider.ValueChanged += (_, args) =>
         {
+            levelLabel.Text = $"{args.NewValue:0}%";
             if (IsLoaded && !AudioSessionService.TrySetVolumes(deviceId, sessionIds, args.NewValue))
                 RefreshSessions();
         };
@@ -114,9 +125,11 @@ public partial class AudioMixerWindow : Window
         };
         var muteControl = new StackPanel { Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center };
-        muteControl.Children.Add(new TextBlock { Text = L("ControlCenter.Mute"),
+        var muteLabel = new TextBlock { Text = L("ControlCenter.Mute"),
             VerticalAlignment = VerticalAlignment.Center, FontSize = 10.5,
-            Margin = new Thickness(0, 0, 4, 0) });
+            Margin = new Thickness(0, 0, 4, 0) };
+        muteLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+        muteControl.Children.Add(muteLabel);
         muteControl.Children.Add(mute);
         Grid.SetColumn(muteControl, 1);
         row.Children.Add(muteControl);

@@ -213,6 +213,8 @@ internal static class GermanStrings
         ["MenuBar.Section"] = "Menüleiste",
         ["MenuBar.Enable"] = "macOS-inspirierte Menüleiste anzeigen",
         ["MenuBar.AutoHide"] = "Menüleiste automatisch ausblenden",
+        ["MenuBar.AlwaysShowTrayApps"] = "Aktive Tray-Apps immer in der Menüleiste zeigen",
+        ["MenuBar.AlwaysShowTrayAppsDescription"] = "Auch sonst ausgeblendete Windows-Infosymbole bleiben direkt in der Leiste, solange ihre App läuft. Gleiche Apps erscheinen nur einmal; bei wenig Platz kannst du seitlich scrollen.",
         ["MenuBar.Topmost"] = "Menüleiste über anderen Fenstern anzeigen",
         ["MenuBar.Description"] = "Die optionale Leiste zeigt aktive Fenster, zuvor beobachtete Hintergrund-Apps, Uhr und Systemindikatoren. Sie reserviert ihren Platz am oberen Bildschirmrand, damit maximierte Fenster nicht überlappt werden, ersetzt aber weder Explorer noch die Windows-Taskleiste.",
         ["MenuBar.ReservationFailed"] = "Windows konnte den Platz für die Menüleiste nicht sicher reservieren. Die Menüleiste bleibt deshalb ausgeschaltet.",

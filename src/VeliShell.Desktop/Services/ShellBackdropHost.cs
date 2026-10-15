@@ -95,6 +95,19 @@ internal sealed class ShellBackdropHost : IDisposable
         bounds.Top = Math.Max(bounds.Top, overlayBounds.Top);
         bounds.Right = Math.Min(bounds.Right, overlayBounds.Right);
         bounds.Bottom = Math.Min(bounds.Bottom, overlayBounds.Bottom);
+        if (_cornerRadius > 0)
+        {
+            // Keep the native acrylic strictly inside the antialiased WPF rim.
+            // The native round-rect region has hard pixel edges; without this
+            // inset they can show up as square corners behind the soft border.
+            var dpi = VisualTreeHelper.GetDpi(_overlay);
+            var insetX = Math.Max(1, (int)Math.Ceiling(2 * dpi.DpiScaleX));
+            var insetY = Math.Max(1, (int)Math.Ceiling(2 * dpi.DpiScaleY));
+            bounds.Left += insetX;
+            bounds.Top += insetY;
+            bounds.Right -= insetX;
+            bounds.Bottom -= insetY;
+        }
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
         if (width < 2 || height < 2)
@@ -112,9 +125,10 @@ internal sealed class ShellBackdropHost : IDisposable
         {
             if (!NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
                     bounds.Left, bounds.Top, width, height, SwpNoActivate)) return;
-            if (!_hasBounds || width != _lastBounds.Right - _lastBounds.Left ||
-                height != _lastBounds.Bottom - _lastBounds.Top)
-                ApplyRegion(width, height);
+            // A layered WPF host can lose its native region when it is shown
+            // again or moved between monitors. Restore the rounded clipping
+            // whenever the acrylic window's bounds change.
+            ApplyRegion(width, height);
             _lastBounds = bounds;
             _hasBounds = true;
         }
@@ -123,6 +137,7 @@ internal sealed class ShellBackdropHost : IDisposable
             // A Topmost change can move the material above the interactive WPF window.
             NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
                 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate);
+            if (!wasVisible) ApplyRegion(width, height);
         }
     }
 
@@ -132,6 +147,15 @@ internal sealed class ShellBackdropHost : IDisposable
         _motionUntil = Environment.TickCount64 + durationMilliseconds + 50;
         _motionTimer.Start();
         Sync();
+    }
+
+    internal void AlignZOrder()
+    {
+        if (!_active || _disposed || _surfaceHandle == 0) return;
+        var overlayHandle = new WindowInteropHelper(_overlay).Handle;
+        if (overlayHandle == 0) return;
+        NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
+            0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate);
     }
 
     private bool CreateSurface()

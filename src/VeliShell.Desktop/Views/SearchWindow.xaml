@@ -3,28 +3,31 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
  xmlns:services="clr-namespace:VeliShell.Desktop.Services"
- Title="{services:Loc Search.Title}" Width="650" Height="520" MinWidth="520" MinHeight="360"
+ Title="{services:Loc Search.Title}" Width="660" Height="500" MinWidth="520" MinHeight="360"
  WindowStartupLocation="Manual" ShowInTaskbar="False" Topmost="True"
  KeyDown="Window_KeyDown">
- <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="14"
-         BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
-  <Grid ClipToBounds="True">
+ <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="18"
+         BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1">
+  <Grid controls:RoundedClip.Radius="17">
    <Grid.RowDefinitions>
-    <RowDefinition Height="50" />
+    <RowDefinition Height="44" />
     <RowDefinition Height="Auto" />
     <RowDefinition Height="*" />
     <RowDefinition Height="Auto" />
    </Grid.RowDefinitions>
+   <Border Grid.RowSpan="4" Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
    <Ellipse Grid.RowSpan="4" Width="420" Height="420" HorizontalAlignment="Right"
             VerticalAlignment="Top" Margin="0,-280,-215,0"
-            Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.1" IsHitTestVisible="False">
+            Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.07" IsHitTestVisible="False">
     <Ellipse.Effect><BlurEffect Radius="38" /></Ellipse.Effect>
    </Ellipse>
+   <Border Grid.RowSpan="4" Height="1" Margin="26,1,26,0" VerticalAlignment="Top"
+           Background="{DynamicResource GlassHighlight}" Opacity="0.7" IsHitTestVisible="False" />
    <controls:TrafficLights HorizontalAlignment="Left" VerticalAlignment="Center" Margin="13,0,0,0" />
    <TextBlock Grid.Row="0" Text="{services:Loc Search.Title}" FontSize="14" FontWeight="SemiBold"
               HorizontalAlignment="Center" VerticalAlignment="Center" />
-   <Border Grid.Row="1" Margin="24,12,24,15" Padding="14,8" CornerRadius="13"
-           Background="{DynamicResource ControlSurfaceGradient}" BorderBrush="{DynamicResource CardStroke}"
+   <Border Grid.Row="1" Margin="22,8,22,14" Padding="14,8" CornerRadius="13"
+           Background="{DynamicResource GlassControlSurface}" BorderBrush="{DynamicResource GlassCardStroke}"
            BorderThickness="1">
     <DockPanel>
      <controls:VeliSymbol Symbol="Search" Width="21" Height="21" Foreground="{DynamicResource TextSecondary}"
@@ -34,12 +37,12 @@
               PreviewKeyDown="QueryBox_PreviewKeyDown" AutomationProperties.Name="{services:Loc Search.Query}" />
     </DockPanel>
    </Border>
-   <ScrollViewer Grid.Row="2" Margin="24,0,24,0" VerticalScrollBarVisibility="Auto"
+   <ScrollViewer Grid.Row="2" Margin="22,0,22,0" VerticalScrollBarVisibility="Hidden"
                  HorizontalScrollBarVisibility="Disabled">
     <StackPanel x:Name="ResultsPanel" />
    </ScrollViewer>
-   <Border Grid.Row="3" BorderBrush="{DynamicResource CardStroke}" BorderThickness="0,1,0,0"
-           Padding="24,13">
+   <Border Grid.Row="3" BorderBrush="{DynamicResource GlassCardStroke}" BorderThickness="0,1,0,0"
+           Padding="22,12">
     <TextBlock x:Name="Footer" Style="{StaticResource SecondaryText}" />
    </Border>
   </Grid>

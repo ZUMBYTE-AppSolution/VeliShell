@@ -27,6 +27,8 @@ public partial class FolderPopoverWindow : Window, ITransientPanel
     private int _pageIndex;
     private Point? _touchStart;
     private bool _closing;
+    private ShellBackdropHost? _backdrop;
+    private ThemeService? _theme;
 
     internal FolderPopoverWindow(string rootPath, FolderDisplayMode mode = FolderDisplayMode.List)
     {
@@ -62,9 +64,23 @@ public partial class FolderPopoverWindow : Window, ITransientPanel
 
     private void RegisterCloseGuard()
     {
+        _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
+        if (Application.Current is App { Themes: not null } host)
+        {
+            _theme = host.Themes;
+            _theme.Changed += RefreshBackdrop;
+        }
+        Loaded += (_, _) => RefreshBackdrop();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
         Closing += (_, _) => _closing = true;
+        Closed += (_, _) =>
+        {
+            if (_theme is not null) _theme.Changed -= RefreshBackdrop;
+            _backdrop?.Dispose();
+        };
     }
+
+    private void RefreshBackdrop() => _backdrop?.Apply();
 
     public void CloseOnce()
     {

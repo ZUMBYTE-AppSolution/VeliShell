@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.6] - 2026-10-15
+
+### Behoben
+
+- Der App-Regler im Lautstärkemixer steuert bei Apple Music jetzt auch die aktive Wiedergabe im zugehörigen Hilfsprozess. Beide Audiositzungen erscheinen unter einem gemeinsamen „Apple Music“-Eintrag; andere Apps desselben Pakets werden nicht pauschal zusammengelegt. App-Namen sind im Dunkelmodus wieder gut lesbar und der eingestellte Prozentwert wird angezeigt.
+- Das automatisch ausgeblendete Dock lässt sich über die gesamte untere Kante des jeweiligen Bildschirms einblenden und bleibt auch vor normalen maximierten Vordergrundfenstern erreichbar.
+
+### Verbessert
+
+- Die Menüleiste klappt ausgeblendete Tray-Symbole nach Fokusverlust oder Verlassen sanft und verzögert ein. Auf Wunsch bleiben aktive Tray-Apps dauerhaft sichtbar, ohne doppelte App-Symbole.
+- Dock-Icons können bis auf 24 DIP verkleinert werden. Suche, Ordneransichten, Kontextmenüs und der Dialog für virtuelle Ordner nutzen einheitlichere Glasflächen und Rundungen; der Ordnerdialog öffnet zentriert und zeigt seine Schaltflächen vollständig.
+
 ## [0.13.5] - 2026-10-15
 
 ### Hinzugefügt

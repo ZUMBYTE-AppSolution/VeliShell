@@ -10,7 +10,6 @@
  </Style>
  <Style TargetType="TextBlock">
   <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
-  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
  </Style>
  <Style x:Key="SecondaryText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
   <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
@@ -23,11 +22,11 @@
  </Style>
  <Style x:Key="Card" TargetType="Border">
   <Setter Property="Background" Value="{DynamicResource CardSurfaceGradient}" />
-  <Setter Property="BorderBrush" Value="{DynamicResource CardStroke}" />
-  <Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="12" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassCardStroke}" />
+  <Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="14" />
   <Setter Property="Padding" Value="18" />
   <Setter Property="Effect">
-   <Setter.Value><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="16" ShadowDepth="3" Opacity="0.24" /></Setter.Value>
+   <Setter.Value><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="13" ShadowDepth="2" Opacity="0.14" /></Setter.Value>
   </Setter>
  </Style>
  <Style x:Key="GlassCard" TargetType="Border">
@@ -46,6 +45,27 @@
   <Setter Property="BorderThickness" Value="1" />
   <Setter Property="CornerRadius" Value="14" />
   <Setter Property="Padding" Value="12" />
+ </Style>
+ <Style x:Key="SpotlightResultButton" TargetType="Button">
+  <Setter Property="Background" Value="Transparent" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderBrush" Value="Transparent" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="Cursor" Value="Hand" />
+  <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Body" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+           BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter TargetName="Body" Property="Background" Value="{DynamicResource GlassControlHover}" />
+    </Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.74" /></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentStroke}" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="GlassTileButton" TargetType="Button">
   <Setter Property="Background" Value="{DynamicResource GlassCardSurface}" />
@@ -167,15 +187,16 @@
  <Style TargetType="Button">
   <Setter Property="Background" Value="{DynamicResource ControlSurfaceGradient}" />
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
-  <Setter Property="BorderBrush" Value="{DynamicResource CardStroke}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassCardStroke}" />
   <Setter Property="BorderThickness" Value="1" />
   <Setter Property="Padding" Value="14,7" /><Setter Property="Cursor" Value="Hand" />
   <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="8"
+   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="11"
     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
     <Border.Effect><DropShadowEffect Color="{DynamicResource AccentGlowColor}" BlurRadius="9" ShadowDepth="0" Opacity="0.12" /></Border.Effect>
-    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                      TextElement.Foreground="{TemplateBinding Foreground}" />
    </Border>
    <ControlTemplate.Triggers>
     <Trigger Property="IsMouseOver" Value="True">
@@ -193,10 +214,11 @@
   <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
   <Setter Property="BorderBrush" Value="{DynamicResource AccentStroke}" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="8"
+   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="11"
     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
     <Border.Effect><DropShadowEffect Color="{DynamicResource AccentGlowColor}" BlurRadius="17" ShadowDepth="0" Opacity="0.48" /></Border.Effect>
-    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                      TextElement.Foreground="{TemplateBinding Foreground}" />
    </Border>
    <ControlTemplate.Triggers>
     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Body" Property="Background" Value="{DynamicResource AccentGradientHover}" /></Trigger>
@@ -353,16 +375,27 @@
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="GlassMenuPlate" TargetType="Border">
+  <Setter Property="Background" Value="{DynamicResource GlassPanelSurface}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassPanelStroke}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="CornerRadius" Value="14" />
+  <Setter Property="Padding" Value="5" />
+  <Setter Property="Effect">
+   <Setter.Value><DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="22" ShadowDepth="4" Opacity="0.36" /></Setter.Value>
+  </Setter>
+ </Style>
  <Style TargetType="ContextMenu">
   <Setter Property="Background" Value="{DynamicResource MenuSurface}" />
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="FontFamily" Value="{StaticResource UiFont}" /><Setter Property="FontSize" Value="13" />
   <Setter Property="MinWidth" Value="210" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
-   <Border CornerRadius="10" Background="{DynamicResource CardSurfaceGradient}" Padding="5"
-    BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
-    <Border.Effect><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="22" ShadowDepth="5" Opacity="0.38" /></Border.Effect>
-    <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
+   <Border Style="{StaticResource GlassMenuPlate}">
+    <Grid controls:RoundedClip.Radius="13">
+     <Border Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
+     <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
+    </Grid>
    </Border>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -371,7 +404,7 @@
   <Setter Property="Padding" Value="10,7" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
    <Grid>
-    <Border x:Name="Body" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
+    <Border x:Name="Body" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}">
      <Grid>
       <Grid.ColumnDefinitions>
        <ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="14" />
@@ -379,6 +412,7 @@
       <TextBlock x:Name="Checkmark" Text="✓" Visibility="Collapsed" VerticalAlignment="Center"
                  Foreground="{TemplateBinding Foreground}" />
       <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False"
+                        TextElement.Foreground="{TemplateBinding Foreground}"
                         VerticalAlignment="Center" />
       <TextBlock x:Name="SubmenuArrow" Grid.Column="2" Text="›" FontSize="17"
                  Visibility="Collapsed" VerticalAlignment="Center" TextAlignment="Right"
@@ -390,13 +424,13 @@
            HorizontalOffset="-3" VerticalOffset="-5"
            IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
            AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-     <Border MinWidth="210" Padding="5" CornerRadius="10"
-             Background="{DynamicResource CardSurfaceGradient}"
-             BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
-      <Border.Effect><DropShadowEffect Color="{DynamicResource SubtleShadowColor}" BlurRadius="22" ShadowDepth="5" Opacity="0.38" /></Border.Effect>
-      <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto">
-       <ItemsPresenter />
-      </ScrollViewer>
+     <Border Style="{StaticResource GlassMenuPlate}" MinWidth="210">
+      <Grid controls:RoundedClip.Radius="13">
+       <Border Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
+       <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto">
+        <ItemsPresenter />
+       </ScrollViewer>
+      </Grid>
      </Border>
     </Popup>
    </Grid>

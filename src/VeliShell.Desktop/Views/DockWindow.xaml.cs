@@ -30,6 +30,7 @@ public partial class DockWindow : Window
     private readonly ShellBackdropHost _backdrop;
     private readonly DispatcherTimer _pollTimer = new() { Interval = TimeSpan.FromMilliseconds(1500) };
     private readonly DispatcherTimer _hideTimer = new() { Interval = TimeSpan.FromMilliseconds(900) };
+    private readonly DispatcherTimer _edgeRevealTimer = new() { Interval = TimeSpan.FromMilliseconds(75) };
     private readonly List<DockTile> _tiles = [];
     private readonly Dictionary<string, long> _launchDeadlines = new(StringComparer.Ordinal);
     private List<NativeWindow> _windows = [];
@@ -40,6 +41,8 @@ public partial class DockWindow : Window
     private DockTile? _dragSource;
     private int _dropInsertionIndex = -1;
     private long _suppressActivationUntil;
+    private long _edgeTransitDeadline;
+    private bool _edgeRevealTracking;
     private bool _refreshing, _closed, _hidden, _dragInProgress;
     private ContextMenu? _menu;
     private DragGhostWindow? _dragGhost;
@@ -71,18 +74,29 @@ public partial class DockWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += async (_, _) => { ApplyPreferences(); ApplyBackdrop(); _pollTimer.Start(); await RefreshWindows(); };
         _pollTimer.Tick += async (_, _) => await RefreshWindows();
+        _edgeRevealTimer.Tick += (_, _) => ProbeEdgeReveal();
         _hideTimer.Tick += (_, _) =>
         {
             _hideTimer.Stop();
             if (_app.Preferences.AutoHide && !_dragInProgress && !IsMouseOver &&
                 _menu?.IsOpen != true && _folderPopover?.IsVisible != true &&
-                _startLauncher?.IsVisible != true) SetHidden(true);
+                _startLauncher?.IsVisible != true)
+            {
+                if (IsCursorAtDisplayBottomEdge())
+                {
+                    _edgeRevealTracking = true;
+                    _edgeTransitDeadline = 0;
+                    _edgeRevealTimer.Start();
+                    RaiseForEdgeReveal();
+                }
+                else SetHidden(true);
+            }
         };
         Closed += (_, _) =>
         {
             _closed = true;
             if (_menu is { IsOpen: true } menu) menu.IsOpen = false;
-            _pollTimer.Stop(); _hideTimer.Stop();
+            _pollTimer.Stop(); _hideTimer.Stop(); _edgeRevealTimer.Stop();
             _app.PreferencesChanged -= ApplyPreferences;
             if (_app.Themes is not null) _app.Themes.Changed -= ApplyBackdrop;
             _backdrop.Dispose();
@@ -191,7 +205,10 @@ public partial class DockWindow : Window
             Rebuild();
             StopCompletedLaunches();
             var fullscreen = WindowCatalog.ForegroundIsFullscreenOnDisplay(_displayDevice);
-            Visibility = fullscreen ? Visibility.Hidden : Visibility.Visible;
+            // Auto-hide must retain an edge-reveal route even while another app
+            // fills the display. Non-auto-hidden docks still yield to fullscreen.
+            Visibility = ShouldShowWithForegroundFullscreen(fullscreen, _app.Preferences.AutoHide)
+                ? Visibility.Visible : Visibility.Hidden;
             PositionDock();
             // Polling is a fallback for system theme changes that don't raise a preference event.
             _app.Themes.Apply(_app.Preferences.Appearance,
@@ -1229,16 +1246,97 @@ public partial class DockWindow : Window
             tile.SetScale(scale, false);
         }
     }
-    private void Dock_MouseEnter(object sender, MouseEventArgs e) { _hideTimer.Stop(); SetHidden(false); }
+    private void Dock_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _hideTimer.Stop();
+        _edgeRevealTracking = false;
+        SetHidden(false);
+    }
     private void Dock_MouseLeave(object sender, MouseEventArgs e)
     {
         foreach (var tile in _tiles) tile.SetScale(1, !_app.Preferences.ReducedMotion);
         if (_app.Preferences.AutoHide) _hideTimer.Start();
     }
+
+    private void ProbeEdgeReveal()
+    {
+        if (_closed || (!_hidden && !_edgeRevealTracking) || !_app.Preferences.AutoHide ||
+            _dragInProgress || !IsVisible) return;
+        var atEdge = IsCursorAtDisplayBottomEdge();
+        if (_edgeRevealTracking && !_hidden)
+        {
+            if (IsMouseOver || _menu?.IsOpen == true || _folderPopover?.IsVisible == true ||
+                _startLauncher?.IsVisible == true)
+            {
+                _edgeRevealTracking = false;
+                _edgeRevealTimer.Stop();
+            }
+            else if (atEdge)
+            {
+                _edgeTransitDeadline = 0;
+                RaiseForEdgeReveal();
+            }
+            else if (_edgeTransitDeadline == 0)
+                _edgeTransitDeadline = Environment.TickCount64 + 2200;
+            else if (Environment.TickCount64 >= _edgeTransitDeadline)
+                SetHidden(true);
+            return;
+        }
+        if (!atEdge) return;
+        _hideTimer.Stop();
+        SetHidden(false);
+        _edgeRevealTracking = true;
+        _edgeTransitDeadline = 0;
+        _edgeRevealTimer.Start();
+        RaiseForEdgeReveal();
+    }
+
+    private void RaiseForEdgeReveal()
+    {
+        // Raising without activating keeps keyboard focus in the foreground app.
+        // Respect the user's Always-on-top setting for the resulting z-order.
+        if (_handle != 0)
+        {
+            NativeMethods.SetWindowPos(_handle, _app.Preferences.AlwaysOnTop ? new nint(-1) : 0,
+                0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+            _backdrop.AlignZOrder();
+        }
+    }
+
+    private bool IsCursorAtDisplayBottomEdge()
+    {
+        if (!NativeMethods.GetCursorPos(out var cursor) ||
+            !NativeMethods.TryMonitorForDevice(_displayDevice, out var monitor)) return false;
+        var edgeBand = Math.Max(4, (int)Math.Ceiling(6 * VisualTreeHelper.GetDpi(this).DpiScaleY));
+        var workBottom = _app.Taskbars.IsHidden ? monitor.Monitor.Bottom : monitor.Work.Bottom;
+        return ShouldRevealAtBottomEdge(cursor.X, cursor.Y, monitor.Monitor.Left,
+            monitor.Monitor.Top, monitor.Monitor.Right, monitor.Monitor.Bottom,
+            workBottom, edgeBand);
+    }
+
+    private static bool ShouldRevealAtBottomEdge(int x, int y, int left, int top,
+        int right, int bottom, int workBottom, int edgeBand)
+    {
+        if (x < left || x >= right || y < top || y >= bottom) return false;
+        return y >= bottom - edgeBand ||
+               (workBottom > top && workBottom < bottom &&
+                y >= workBottom - edgeBand && y <= workBottom + edgeBand);
+    }
+
+    private static bool ShouldShowWithForegroundFullscreen(bool fullscreen, bool autoHide) =>
+        !fullscreen || autoHide;
+
     private void SetHidden(bool hidden)
     {
         if (_dragInProgress && hidden) return;
         _hidden = hidden && _app.Preferences.AutoHide;
+        if (_hidden)
+        {
+            _edgeRevealTracking = false;
+            _edgeTransitDeadline = 0;
+            _edgeRevealTimer.Start();
+        }
+        else if (!_edgeRevealTracking) _edgeRevealTimer.Stop();
         RevealHandle.Visibility = _hidden ? Visibility.Visible : Visibility.Collapsed;
         DockBody.IsHitTestVisible = !_hidden;
         var target = _hidden ? Height + 10 : 0;

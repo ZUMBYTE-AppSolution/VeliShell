@@ -75,7 +75,9 @@ public sealed class ThemeService : IDisposable
         // panels still retain enough tint for text contrast.
         var opacityScale = 1 + (50 - transparency) * 0.012;
         foreach (var key in new[] { "DockSurfaceGradient", "DockAcrylicSurfaceGradient",
-                     "MenuBarSurface", "MenuBarAcrylicSurface", "GlassPanelSurface" })
+                     "MenuBarSurface", "MenuBarAcrylicSurface", "GlassPanelSurface",
+                     "WindowBackdropGradient", "SidebarGradient", "CardSurfaceGradient",
+                     "ControlSurfaceGradient" })
         {
             if (dictionary[key] is not LinearGradientBrush original) continue;
             var brush = original.CloneCurrentValue();

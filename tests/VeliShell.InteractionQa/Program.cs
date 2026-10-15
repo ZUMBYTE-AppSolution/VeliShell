@@ -32,6 +32,8 @@ internal static class Program
             return RenderStartLauncher();
         if (args.Contains("--render-folder", StringComparer.OrdinalIgnoreCase))
             return RenderFolderViews();
+        if (args.Contains("--render-glass-dialogs", StringComparer.OrdinalIgnoreCase))
+            return RenderGlassDialogs();
         if (args.Contains("--live-multidisplay-dock", StringComparer.OrdinalIgnoreCase))
             return RunLiveMultiDisplayDockProbe();
         if (args.Contains("--live-real-multidisplay-menu", StringComparer.OrdinalIgnoreCase))
@@ -109,6 +111,7 @@ internal static class Program
             TestThumbnail(owner, source, anchor);
             TestGhostAndMask(owner, anchor);
             TestDockPinDragOutPolicy();
+            TestDockEdgeRevealPolicy();
             TestExplorerPinVerbContract();
             TestDockTileHoverMask();
             TestVeliShellAssetSurface();
@@ -124,6 +127,7 @@ internal static class Program
             TestTrayIconMirror();
             TestRunCommandParser();
             TestTransientAudioPanelClose(owner, anchor);
+            TestAudioPackagedSessionGrouping();
             TestGlassMaterialAndRoundedClip();
             var chatGptShortcutChecked = TestInstalledChatGptShortcut();
             var policyType = RequireType("VeliShell.Desktop.Services.AudioDefaultDeviceService");
@@ -139,10 +143,11 @@ internal static class Program
             var steamStatusPath = Path.Combine(AppContext.BaseDirectory, "steam-status-light-dark.png");
             var hasSteamIconSample = RenderInstalledSteamStatusIcon(steamStatusPath);
             Console.WriteLine("PASS: DWM thumbnail registered, hidden and released cleanly across 12 cycles.");
-            Console.WriteLine("PASS: Drag ghost snapped/followed/disposed at 32, 58 and 96 DIP.");
+            Console.WriteLine("PASS: Drag ghost snapped/followed/disposed at 24, 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock drag-out carries no FileDrop/shortcut payload; feedback, drop and removal share the visible dock-plate boundary while internal reorder/external file-drop inputs remain available.");
+            Console.WriteLine("PASS: Dock edge hit zones cover each display's full bottom width and its work-area edge; fullscreen visibility policy retains the auto-hide reveal route.");
             Console.WriteLine("PASS: Explorer static verbs quote one Unicode path and the same-user single-instance bridge forwards it without loading code into Explorer.");
-            Console.WriteLine("PASS: Different source safe zones normalize to the same fixed 32, 58 and 96 DIP icons without a generated backdrop; source pixels cannot resize the artwork and common 1.42x hover scale is preserved.");
+            Console.WriteLine("PASS: Different source safe zones normalize to the same fixed 24, 32, 58 and 96 DIP icons without a generated backdrop; source pixels cannot resize the artwork and common 1.42x hover scale is preserved.");
             Console.WriteLine("PASS: Bundled VeliShell app artwork expands its centered ~0.803 source safe zone to each fixed icon and uses the same p=4.37 contour without an accent plate.");
             Console.WriteLine("PASS: Dock hover labels contain only the application name, never icon-provider attribution.");
             Console.WriteLine("PASS: Settings exposes local/online/reset controls for pins, fixed dock elements, separate empty/full Recycle Bin states, and stable running-app identities.");
@@ -182,6 +187,28 @@ internal static class Program
             owner.Close();
             application.Shutdown();
         }
+    }
+
+
+    private static void TestAudioPackagedSessionGrouping()
+    {
+        var resolver = RequireMethod(RequireType("VeliShell.Desktop.Services.AudioSessionService"),
+            "ResolvePackagedGroup");
+        const string family = "AppleInc.AppleMusicWin_nzyj5cx40ttqa";
+        Func<string, string?> lookup = appId => appId == family + "!App" ? "Apple Music" : null;
+        var primary = resolver.Invoke(null, [family + "!App", "Apple Music", "AppleMusic", lookup])!;
+        var helper = resolver.Invoke(null,
+            [family + "!LibraryServer", "AMPLibraryAgent", "AMPLibraryAgent", lookup])!;
+        Require((string)primary.GetType().GetField("Item1")!.GetValue(primary)! ==
+                (string)helper.GetType().GetField("Item1")!.GetValue(helper)! &&
+                (string)helper.GetType().GetField("Item2")!.GetValue(helper)! == "Apple Music",
+            "Apple Music's playback helper is not grouped with its primary app audio control.");
+        var unrelated = resolver.Invoke(null,
+            [family + "!OtherApp", "Other App", "OtherApp", lookup])!;
+        Require((string)unrelated.GetType().GetField("Item1")!.GetValue(unrelated)! !=
+                (string)primary.GetType().GetField("Item1")!.GetValue(primary)!,
+            "Unrelated apps in the same package must not be merged into the Apple Music volume control.");
+        Console.WriteLine("PASS: Apple Music's playback helper and primary app share one audio group; unrelated package apps stay separate.");
     }
 
     private static int RenderStartLauncher()
@@ -298,6 +325,104 @@ internal static class Program
         }
     }
 
+    private static int RenderGlassDialogs()
+    {
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Light.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
+        });
+        var preferences = new Settings { FirstRunCompleted = true, Pins = Settings.Defaults() };
+        var appType = typeof(VeliShell.Desktop.App);
+        appType.GetProperty("Preferences")!.SetValue(application, preferences);
+        using var themes = new ThemeService();
+        appType.GetProperty("Themes")!.SetValue(application, themes);
+        appType.GetProperty("Dock")!.SetValue(application,
+            new VeliShell.Desktop.Views.DockWindow(application));
+        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "glass-dialog-renders");
+        Directory.CreateDirectory(outputDirectory);
+        try
+        {
+            foreach (var dark in new[] { false, true })
+            {
+                themes.Apply(dark ? Appearance.Dark : Appearance.Light,
+                    preferences.GlassGloss, preferences.GlassTransparency);
+                var suffix = dark ? "dark" : "light";
+                var search = new VeliShell.Desktop.Views.SearchWindow(application);
+                var query = (TextBox)RequireField(search.GetType(), "QueryBox").GetValue(search)!;
+                query.Text = "Editor";
+                RequireMethod(search.GetType(), "RenderResults").Invoke(search, null);
+                RenderShellPanel(search, Path.Combine(outputDirectory, $"search-{suffix}.png"), dark);
+
+                var settings = new VeliShell.Desktop.Views.PreferencesWindow(application);
+                RenderShellPanel(settings, Path.Combine(outputDirectory, $"settings-{suffix}.png"), dark);
+
+                var folderDialogType = RequireType("VeliShell.Desktop.Views.VirtualFolderNameWindow");
+                var folderDialog = (Window)(Activator.CreateInstance(folderDialogType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [null], culture: null)
+                    ?? throw new InvalidOperationException("Could not create app-folder dialog."));
+                RenderShellPanel(folderDialog,
+                    Path.Combine(outputDirectory, $"app-folder-name-{suffix}.png"), dark);
+                var plate = (Border)RequireField(folderDialogType, "GlassPlate").GetValue(folderDialog)!;
+                foreach (var name in new[] { "CancelButton", "SaveButton" })
+                {
+                    var button = (Button)RequireField(folderDialogType, name).GetValue(folderDialog)!;
+                    var bounds = button.TransformToAncestor(plate)
+                        .TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+                    Require(button.ActualWidth >= 110 && bounds.Bottom < plate.ActualHeight - 8,
+                        $"The {name} is clipped in the app-folder dialog.");
+                    if (name == "SaveButton")
+                        Require(button.Foreground is SolidColorBrush { Color: var color } &&
+                                color == Colors.White,
+                            $"The primary dialog button lost its high-contrast text color: {button.Foreground}.");
+                }
+            }
+            var workArea = SystemParameters.WorkArea;
+            var owner = new Window
+            {
+                Width = 240, Height = 72, Left = workArea.Left + 24,
+                Top = workArea.Bottom - 96, ShowInTaskbar = false,
+                WindowStartupLocation = WindowStartupLocation.Manual
+            };
+            Window? positionedDialog = null;
+            try
+            {
+                owner.Show();
+                var folderDialogType = RequireType("VeliShell.Desktop.Views.VirtualFolderNameWindow");
+                positionedDialog = (Window)(Activator.CreateInstance(folderDialogType,
+                    BindingFlags.Instance | BindingFlags.NonPublic, binder: null,
+                    args: [null], culture: null)
+                    ?? throw new InvalidOperationException("Could not create positioned app-folder dialog."));
+                positionedDialog.Owner = owner;
+                positionedDialog.Show();
+                DrainDispatcher();
+                Require(Math.Abs(positionedDialog.Left + positionedDialog.ActualWidth / 2 -
+                                 (workArea.Left + workArea.Width / 2)) < 4 &&
+                        Math.Abs(positionedDialog.Top + positionedDialog.ActualHeight / 2 -
+                                 (workArea.Top + workArea.Height / 2)) < 4,
+                    "The app-folder dialog was centered over the dock owner rather than the display.");
+            }
+            finally
+            {
+                positionedDialog?.Close();
+                owner.Close();
+            }
+            Console.WriteLine($"PASS: Search, settings and unclipped app-folder dialogs rendered in both themes: {outputDirectory}");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error);
+            return 1;
+        }
+        finally { application.Shutdown(); }
+    }
+
     private static int RenderFolderViews()
     {
         var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -354,6 +479,11 @@ internal static class Program
                     RequireMethod(popoverType, "MovePage").Invoke(popover, [-1]);
                     RenderShellPanel(popover, Path.Combine(outputDirectory,
                         $"app-folder-{(mode == FolderDisplayMode.CompactAppLauncher ? "4x4" : "3x3")}-{(dark ? "dark" : "light")}.png"), dark);
+                    var plate = (Border)RequireField(popoverType, "GlassPlate").GetValue(popover)!;
+                    Require(plate.Background is LinearGradientBrush &&
+                            plate.Child is Grid { Clip: RectangleGeometry { RadiusX: 23, RadiusY: 23 } } &&
+                            RequireField(popoverType, "_backdrop").GetValue(popover) is not null,
+                        "Dock folders must use the shared glass material, rounded clipping and native backdrop.");
                 }
 
                 var item = Activator.CreateInstance(itemType)!;
@@ -381,7 +511,7 @@ internal static class Program
             TestDockContextMenus(application, outputDirectory);
             Console.WriteLine($"PASS: Glass folder previews and paged 3×3/4×4 app grids rendered in both themes: {outputDirectory}");
             Console.WriteLine("PASS: Folder shortcuts keep their folder artwork in virtual and physical dock previews; app shortcuts stay masked.");
-            Console.WriteLine("PASS: Dock folders share the app icon center, with their captions aligned to the activity-dot row at 32, 58 and 96 DIP.");
+            Console.WriteLine("PASS: Dock folders share the app icon center, with their captions aligned to the activity-dot row at 24, 32, 58 and 96 DIP.");
             Console.WriteLine("PASS: Dock-item menus contain only item actions; dock-wide actions stay on the plate, and menus are configured to dismiss on outside clicks.");
             Console.WriteLine("PASS: Folder-view submenus have a visible popup and save selections for virtual and physical folders.");
             Console.WriteLine("PASS: A physical folder can open directly with the supplied unmasked icon in both themes; virtual folders remain launchers.");
@@ -566,7 +696,7 @@ internal static class Program
             element.TransformToAncestor(ancestor).TransformBounds(
                 new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
-        foreach (var size in new[] { 32d, 58d, 96d })
+        foreach (var size in new[] { 24d, 32d, 58d, 96d })
         {
             var folderItem = NewItem("pin:" + folder.Id, folder.Name, folder.Target, folder);
             var appItem = NewItem("pin:qa-app", "Editor", "notepad.exe", new Pin("qa-app", "Editor", "notepad.exe"));
@@ -1323,7 +1453,7 @@ internal static class Program
             ?? throw new MissingFieldException(maskType.FullName, "ContinuousCornerExponent");
         Require(Math.Abs((double)exponentField.GetRawConstantValue()! - 4.37) < 0.000001,
             "The calibrated continuous macOS-style corner exponent is no longer 4.37.");
-        foreach (var size in new[] { 32d, 58d, 96d })
+        foreach (var size in new[] { 24d, 32d, 58d, 96d })
         {
             var mask = (Geometry)createMask.Invoke(null, [size])!;
             Require(mask.IsFrozen, $"Mask at {size} DIP is not frozen.");
@@ -1477,7 +1607,7 @@ internal static class Program
                 new Rect(0, 0, 1, 1), "full-canvas artwork")
         };
 
-        foreach (var size in new[] { 32d, 58d, 96d })
+        foreach (var size in new[] { 24d, 32d, 58d, 96d })
         {
             foreach (var sample in samples)
             {
@@ -1630,6 +1760,29 @@ internal static class Program
             "External file drops into the dock are no longer available.");
     }
 
+    private static void TestDockEdgeRevealPolicy()
+    {
+        var dockType = RequireType("VeliShell.Desktop.Views.DockWindow");
+        var edge = RequireMethod(dockType, "ShouldRevealAtBottomEdge");
+        bool Hot(int x, int y, int left = 0, int top = 0, int right = 1920,
+            int bottom = 1080, int workBottom = 1040) =>
+            (bool)edge.Invoke(null, [x, y, left, top, right, bottom, workBottom, 6])!;
+        Require(Hot(0, 1079) && Hot(1919, 1079) && Hot(950, 1079),
+            "The bottom-edge reveal is still limited to the dock's center handle.");
+        Require(Hot(0, 1038) && Hot(1919, 1041),
+            "The dock cannot reveal beside a visible bottom taskbar.");
+        Require(!Hot(-1, 1079) && !Hot(1920, 1079) && !Hot(100, 900) &&
+                !Hot(100, 1079, 1920, 0, 3840, 1080, 1040),
+            "Another display or an ordinary mouse position can reveal this dock.");
+        var fullscreen = RequireMethod(dockType, "ShouldShowWithForegroundFullscreen");
+        bool Visible(bool isFullscreen, bool autoHide) =>
+            (bool)fullscreen.Invoke(null, [isFullscreen, autoHide])!;
+        Require(Visible(true, true) && !Visible(true, false) && Visible(false, false),
+            "A foreground fullscreen window still makes auto-hidden dock reveal impossible.");
+        Require(RequireField(dockType, "_edgeRevealTimer") is not null,
+            "The hidden dock has no independent cursor probe outside its WPF window.");
+    }
+
     private static void TestExplorerPinVerbContract()
     {
         var registrationType = RequireType("VeliShell.Desktop.Services.ShellVerbRegistrationService");
@@ -1695,7 +1848,7 @@ internal static class Program
         Require(Math.Abs((double)exponentField.GetRawConstantValue()! - 4.37) < 0.000001,
             "The bundled VeliShell app icon is no longer tested with the calibrated p=4.37 mask.");
 
-        foreach (var size in new[] { 32d, 58d, 96d })
+        foreach (var size in new[] { 24d, 32d, 58d, 96d })
         {
             var surface = (FrameworkElement)Activator.CreateInstance(
                 surfaceType,
@@ -2410,6 +2563,29 @@ internal static class Program
                 menuType.GetMethod("AnimateTrayReveal", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
                 menuType.GetField("_trayCollapseTimer", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
             "The inline tray reveal lost its animation or automatic-collapse lifecycle.");
+
+        // Focus loss and pointer exit must restart the countdown rather than
+        // collapsing the icons immediately. No real menu bar or appbar is shown.
+        var bar = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(menuType);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        var timerField = RequireField(menuType, "_trayCollapseTimer");
+        var expandedField = RequireField(menuType, "_trayExpanded");
+        timerField.SetValue(bar, timer);
+        expandedField.SetValue(bar, true);
+        try
+        {
+            RequireMethod(menuType, "MenuBar_Deactivated").Invoke(bar, [null, EventArgs.Empty]);
+            Require((bool)expandedField.GetValue(bar)! && timer.IsEnabled &&
+                    timer.Interval == TimeSpan.FromSeconds(10),
+                "Focus loss collapsed the tray immediately instead of delaying it for ten seconds.");
+            RequireMethod(menuType, "MenuBar_Activated").Invoke(bar, [null, EventArgs.Empty]);
+            Require((bool)expandedField.GetValue(bar)! && !timer.IsEnabled,
+                "Regaining focus did not cancel the tray collapse countdown.");
+            RequireMethod(menuType, "Window_MouseLeave").Invoke(bar, [null, null]);
+            Require((bool)expandedField.GetValue(bar)! && timer.IsEnabled,
+                "Leaving the menu bar collapsed the tray before the delayed animation.");
+        }
+        finally { timer.Stop(); }
     }
 
     private static int RenderShellPanels(Application application)
@@ -2643,13 +2819,21 @@ internal static class Program
         return root;
     }
 
+    private static int MeasureContentHeight(FrameworkElement content, int width, double minimumHeight)
+    {
+        content.Measure(new Size(width, double.PositiveInfinity));
+        return (int)Math.Ceiling(Math.Max(minimumHeight, content.DesiredSize.Height));
+    }
+
     private static void RenderShellPanel(Window window, string path, bool dark)
     {
         const int outerPadding = 30;
         var panelWidth = (int)Math.Ceiling(window.Width);
-        var panelHeight = (int)Math.Ceiling(window.Height);
         var content = window.Content as FrameworkElement
                       ?? throw new InvalidOperationException($"{window.GetType().Name} has no renderable content.");
+        var panelHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
+            ? MeasureContentHeight(content, panelWidth, window.MinHeight)
+            : (int)Math.Ceiling(window.Height);
         window.Content = null;
         content.Width = panelWidth;
         content.Height = panelHeight;
@@ -2856,7 +3040,7 @@ internal static class Program
         {
             drawing.DrawRectangle(new SolidColorBrush(Color.FromRgb(235, 238, 244)), null, new Rect(0, 0, width, height));
             var x = 20d;
-            foreach (var size in new[] { 32d, 58d, 96d })
+            foreach (var size in new[] { 24d, 32d, 58d, 96d })
             {
                 var geometry = (Geometry)RequireMethod(RequireType("VeliShell.Desktop.Controls.AppIconMask"), "Create")
                     .Invoke(null, [size])!;

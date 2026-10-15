@@ -6,7 +6,8 @@
  Title="{services:Loc MenuBar.Title}" WindowStyle="None" AllowsTransparency="True"
  Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False"
  Topmost="True" Height="35" Width="900" UseLayoutRounding="True"
- MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave" Deactivated="MenuBar_Deactivated">
+ MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave"
+ Activated="MenuBar_Activated" Deactivated="MenuBar_Deactivated">
  <Grid Background="Transparent">
   <Border x:Name="MenuBody" Height="30" VerticalAlignment="Top"
           Background="{DynamicResource MenuBarSurface}"

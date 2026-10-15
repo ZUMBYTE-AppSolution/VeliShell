@@ -41,7 +41,7 @@ public sealed class Settings
 {
     public const int CurrentSchemaVersion = 11;
     public const int CurrentOnlineIconConsentVersion = 4;
-    public const double MinimumIconSize = 32;
+    public const double MinimumIconSize = 24;
     public const double DefaultIconSize = 52;
     public const double MaximumIconSize = 96;
     public const int MaximumPins = 32;
@@ -73,6 +73,7 @@ public sealed class Settings
     public bool MenuBarOnAllDisplays { get; set; }
     public bool MenuBarAutoHide { get; set; }
     public bool MenuBarAlwaysOnTop { get; set; } = true;
+    public bool MenuBarAlwaysShowTrayApps { get; set; }
     public List<string> HiddenTrayIconIds { get; set; } = [];
     public List<string> PreferredTrayIconIds { get; set; } = [];
     public OnlineIconMode OnlineIcons { get; set; } = OnlineIconMode.Disabled;

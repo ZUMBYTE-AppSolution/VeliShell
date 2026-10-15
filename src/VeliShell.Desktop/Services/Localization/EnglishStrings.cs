@@ -9,6 +9,8 @@ internal static class EnglishStrings
         ["Apps.RunningPerDisplay"] = "Show running apps only from this display",
         ["Apps.RunningPerDisplayDescription"] = "Off: open windows appear everywhere. On: the dock and menu bar show windows from their own display; windowless background apps remain global.",
         ["MenuBar.AllDisplays"] = "Show the menu bar on all displays",
+        ["MenuBar.AlwaysShowTrayApps"] = "Always show active tray apps in the menu bar",
+        ["MenuBar.AlwaysShowTrayAppsDescription"] = "Windows tray icons normally hidden behind the chevron stay in the bar while their app is running. Each app appears once; scroll sideways when space is limited.",
         ["MenuBar.ForceQuitApps"] = "Force quit …",
         ["MenuBar.NoForceQuitApps"] = "No eligible apps open",
         ["MenuBar.Run"] = "Run …",

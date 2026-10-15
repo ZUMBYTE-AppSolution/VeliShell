@@ -87,6 +87,8 @@ public partial class PreferencesWindow : VeliShellWindow
         MenuBarSwitch.IsChecked = s.MenuBarEnabled;
         MenuBarAutoHideSwitch.IsChecked = s.MenuBarAutoHide;
         MenuBarAutoHideSwitch.IsEnabled = s.MenuBarEnabled;
+        MenuBarAlwaysShowTrayAppsSwitch.IsChecked = s.MenuBarAlwaysShowTrayApps;
+        MenuBarAlwaysShowTrayAppsSwitch.IsEnabled = s.MenuBarEnabled;
         MenuBarTopmostSwitch.IsChecked = s.MenuBarAlwaysOnTop;
         MenuBarTopmostSwitch.IsEnabled = s.MenuBarEnabled;
         MenuBarAllDisplaysSwitch.IsChecked = s.MenuBarOnAllDisplays;
@@ -252,6 +254,8 @@ public partial class PreferencesWindow : VeliShellWindow
         }
     }
     private void MenuBarAutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAutoHide = MenuBarAutoHideSwitch.IsChecked == true);
+    private void MenuBarAlwaysShowTrayApps_Click(object sender, RoutedEventArgs e) =>
+        _app.UpdatePreferences(s => s.MenuBarAlwaysShowTrayApps = MenuBarAlwaysShowTrayAppsSwitch.IsChecked == true);
     private void MenuBarTopmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAlwaysOnTop = MenuBarTopmostSwitch.IsChecked == true);
     private async void MenuBarAllDisplays_Click(object sender, RoutedEventArgs e)
     {

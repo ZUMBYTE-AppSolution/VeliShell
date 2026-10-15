@@ -86,12 +86,11 @@ public partial class SearchWindow : VeliShellWindow
             var rowIndex = index;
             var button = new Button
             {
+                Style = (Style)FindResource("SpotlightResultButton"),
                 Tag = rowIndex,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 0, 0, 5),
                 Padding = new Thickness(10, 7, 10, 7),
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
                 Content = CreateRow(entry)
             };
             button.Click += (_, _) => Activate(rowIndex);
@@ -152,7 +151,10 @@ public partial class SearchWindow : VeliShellWindow
         for (var index = 0; index < ResultsPanel.Children.Count; index++)
         {
             if (ResultsPanel.Children[index] is not Button button) continue;
-            button.Background = index == _selectedIndex ? (Brush)FindResource("HoverSurface") : Brushes.Transparent;
+            button.Background = index == _selectedIndex
+                ? (Brush)FindResource("GlassControlHover") : Brushes.Transparent;
+            button.BorderBrush = index == _selectedIndex
+                ? (Brush)FindResource("GlassCardStroke") : Brushes.Transparent;
         }
     }
 

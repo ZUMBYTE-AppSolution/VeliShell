@@ -4,13 +4,14 @@ using System.Runtime.InteropServices;
 namespace VeliShell.Desktop.Services;
 
 internal sealed record AudioAppSession(string Id, string Name, int ProcessId,
-    double VolumePercent, bool IsMuted, bool IsSystemSound);
+    double VolumePercent, bool IsMuted, bool IsSystemSound, bool IsActive, string GroupKey);
 
 internal static class AudioSessionService
 {
     internal static IReadOnlyList<AudioAppSession> Read(string endpointId)
     {
         var sessions = new List<AudioAppSession>();
+        var packagedByProcess = new Dictionary<uint, PackagedAppIdentity?>();
         WithSessions(endpointId, (control, info, volume) =>
         {
             if (info.GetState(out var state) != 0 || state == 2 ||
@@ -37,12 +38,43 @@ internal static class AudioSessionService
                 catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
                 { name = LocalizationService.Current.Get("ShellLink.Application"); }
             }
+            var groupKey = systemSound ? "\u0001system" : name;
+            if (!systemSound && pid != 0)
+            {
+                if (!packagedByProcess.TryGetValue(pid, out var packaged))
+                {
+                    packaged = PackagedAppService.ForProcess(pid);
+                    packagedByProcess[pid] = packaged;
+                }
+                if (packaged is not null)
+                    (groupKey, name) = ResolvePackagedGroup(packaged.AppUserModelId,
+                        packaged.Name, name, PackagedAppService.NameForAppId);
+            }
             sessions.Add(new AudioAppSession(id, name, (int)pid,
-                Math.Clamp(level * 100d, 0, 100), muted, systemSound));
+                Math.Clamp(level * 100d, 0, 100), muted, systemSound, state == 1, groupKey));
             return sessions.Count >= 64;
         });
         return sessions.OrderBy(session => session.IsSystemSound ? 0 : 1)
             .ThenBy(session => session.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+    }
+
+    internal static (string GroupKey, string Name) ResolvePackagedGroup(string appId,
+        string packagedName, string sessionName, Func<string, string?> lookupName)
+    {
+        var separator = appId.LastIndexOf('!');
+        if (separator <= 0 || separator == appId.Length - 1)
+            return (sessionName, sessionName);
+        // Apple Music's playback session belongs to its LibraryServer process,
+        // while its main App session can be idle. Resolve only this known helper
+        // kind to a registered primary app; never merge arbitrary package apps.
+        if (appId[(separator + 1)..].Equals("LibraryServer", StringComparison.OrdinalIgnoreCase))
+        {
+            var primaryId = appId[..(separator + 1)] + "App";
+            var primaryName = lookupName(primaryId);
+            if (!string.IsNullOrWhiteSpace(primaryName))
+                return (primaryId, primaryName.Trim());
+        }
+        return (appId, string.IsNullOrWhiteSpace(packagedName) ? sessionName : packagedName.Trim());
     }
 
     internal static bool TrySetVolume(string endpointId, string sessionId, double percent)

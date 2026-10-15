@@ -1,8 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <SolidColorBrush x:Key="WindowSurface" Color="#F4F7FF" />
-  <SolidColorBrush x:Key="SidebarSurface" Color="#EAF1FF" />
-  <SolidColorBrush x:Key="CardSurface" Color="#F9FBFF" />
-  <SolidColorBrush x:Key="CardStroke" Color="#B9C9EB" />
+  <SolidColorBrush x:Key="WindowSurface" Color="#E9EDF4" />
+  <SolidColorBrush x:Key="SidebarSurface" Color="#EDF1F7" />
+  <SolidColorBrush x:Key="CardSurface" Color="#F7F9FC" />
+  <SolidColorBrush x:Key="CardStroke" Color="#AAB8CA" />
   <SolidColorBrush x:Key="TextPrimary" Color="#17203A" />
   <SolidColorBrush x:Key="TextSecondary" Color="#596684" />
   <SolidColorBrush x:Key="Divider" Color="#C8D4EC" />
@@ -16,23 +16,23 @@
   <SolidColorBrush x:Key="ControlThumb" Color="#FFFFFF" />
   <SolidColorBrush x:Key="ControlThumbStroke" Color="#526584" />
   <LinearGradientBrush x:Key="WindowBackdropGradient" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#FBFDFF" Offset="0" />
-    <GradientStop Color="#F1F6FF" Offset="0.52" />
-    <GradientStop Color="#F9F2FF" Offset="1" />
+    <GradientStop Color="#EDFFFFFF" Offset="0" />
+    <GradientStop Color="#DEE8EEF7" Offset="0.52" />
+    <GradientStop Color="#E8F7EEFB" Offset="1" />
   </LinearGradientBrush>
   <LinearGradientBrush x:Key="SidebarGradient" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#F2F8FF" Offset="0" />
-    <GradientStop Color="#E5EEFF" Offset="0.58" />
-    <GradientStop Color="#F1E9FF" Offset="1" />
+    <GradientStop Color="#E9F8FBFF" Offset="0" />
+    <GradientStop Color="#DAE6ECF5" Offset="0.58" />
+    <GradientStop Color="#E2F0E9FA" Offset="1" />
   </LinearGradientBrush>
   <LinearGradientBrush x:Key="CardSurfaceGradient" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#FCFEFF" Offset="0" />
-    <GradientStop Color="#F5F8FF" Offset="0.58" />
-    <GradientStop Color="#FCF8FF" Offset="1" />
+    <GradientStop Color="#E8FFFFFF" Offset="0" />
+    <GradientStop Color="#CDEEF2F8" Offset="0.58" />
+    <GradientStop Color="#D8F9F2FC" Offset="1" />
   </LinearGradientBrush>
   <LinearGradientBrush x:Key="ControlSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#FFFFFF" Offset="0" />
-    <GradientStop Color="#EEF3FF" Offset="1" />
+    <GradientStop Color="#ECFFFFFF" Offset="0" />
+    <GradientStop Color="#D3E8EDF5" Offset="1" />
   </LinearGradientBrush>
   <LinearGradientBrush x:Key="ControlHoverGradient" StartPoint="0,0" EndPoint="1,1">
     <GradientStop Color="#F5FAFF" Offset="0" />

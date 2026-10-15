@@ -7,11 +7,14 @@
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
  Title="{services:Loc Product.SettingsTitle}" Width="870" Height="660" MinWidth="760" MinHeight="540"
  WindowStartupLocation="CenterScreen">
- <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="12" BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
-  <Grid ClipToBounds="True">
+ <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="16" BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1">
+  <Grid controls:RoundedClip.Radius="15">
    <Grid.ColumnDefinitions><ColumnDefinition Width="218" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
    <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-   <Border Grid.RowSpan="3" Background="{DynamicResource SidebarGradient}" CornerRadius="12,0,0,12" />
+   <Border Grid.ColumnSpan="2" Grid.RowSpan="3" Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
+   <Border Grid.RowSpan="3" Background="{DynamicResource SidebarGradient}" CornerRadius="16,0,0,16" />
+   <Border Grid.ColumnSpan="2" Grid.RowSpan="3" Height="1" Margin="25,1" VerticalAlignment="Top"
+           Background="{DynamicResource GlassHighlight}" Opacity="0.66" IsHitTestVisible="False" />
    <Ellipse Grid.Column="1" Grid.RowSpan="2" Width="460" Height="460" HorizontalAlignment="Right" VerticalAlignment="Top"
             Margin="0,-270,-230,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.11" IsHitTestVisible="False">
     <Ellipse.Effect><BlurEffect Radius="42" /></Ellipse.Effect>
@@ -284,6 +287,8 @@
       <Border Style="{StaticResource Card}"><StackPanel>
        <CheckBox x:Name="MenuBarSwitch" Content="{services:Loc MenuBar.Enable}" Style="{StaticResource ToggleSwitch}" Click="MenuBar_Click" />
        <CheckBox x:Name="MenuBarAutoHideSwitch" Content="{services:Loc MenuBar.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAutoHide_Click" />
+       <CheckBox x:Name="MenuBarAlwaysShowTrayAppsSwitch" Content="{services:Loc MenuBar.AlwaysShowTrayApps}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAlwaysShowTrayApps_Click" />
+       <TextBlock Text="{services:Loc MenuBar.AlwaysShowTrayAppsDescription}" Style="{StaticResource SecondaryText}" Margin="0,4,44,10" />
        <CheckBox x:Name="MenuBarTopmostSwitch" Content="{services:Loc MenuBar.Topmost}" Style="{StaticResource ToggleSwitch}" Click="MenuBarTopmost_Click" />
        <CheckBox x:Name="MenuBarAllDisplaysSwitch" Content="{services:Loc MenuBar.AllDisplays}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAllDisplays_Click" />
        <TextBlock Text="{services:Loc MenuBar.Description}" Style="{StaticResource SecondaryText}" Margin="0,7,44,0" />

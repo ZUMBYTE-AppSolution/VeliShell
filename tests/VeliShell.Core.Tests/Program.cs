@@ -32,6 +32,8 @@ try
         Check(!new Settings().ShowWindowsStartDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
+    Test("Always-visible tray icons are opt-in", () =>
+        Check(!new Settings().MenuBarAlwaysShowTrayApps));
     Test("Tray icon hiding is opt-in and normalizes stable identities", () =>
     {
         var id = new string('a', 64);
@@ -50,6 +52,7 @@ try
     Test("Online icons are opt-in", () => Check(new Settings().OnlineIcons == OnlineIconMode.Disabled));
     Test("Clamp large icon size", () => { var s = new Settings { IconSize = 500 }; s.Normalize(); Check(s.IconSize == Settings.MaximumIconSize); });
     Test("Clamp small icon size", () => { var s = new Settings { IconSize = -1 }; s.Normalize(); Check(s.IconSize == Settings.MinimumIconSize); });
+    Test("Compact dock icon size starts at 24 DIP", () => Check(Settings.MinimumIconSize == 24));
     Test("Handle NaN", () => { var s = new Settings { IconSize = double.NaN }; s.Normalize(); Check(s.IconSize == Settings.DefaultIconSize); });
     Test("Handle Infinity", () => { var s = new Settings { IconSize = double.PositiveInfinity }; s.Normalize(); Check(s.IconSize == Settings.DefaultIconSize); });
     Test("Glass controls clamp invalid values", () =>
@@ -381,6 +384,7 @@ try
         store.Save(new Settings { Appearance = Appearance.Dark, Language = UiLanguage.English, Startup = StartupMode.UserLogin, Updates = UpdateMode.AutomaticDownload, IconSize = 61, AutoHide = true, HideTaskbar = true, HideDesktopIcons = true, ShowVeliShellDockItem = false, WindowsNotificationsEnabled = true,
             DockOnAllDisplays = true, RunningAppsPerDisplay = true,
             IconStyle = DockIconStyle.Windows, MenuBarEnabled = true, MenuBarOnAllDisplays = true, MenuBarAutoHide = true, MenuBarAlwaysOnTop = false,
+            MenuBarAlwaysShowTrayApps = true,
             OnlineIcons = OnlineIconMode.OnDemand, OnlineIconConsentVersion = Settings.CurrentOnlineIconConsentVersion,
             DockIconOverrides = new Dictionary<string, IconReference> { ["trash-full"] = new("velishell-custom", new string('e', 64), "1", new string('e', 64)) },
             Pins = [new("steam", "Steam", "steam.exe", "steam", icon)] });
@@ -388,6 +392,7 @@ try
         Check(s.Appearance == Appearance.Dark && s.Language == UiLanguage.English && s.Startup == StartupMode.UserLogin && s.Updates == UpdateMode.AutomaticDownload && s.IconSize == 61 && s.AutoHide && s.HideTaskbar && s.HideDesktopIcons && !s.ShowVeliShellDockItem && s.WindowsNotificationsEnabled
             && s.IconStyle == DockIconStyle.Windows && s.MenuBarEnabled && s.MenuBarOnAllDisplays &&
                s.DockOnAllDisplays && s.RunningAppsPerDisplay && s.MenuBarAutoHide && !s.MenuBarAlwaysOnTop
+            && s.MenuBarAlwaysShowTrayApps
             && s.OnlineIcons == OnlineIconMode.OnDemand && s.Pins[0].Icon?.IconId == new string('d', 64)
             && s.GetDockIconOverride("trash-full")?.IconId == new string('e', 64));
     });
