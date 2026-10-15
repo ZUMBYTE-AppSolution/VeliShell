@@ -11,20 +11,31 @@ public partial class ControlCenterWindow : Window, ITransientPanel
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private bool _updatingStatus;
     private bool _closing;
+    private readonly ShellBackdropHost _backdrop;
 
     internal ControlCenterWindow()
     {
         InitializeComponent();
+        _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
+        if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
         Loaded += (_, _) =>
         {
+            _backdrop.Apply();
             RefreshStatus();
             _statusTimer.Start();
         };
         _statusTimer.Tick += (_, _) => RefreshStatus();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
         Closing += (_, _) => _closing = true;
-        Closed += (_, _) => _statusTimer.Stop();
+        Closed += (_, _) =>
+        {
+            _statusTimer.Stop();
+            if (Application.Current is App app) app.Themes.Changed -= RefreshBackdrop;
+            _backdrop.Dispose();
+        };
     }
+
+    private void RefreshBackdrop() => _backdrop.Apply();
 
     public void CloseOnce()
     {

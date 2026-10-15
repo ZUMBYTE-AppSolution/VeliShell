@@ -3,15 +3,15 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:services="clr-namespace:VeliShell.Desktop.Services"
  xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
- Title="{services:Loc AudioDevices.Title}" Width="380" Height="470"
+ Title="{services:Loc AudioDevices.Title}" Width="520" Height="630"
  WindowStyle="None" AllowsTransparency="True" Background="Transparent"
  Foreground="{DynamicResource TextPrimary}" ResizeMode="NoResize" ShowInTaskbar="False"
  WindowStartupLocation="Manual" UseLayoutRounding="True" SnapsToDevicePixels="True"
  KeyDown="Window_KeyDown">
- <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
+ <Border x:Name="GlassPlate" Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect><DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.42" /></Border.Effect>
-  <Grid ClipToBounds="True">
+  <Grid controls:RoundedClip.Radius="23">
    <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />
    <Ellipse Width="290" Height="225" HorizontalAlignment="Right" VerticalAlignment="Top"
             Margin="0,-150,-120,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.12"
@@ -23,12 +23,23 @@
      <TextBlock Text="{services:Loc AudioDevices.Hint}" Foreground="{DynamicResource TextSecondary}"
                 FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
     </StackPanel>
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-     <StackPanel x:Name="DevicesPanel" />
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+     <StackPanel>
+      <Expander x:Name="OutputsExpander" Header="{services:Loc AudioDevices.Outputs}"
+                Style="{StaticResource GlassExpander}" IsExpanded="True"
+                Expanded="Sections_Changed" Collapsed="Sections_Changed">
+       <StackPanel x:Name="DevicesPanel" />
+      </Expander>
+      <Expander x:Name="InputsExpander" Header="{services:Loc AudioDevices.Inputs}"
+                Style="{StaticResource GlassExpander}" IsExpanded="False" Margin="0,9,0,0"
+                Expanded="Sections_Changed" Collapsed="Sections_Changed">
+       <StackPanel x:Name="InputsPanel" />
+      </Expander>
+     </StackPanel>
     </ScrollViewer>
-    <Button Grid.Row="2" Style="{StaticResource GlassTileButton}"
-            Content="{services:Loc AudioDevices.ChooseInWindows}" Padding="12,10" Margin="0,12,0,0"
-            Click="OpenSoundSettings_Click" />
+    <Button Grid.Row="2" Style="{StaticResource PrimaryButton}"
+            Content="{services:Loc AudioDevices.OpenMixer}" Padding="12,10" Margin="0,12,0,0"
+            Click="OpenMixer_Click" />
    </Grid>
   </Grid>
  </Border>

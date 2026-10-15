@@ -41,6 +41,14 @@ internal static class PackagedAppService
 
     internal static string TargetForAppId(string appId) => AppsFolderPrefix + appId;
 
+    internal static PackagedAppIdentity? ForProcess(uint processId)
+    {
+        var appId = ReadProcessAppId(processId);
+        if (appId is null) return null;
+        var target = TargetForAppId(appId);
+        return new PackagedAppIdentity(processId, appId, NameForAppId(appId) ?? "", target);
+    }
+
     internal static string? AppIdFromTarget(string target)
     {
         if (string.IsNullOrWhiteSpace(target) || !target.StartsWith(AppsFolderPrefix, StringComparison.OrdinalIgnoreCase))

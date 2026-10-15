@@ -145,8 +145,12 @@ internal sealed class WindowsNotificationListenerBridge : IDisposable
         var appName = Normalize(notification.AppInfo?.DisplayInfo?.DisplayName, 120);
         if (appName.Length == 0) appName = "Windows";
 
-        var binding = notification.Notification?.Visual?
-            .GetBinding(KnownNotificationBindings.ToastGeneric);
+        var visual = notification.Notification?.Visual;
+        // Most modern apps use ToastGeneric, but older desktop apps can leave
+        // only a legacy binding in Action Center. Read its text as a fallback.
+        var binding = visual?.GetBinding(KnownNotificationBindings.ToastGeneric) ??
+                      visual?.Bindings?.FirstOrDefault(candidate =>
+                          candidate.GetTextElements().Count > 0);
         var textElements = binding?.GetTextElements()
             .Select(element => Normalize(element.Text, 800))
             .Where(text => text.Length > 0)

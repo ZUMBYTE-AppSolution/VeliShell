@@ -79,11 +79,17 @@ Bildvorlage eigenständig für VeliShell gestaltet. Sie verwenden eine eigene
 Geometrie und VeliShell-Farbwelt, enthalten keine Apple-Logos oder extrahierten
 Apple-Assets und werden unter der Projektlizenz ausgeliefert.
 
-Auch Apple SF Symbols werden weder extrahiert noch als Font, SVG oder Bitmap in
-VeliShell eingebettet. Die kleinen Symbole in Menüleiste, Kontrollcenter und
-Einstellungen sind eigenständige, zur Laufzeit gezeichnete VeliShell-Vektoren auf
-einem gemeinsamen 24-Punkt-Raster. Sie übernehmen keine Apple-Originalpfade und
-bleiben bei jeder Windows-Skalierung scharf.
+Apple SF Symbols werden weder extrahiert noch als Font, SVG oder Bitmap in
+VeliShell eingebettet. Die kleinen UI-Symbole verwenden stattdessen lokal
+gespeicherte **Material Symbols Rounded**-Vektorpfade von Google. Sie werden
+offline auf einem gemeinsamen 24-Punkt-Raster gezeichnet und übernehmen die
+VeliShell-Themefarbe. Die Auswahl und WPF-Einbindung der Pfade wurde für
+VeliShell angepasst; App-Icons und Nutzerbilder bleiben davon unberührt.
+
+- Katalog: <https://icon-sets.iconify.design/material-symbols/>
+- Originalprojekt: <https://github.com/google/material-design-icons>
+- Lizenz: Apache License 2.0, vollständiger Text unter
+  [`THIRD-PARTY-LICENSES/Material-Symbols-APACHE-2.0.txt`](THIRD-PARTY-LICENSES/Material-Symbols-APACHE-2.0.txt)
 
 ## VeliShell-Appsymbol
 

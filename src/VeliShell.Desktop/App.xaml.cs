@@ -115,12 +115,13 @@ public partial class App : Application
         ProgramIndex.Start();
         if (Store.LoadWarning is not null) Log(Store.LoadWarning);
         Themes = new ThemeService();
-        Themes.Apply(Preferences.Appearance);
+        Themes.Apply(Preferences.Appearance, Preferences.GlassGloss, Preferences.GlassTransparency);
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); SaveNow(); };
         Dock = new DockWindow(this);
         MainWindow = Dock;
         Dock.Show();
+        StabilizeLegacyExecutablePins();
         if (Preferences.WindowsNotificationsEnabled &&
             NotificationCenterService.Current.WindowsAccess.State ==
             WindowsNotificationAccessState.Unsupported)
@@ -230,12 +231,53 @@ public partial class App : Application
         Preferences.Normalize();
         if (LocalizationService.Current.Preference != Preferences.Language)
             LocalizationService.Current.Apply(Preferences.Language);
-        Themes.Apply(Preferences.Appearance);
+        Themes.Apply(Preferences.Appearance, Preferences.GlassGloss, Preferences.GlassTransparency);
         PreferencesChanged?.Invoke();
         SyncMenuBar();
         SyncDisplayWindows();
         _saveTimer?.Stop();
         _saveTimer?.Start();
+    }
+
+    private void StabilizeLegacyExecutablePins()
+    {
+        var candidates = Preferences.Pins
+            .Where(pin => pin.Kind == PinKind.Item &&
+                pin.Target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                Path.IsPathFullyQualified(pin.Target))
+            .Select(pin => (pin.Id, pin.Target, pin.Name)).ToArray();
+        if (candidates.Length == 0) return;
+        var worker = new Thread(() =>
+        {
+            try
+            {
+                var replacements = candidates
+                    .Select(pin => (pin.Id, OldTarget: pin.Target,
+                        NewTarget: StableLaunchTargetService.PreferShortcut(pin.Target, pin.Name)))
+                    .Where(change => !string.Equals(change.OldTarget, change.NewTarget,
+                        StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (replacements.Length == 0 || Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_exiting) return;
+                    UpdatePreferences(settings =>
+                    {
+                        for (var index = 0; index < settings.Pins.Count; index++)
+                        {
+                            var pin = settings.Pins[index];
+                            var change = replacements.FirstOrDefault(item =>
+                                string.Equals(item.Id, pin.Id, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(item.OldTarget, pin.Target, StringComparison.OrdinalIgnoreCase));
+                            if (change.NewTarget is not null)
+                                settings.Pins[index] = pin with { Target = change.NewTarget };
+                        }
+                    });
+                }));
+            }
+            catch (Exception exception) { Log("Could not upgrade old executable pins", exception); }
+        }) { IsBackground = true, Name = "VeliShell shortcut migration" };
+        worker.SetApartmentState(ApartmentState.STA);
+        worker.Start();
     }
 
     public void ShowPreferences()

@@ -89,6 +89,12 @@ internal static class SystemControlStatusService
     }
 
     internal static IReadOnlyList<AudioOutputEndpoint> ReadOutputDevices()
+        => ReadDevices(0);
+
+    internal static IReadOnlyList<AudioOutputEndpoint> ReadInputDevices()
+        => ReadDevices(1);
+
+    private static IReadOnlyList<AudioOutputEndpoint> ReadDevices(int dataFlow)
     {
         if (!OperatingSystem.IsWindows()) return [];
         IMMDeviceEnumerator? enumerator = null;
@@ -100,10 +106,10 @@ internal static class SystemControlStatusService
                 new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), throwOnError: true)!;
             enumerator = (IMMDeviceEnumerator)Activator.CreateInstance(type)!;
             var defaultId = "";
-            if (enumerator.GetDefaultAudioEndpoint(0, 1, out defaultDevice) == 0 &&
+            if (enumerator.GetDefaultAudioEndpoint(dataFlow, 1, out defaultDevice) == 0 &&
                 defaultDevice is not null)
                 defaultDevice.GetId(out defaultId);
-            if (enumerator.EnumAudioEndpoints(0, 1, out collection) != 0 || collection is null ||
+            if (enumerator.EnumAudioEndpoints(dataFlow, 1, out collection) != 0 || collection is null ||
                 collection.GetCount(out var count) != 0) return [];
             var results = new List<AudioOutputEndpoint>();
             for (uint index = 0; index < Math.Min(count, 32); index++)

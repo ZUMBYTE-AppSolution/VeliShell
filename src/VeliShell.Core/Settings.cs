@@ -54,6 +54,8 @@ public sealed class Settings
     public StartupMode Startup { get; set; } = StartupMode.Disabled;
     public UpdateMode Updates { get; set; } = UpdateMode.Notify;
     public double IconSize { get; set; } = DefaultIconSize;
+    public double GlassGloss { get; set; } = 50;
+    public double GlassTransparency { get; set; } = 50;
     public bool Magnification { get; set; } = true;
     public bool ReducedMotion { get; set; }
     public bool ShowRunningApps { get; set; } = true;
@@ -108,6 +110,9 @@ public sealed class Settings
         IconSize = double.IsFinite(IconSize)
             ? Math.Clamp(IconSize, MinimumIconSize, MaximumIconSize)
             : DefaultIconSize;
+        GlassGloss = double.IsFinite(GlassGloss) ? Math.Clamp(GlassGloss, 0, 100) : 50;
+        GlassTransparency = double.IsFinite(GlassTransparency)
+            ? Math.Clamp(GlassTransparency, 0, 100) : 50;
         Pins = (Pins ?? Defaults())
             .Where(p => p is not null && (p.Kind == PinKind.VirtualFolder || !string.IsNullOrWhiteSpace(p.Target)))
             .Select(NormalizePin)

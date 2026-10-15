@@ -52,6 +52,20 @@ try
     Test("Clamp small icon size", () => { var s = new Settings { IconSize = -1 }; s.Normalize(); Check(s.IconSize == Settings.MinimumIconSize); });
     Test("Handle NaN", () => { var s = new Settings { IconSize = double.NaN }; s.Normalize(); Check(s.IconSize == Settings.DefaultIconSize); });
     Test("Handle Infinity", () => { var s = new Settings { IconSize = double.PositiveInfinity }; s.Normalize(); Check(s.IconSize == Settings.DefaultIconSize); });
+    Test("Glass controls clamp invalid values", () =>
+    {
+        var s = new Settings { GlassGloss = double.NaN, GlassTransparency = 500 };
+        s.Normalize();
+        Check(s.GlassGloss == 50 && s.GlassTransparency == 100);
+    });
+    Test("Protocol and shell-link pins survive normalization", () =>
+    {
+        var s = new Settings { Pins = [new("protocol", "ChatGPT", "chatgpt://"),
+            new("link", "Spotify", @"C:\Users\test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Spotify.lnk")] };
+        s.Normalize();
+        Check(s.Pins.Count == 2 && s.Pins[0].Target == "chatgpt://" &&
+            s.Pins[1].Target.EndsWith("Spotify.lnk", StringComparison.Ordinal));
+    });
     Test("Invalid enum falls back", () => { var s = new Settings { Appearance = (Appearance)999 }; s.Normalize(); Check(s.Appearance == Appearance.System); });
     Test("Invalid language falls back", () => { var s = new Settings { Language = (UiLanguage)999 }; s.Normalize(); Check(s.Language == UiLanguage.System); });
     Test("Invalid startup mode falls back", () => { var s = new Settings { Startup = (StartupMode)999 }; s.Normalize(); Check(s.Startup == StartupMode.Disabled); });

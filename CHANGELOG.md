@@ -6,6 +6,22 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.5] - 2026-10-15
+
+### Hinzugefügt
+
+- Dock-Verknüpfungen können registrierte URI-Protokolle und stabile Windows-App-Verweise verwenden. So bleiben angeheftete Apps auch bei wechselnden EXE-Pfaden nach Updates erreichbar.
+- Das Audiopanel erlaubt die direkte Wahl des Standard-Ausgabe- und Eingabegeräts. Ein eigener Lautstärkemixer regelt aktive Apps einzeln.
+- Die Einstellungen bieten Regler für Transparenz und Glanz der gläsernen Dock-, Menüleisten- und Center-Flächen.
+- Material Symbols Rounded stehen als lokal eingebundene Vektorsymbole für Menüleiste, Panels und Einstellungen bereit.
+
+### Verbessert
+
+- Mitteilungszentrale, Kontrollzentrum und Audiopanel verwenden klarere Flächen und beschriftete Schalter; weitere Inhalte lassen sich aufklappen, ohne dauerhaft sichtbare Scrollleisten.
+- Ausgeblendete App-Symbole schieben sich in der Menüleiste neben die übrigen Symbole, statt ein separates Feld unter der Leiste zu öffnen.
+- Windows-Mitteilungen können in einer paketierten Ausgabe nach ausdrücklicher Freigabe gelesen werden. Die GitHub-MSI- und Portable-Ausgaben haben dafür keine Paketidentität; dort bleibt diese Funktion deaktiviert.
+- Dock und schwebende Panels schneiden ihre abgerundeten Konturen sauberer zu.
+
 ## [0.13.4] - 2026-10-14
 
 ### Behoben
@@ -286,7 +302,9 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 - Die vollständigen Lizenz- und Drittanbieterhinweise der mitgelieferten .NET- und WPF-Laufzeit sind offline im Installer und im portablen Paket enthalten.
 - Version 0.3.0 kann noch ohne Herausgeberzertifikat veröffentlicht werden. VeliShell zeigt diesen Zustand vor dem Start des Installers ausdrücklich an; Windows SmartScreen kann zusätzlich warnen.
 
-[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.4...HEAD
+[Unreleased]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.5...HEAD
+
+[0.13.5]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.4...v0.13.5
 
 [0.13.4]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.3...v0.13.4
 [0.13.3]: https://github.com/ZUMBYTE-AppSolution/VeliShell/compare/v0.13.2...v0.13.3

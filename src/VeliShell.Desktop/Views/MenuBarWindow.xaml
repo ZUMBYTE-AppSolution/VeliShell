@@ -36,7 +36,7 @@
      <TextBlock x:Name="ActiveAppLabel" Text="{services:Loc Product.Name}" FontWeight="SemiBold"
                 TextTrimming="CharacterEllipsis" />
     </Button>
-    <Button Grid.Column="2" Style="{StaticResource MenuBarButton}" Click="WindowsMenu_Click"
+    <Button x:Name="WindowsMenuButton" Grid.Column="2" Style="{StaticResource MenuBarButton}" Click="WindowsMenu_Click"
             Content="{services:Loc MenuBar.Windows}" AutomationProperties.Name="{services:Loc MenuBar.Windows}" />
     <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
      <StackPanel x:Name="TrayIconsPanel" Orientation="Horizontal" />
@@ -45,9 +45,16 @@
              ToolTip="{services:Loc MenuBar.TrayHidden}" AutomationProperties.Name="{services:Loc MenuBar.TrayHidden}">
       <controls:VeliSymbol Symbol="ChevronRight" Width="13" Height="13"
                            Foreground="{DynamicResource TextPrimary}" RenderTransformOrigin="0.5,0.5">
-       <controls:VeliSymbol.RenderTransform><RotateTransform Angle="90" /></controls:VeliSymbol.RenderTransform>
+       <controls:VeliSymbol.RenderTransform><RotateTransform x:Name="TrayChevronRotation" Angle="180" /></controls:VeliSymbol.RenderTransform>
       </controls:VeliSymbol>
      </Button>
+     <Border x:Name="TrayOverflowReveal" Width="0" ClipToBounds="True" VerticalAlignment="Center">
+      <ScrollViewer x:Name="TrayOverflowScroller" HorizontalScrollBarVisibility="Hidden"
+                    VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly"
+                    PreviewMouseWheel="TrayOverflow_MouseWheel">
+       <StackPanel x:Name="TrayOverflowItemsPanel" Orientation="Horizontal" />
+      </ScrollViewer>
+     </Border>
      <StackPanel x:Name="BackgroundAppsPanel" Orientation="Horizontal" />
      <Button x:Name="SteamButton" Style="{StaticResource MenuBarButton}" Visibility="Collapsed"
              Click="Steam_Click" PreviewMouseRightButtonUp="Steam_RightClick"
@@ -97,25 +104,6 @@
     </StackPanel>
    </Grid>
   </Border>
-  <Popup x:Name="TrayOverflowPopup" PlacementTarget="{Binding ElementName=TrayChevronButton}"
-         Placement="Bottom" VerticalOffset="2" AllowsTransparency="True" StaysOpen="False"
-         Opened="TrayOverflow_Opened" Closed="TrayOverflow_Closed">
-   <Border Margin="8" Padding="12" Background="{DynamicResource GlassPanelSurface}"
-           BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" CornerRadius="14">
-    <Border.Effect><DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10"
-                                     ShadowDepth="1" Opacity="0.42" /></Border.Effect>
-    <StackPanel>
-     <TextBlock Text="{services:Loc MenuBar.TrayHidden}" FontSize="11" FontWeight="SemiBold"
-                Foreground="{DynamicResource TextSecondary}" Margin="4,0,4,7" />
-     <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto"
-                   HorizontalScrollBarVisibility="Disabled">
-      <WrapPanel x:Name="TrayOverflowItemsPanel" Width="272" />
-     </ScrollViewer>
-     <TextBlock Text="{services:Loc MenuBar.TrayRevealHint}" FontSize="10"
-                Foreground="{DynamicResource TextSecondary}" Margin="4,8,4,0" />
-    </StackPanel>
-   </Border>
-  </Popup>
   <Border x:Name="RevealHandle" Width="76" Height="5" VerticalAlignment="Top" HorizontalAlignment="Center"
           CornerRadius="0,0,2.5,2.5" Background="{DynamicResource DockIndicator}"
           Opacity="0.5" Visibility="Collapsed" IsHitTestVisible="False" />

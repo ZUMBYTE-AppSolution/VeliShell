@@ -12,13 +12,25 @@ namespace VeliShell.Desktop.Views;
 public partial class AudioDevicesWindow : Window, ITransientPanel
 {
     private bool _closing;
+    private readonly ShellBackdropHost _backdrop;
+    private FrameworkElement? _anchor;
+    private int _outputCount;
+    private int _inputCount;
 
     internal AudioDevicesWindow()
     {
         InitializeComponent();
+        _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
+        Loaded += (_, _) => _backdrop.Apply();
+        if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
         Loaded += (_, _) => RefreshDevices();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
         Closing += (_, _) => _closing = true;
+        Closed += (_, _) =>
+        {
+            if (Application.Current is App app) app.Themes.Changed -= RefreshBackdrop;
+            _backdrop.Dispose();
+        };
     }
 
     public void CloseOnce()
@@ -30,6 +42,7 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
 
     internal void ShowRelativeTo(FrameworkElement anchor, Window owner, bool topmost)
     {
+        _anchor = anchor;
         Owner = owner;
         Topmost = topmost;
         MenuPanelPlacement.PlaceBelow(anchor, this);
@@ -40,28 +53,58 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
     private void RefreshDevices()
     {
         DevicesPanel.Children.Clear();
+        InputsPanel.Children.Clear();
         var devices = SystemControlStatusService.ReadOutputDevices();
-        if (devices.Count == 0)
-        {
-            Height = 250;
-            DevicesPanel.Children.Add(new TextBlock
-            {
-                Text = L("AudioDevices.None"), TextWrapping = TextWrapping.Wrap,
-                Foreground = (Brush)FindResource("TextSecondary"), Margin = new Thickness(8, 14, 8, 14)
-            });
-            return;
-        }
-
-        Height = 470;
-
+        var inputs = SystemControlStatusService.ReadInputDevices();
+        _outputCount = devices.Count;
+        _inputCount = inputs.Count;
+        if (devices.Count == 0) AddEmpty(DevicesPanel);
         foreach (var device in devices)
+            AddDevice(DevicesPanel, device, input: false);
+        if (inputs.Count == 0) AddEmpty(InputsPanel);
+        foreach (var input in inputs)
+            AddDevice(InputsPanel, input, input: true);
+        var longestName = devices.Concat(inputs).Select(device => device.Name.Length).DefaultIfEmpty(0).Max();
+        Width = Math.Clamp(280 + longestName * 7, 520, 700);
+        ResizeToContent();
+    }
+
+    private void Sections_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (e.RoutedEvent == Expander.ExpandedEvent)
         {
+            if (ReferenceEquals(sender, OutputsExpander)) InputsExpander.IsExpanded = false;
+            if (ReferenceEquals(sender, InputsExpander)) OutputsExpander.IsExpanded = false;
+        }
+        ResizeToContent();
+    }
+
+    private void ResizeToContent()
+    {
+        var visible = (OutputsExpander?.IsExpanded == true ? Math.Max(1, _outputCount) : 0) +
+                      (InputsExpander?.IsExpanded == true ? Math.Max(1, _inputCount) : 0);
+        var maximum = Math.Max(380, Math.Min(760, SystemParameters.WorkArea.Height - 48));
+        Height = Math.Clamp(262 + visible * 103, 380, maximum);
+        if (IsLoaded && !_closing && _anchor is not null)
+            MenuPanelPlacement.PlaceBelow(_anchor, this);
+    }
+
+    private void AddEmpty(Panel panel) => panel.Children.Add(new TextBlock
+    {
+        Text = L("AudioDevices.None"), TextWrapping = TextWrapping.Wrap,
+        Foreground = (Brush)FindResource("TextSecondary"), Margin = new Thickness(8, 4, 8, 12)
+    });
+
+    private void AddDevice(Panel panel, AudioOutputEndpoint device, bool input)
+    {
             var content = new StackPanel();
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var icon = new VeliSymbol { Symbol = VeliSymbolKind.Sound, Width = 19, Height = 19,
+            var icon = new VeliSymbol { Symbol = input ? VeliSymbolKind.Microphone : VeliSymbolKind.Sound,
+                Width = 19, Height = 19,
                 Margin = new Thickness(0, 0, 10, 0) };
             icon.SetResourceReference(ForegroundProperty, "TextPrimary");
             header.Children.Add(icon);
@@ -76,6 +119,21 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
                 current.SetResourceReference(ForegroundProperty, "Accent");
                 Grid.SetColumn(current, 2);
                 header.Children.Add(current);
+            }
+            else
+            {
+                var select = new Button { Content = L("AudioDevices.SetDefault"),
+                    FontSize = 10.5, Padding = new Thickness(7, 4, 7, 4),
+                    Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                select.Click += (_, _) =>
+                {
+                    var switched = AudioDefaultDeviceService.TrySetDefault(device.Id, input);
+                    RefreshDevices();
+                    if (!switched) MessageBox.Show(L("AudioDevices.SwitchFailed"), L("Common.ErrorTitle"),
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                };
+                Grid.SetColumn(select, 2);
+                header.Children.Add(select);
             }
             content.Children.Add(header);
 
@@ -115,20 +173,27 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
                 content.Children.Add(row);
             }
 
-            var card = new Border { Child = content, Padding = new Thickness(13, 12, 13, 12),
-                Margin = new Thickness(0, 0, 0, 8), CornerRadius = new CornerRadius(15),
-                BorderThickness = new Thickness(1) };
-            card.SetResourceReference(BackgroundProperty, "GlassCardSurface");
-            card.SetResourceReference(BorderBrushProperty, "GlassCardStroke");
-            DevicesPanel.Children.Add(card);
-        }
+            var card = new Border { Child = content, Style = (Style)FindResource("GlassListRow"),
+                Padding = new Thickness(13, 12, 13, 12), Margin = new Thickness(0, 0, 0, 8) };
+            panel.Children.Add(card);
     }
 
-    private void OpenSoundSettings_Click(object sender, RoutedEventArgs e)
+    private void OpenMixer_Click(object sender, RoutedEventArgs e)
     {
+        var mixer = new AudioMixerWindow
+        {
+            Anchor = _anchor,
+            Owner = Owner,
+            Topmost = Topmost
+        };
+        if (_anchor is not null) MenuPanelPlacement.PlaceBelow(_anchor, mixer);
+        else { mixer.Left = Left; mixer.Top = Top; }
         CloseOnce();
-        LaunchService.Open("ms-settings:sound");
+        mixer.Show();
+        mixer.Activate();
     }
+
+    private void RefreshBackdrop() => _backdrop.Apply();
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {

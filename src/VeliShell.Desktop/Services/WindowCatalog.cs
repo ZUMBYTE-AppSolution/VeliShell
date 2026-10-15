@@ -68,9 +68,13 @@ internal static class WindowCatalog
                         ProcessId: checked((int)pid), DisplayName: title.ToString()));
                     return true;
                 }
-                var appId = IsBrowserProcess(processName) ? ReadWindowAppId(hwnd) : null;
+                var packagedProcess = path.Contains("\\WindowsApps\\", StringComparison.OrdinalIgnoreCase)
+                    ? PackagedAppService.ForProcess(pid) : null;
+                var appId = packagedProcess?.AppUserModelId ??
+                    (IsBrowserProcess(processName) ? ReadWindowAppId(hwnd) : null);
                 result.Add(new NativeWindow(hwnd, title.ToString(), path, processName,
-                    appId, WebAppCatalog.Match(appId), checked((int)pid)));
+                    appId, WebAppCatalog.Match(appId), checked((int)pid),
+                    packagedProcess?.Name, packagedProcess?.Target));
             }
             catch (Exception) { /* A process may exit while it is being enumerated. */ }
             return true;

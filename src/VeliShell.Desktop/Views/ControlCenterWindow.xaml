@@ -30,12 +30,12 @@
   </Style>
  </Window.Resources>
 
- <Border Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
+ <Border x:Name="GlassPlate" Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
   <Border.Effect>
    <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.42" />
   </Border.Effect>
-  <Grid ClipToBounds="True">
+  <Grid controls:RoundedClip.Radius="23">
    <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />
    <Ellipse Width="310" Height="250" HorizontalAlignment="Left" VerticalAlignment="Top"
             Margin="-180,-155,0,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.12"
@@ -45,7 +45,7 @@
    <Border Height="1" Margin="25,1" VerticalAlignment="Top" CornerRadius="0.5"
            Background="{DynamicResource GlassHighlight}" Opacity="0.72" IsHitTestVisible="False" />
 
-   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+   <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
                  CanContentScroll="False">
     <Grid Margin="13,10,13,14">
      <Grid.RowDefinitions>
@@ -150,12 +150,15 @@
                    ToolTip="{services:Loc ControlCenter.Mute}">
           <CheckBox.Template>
            <ControlTemplate TargetType="CheckBox">
-            <Border x:Name="MuteBody" Width="30" Height="30" CornerRadius="15"
-                    Background="{DynamicResource GlassControlSurface}"
-                    BorderBrush="{DynamicResource GlassCardStroke}" BorderThickness="1">
-             <controls:VeliSymbol Symbol="Sound" Width="15" Height="15"
-                                  Foreground="{DynamicResource TextPrimary}" />
-            </Border>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+             <ContentPresenter VerticalAlignment="Center" Margin="0,0,7,0" />
+             <Border x:Name="MuteBody" Width="30" Height="30" CornerRadius="15"
+                     Background="{DynamicResource GlassControlSurface}"
+                     BorderBrush="{DynamicResource GlassCardStroke}" BorderThickness="1">
+              <controls:VeliSymbol Symbol="Sound" Width="15" Height="15"
+                                   Foreground="{DynamicResource TextPrimary}" />
+             </Border>
+            </StackPanel>
             <ControlTemplate.Triggers>
              <Trigger Property="IsChecked" Value="True"><Setter TargetName="MuteBody" Property="Opacity" Value="0.42" /></Trigger>
              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="MuteBody" Property="Background" Value="{DynamicResource GlassControlHover}" /></Trigger>

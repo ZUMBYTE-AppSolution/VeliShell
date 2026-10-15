@@ -15,15 +15,21 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
 {
     private readonly NotificationCenterService _notifications;
     private bool _closing;
+    private bool _requestingWindowsAccess;
+    private readonly ShellBackdropHost _backdrop;
+    private FrameworkElement? _anchor;
 
     internal NotificationCenterWindow(NotificationCenterService notifications)
     {
         _notifications = notifications;
         InitializeComponent();
+        _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
+        if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
         _notifications.Changed += NotificationsChanged;
         _notifications.WindowsAccessChanged += WindowsAccessChanged;
         Loaded += async (_, _) =>
         {
+            _backdrop.Apply();
             DateLabel.Text = DateTime.Now.ToString("dddd, d. MMMM",
                 LocalizationService.Current.ActiveCulture);
             RefreshItems();
@@ -31,14 +37,22 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
             if (_notifications.WindowsAccess.State == WindowsNotificationAccessState.Allowed)
                 await _notifications.RefreshWindowsNotificationsAsync();
         };
-        Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        Deactivated += (_, _) =>
+        {
+            if (!_requestingWindowsAccess)
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
+        };
         Closing += (_, _) => _closing = true;
         Closed += (_, _) =>
         {
             _notifications.Changed -= NotificationsChanged;
             _notifications.WindowsAccessChanged -= WindowsAccessChanged;
+            if (Application.Current is App app) app.Themes.Changed -= RefreshBackdrop;
+            _backdrop.Dispose();
         };
     }
+
+    private void RefreshBackdrop() => _backdrop.Apply();
 
     public void CloseOnce()
     {
@@ -49,6 +63,7 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
 
     internal void ShowRelativeTo(FrameworkElement anchor, Window owner, bool topmost)
     {
+        _anchor = anchor;
         Owner = owner;
         Topmost = topmost;
         MenuPanelPlacement.PlaceBelow(anchor, this);
@@ -73,20 +88,30 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
     {
         if (!IsInitialized) return;
         var items = _notifications.Snapshot();
+        var hadGroups = NotificationItems.Children.Count > 0;
+        var expandedGroups = NotificationItems.Children.OfType<Expander>()
+            .Where(expander => expander.IsExpanded &&
+                expander.Tag is ValueTuple<VeliShellNotificationSource, string>)
+            .Select(expander => ((VeliShellNotificationSource, string))expander.Tag)
+            .ToHashSet();
         NotificationItems.Children.Clear();
-        foreach (var group in items
+        var groups = items
                      .GroupBy(notification => new
                      {
                          notification.Source,
                          notification.AppDisplayName
                      })
-                     .OrderByDescending(group => group.Max(notification => notification.CreatedAt)))
+                     .OrderByDescending(group => group.Max(notification => notification.CreatedAt))
+                     .ToArray();
+        for (var index = 0; index < groups.Length; index++)
         {
+            var group = groups[index];
             var ordered = group.OrderByDescending(notification => notification.CreatedAt).ToList();
             NotificationItems.Children.Add(CreateNotificationGroup(
                 group.Key.AppDisplayName,
                 group.Key.Source,
-                ordered));
+                ordered, expandedGroups.Contains((group.Key.Source, group.Key.AppDisplayName)) ||
+                         !hadGroups && index == 0));
         }
 
         var hasItems = items.Count > 0;
@@ -96,18 +121,37 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         MarkReadButton.IsEnabled = items.Any(notification => notification.IsUnread);
 
         var access = _notifications.WindowsAccess;
-        var showAccessWarning = access.AppEnabled &&
-                                access.State != WindowsNotificationAccessState.Allowed;
+        var showAccessWarning = access.State is WindowsNotificationAccessState.Disabled
+            or WindowsNotificationAccessState.NotRequested or WindowsNotificationAccessState.Requesting
+            or WindowsNotificationAccessState.Unsupported
+            or WindowsNotificationAccessState.Denied or WindowsNotificationAccessState.Revoked
+            or WindowsNotificationAccessState.Error;
         WindowsAccessBanner.Visibility = showAccessWarning ? Visibility.Visible : Visibility.Collapsed;
-        WindowsAccessText.Text = L("Notifications.WindowsUnavailable");
+        ConnectWindowsButton.Visibility = access.HasPackageIdentity &&
+                                          access.State != WindowsNotificationAccessState.Unsupported &&
+                                          showAccessWarning
+            ? Visibility.Visible : Visibility.Collapsed;
+        WindowsAccessText.Text = L(access.State switch
+        {
+            WindowsNotificationAccessState.Disabled => "Notifications.AccessDisabled",
+            WindowsNotificationAccessState.NotRequested => "Notifications.AccessNotRequested",
+            WindowsNotificationAccessState.Requesting => "Notifications.AccessRequesting",
+            WindowsNotificationAccessState.Unsupported => "Notifications.AccessUnsupported",
+            WindowsNotificationAccessState.Denied => "Notifications.AccessDenied",
+            WindowsNotificationAccessState.Revoked => "Notifications.AccessRevoked",
+            WindowsNotificationAccessState.Error => "Notifications.AccessError",
+            _ => "Notifications.WindowsUnavailable"
+        });
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Reflow));
     }
 
     private UIElement CreateNotificationGroup(
         string appName,
         VeliShellNotificationSource source,
-        IReadOnlyList<VeliShellNotification> notifications)
+        IReadOnlyList<VeliShellNotification> notifications,
+        bool initiallyExpanded)
     {
-        var section = new StackPanel { Margin = new Thickness(2, 3, 2, 9) };
+        var section = new StackPanel { Margin = new Thickness(2, 0, 2, 5) };
         var header = new Grid { Margin = new Thickness(5, 0, 5, 6) };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -143,11 +187,31 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         };
         Grid.SetColumn(count, 2);
         header.Children.Add(count);
-        section.Children.Add(header);
-
         foreach (var notification in notifications)
             section.Children.Add(CreateNotificationCard(notification));
-        return section;
+        var expander = new Expander
+        {
+            Style = (Style)FindResource("GlassExpander"),
+            Header = header,
+            Content = section,
+            Tag = (source, appName),
+            IsExpanded = initiallyExpanded,
+            Margin = new Thickness(0, 2, 0, 5)
+        };
+        expander.Expanded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Reflow));
+        expander.Collapsed += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Reflow));
+        return expander;
+    }
+
+    private void Reflow()
+    {
+        if (_closing || !IsLoaded) return;
+        NotificationItems.Measure(new Size(Math.Max(200, Width - 42), double.PositiveInfinity));
+        var available = Math.Max(320, SystemParameters.WorkArea.Height - 48);
+        Height = Math.Clamp(182 + NotificationItems.DesiredSize.Height +
+                            (WindowsAccessBanner.IsVisible
+                                ? ConnectWindowsButton.IsVisible ? 88 : 52 : 0), 320, available);
+        if (_anchor is not null) MenuPanelPlacement.PlaceBelow(_anchor, this);
     }
 
     private UIElement CreateAppIcon(VeliShellNotificationSource source, byte[]? logoBytes)
@@ -267,7 +331,7 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
 
         return new Border
         {
-            Style = (Style)FindResource("GlassCard"),
+            Style = (Style)FindResource("GlassListRow"),
             CornerRadius = new CornerRadius(15),
             Padding = new Thickness(12, 10, 9, 10),
             Margin = new Thickness(0, 0, 0, 6),
@@ -305,6 +369,24 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
     }
 
     private static string L(string key) => LocalizationService.Current.Get(key);
+    private async void ConnectWindows_Click(object sender, RoutedEventArgs e)
+    {
+        _requestingWindowsAccess = true;
+        ConnectWindowsButton.IsEnabled = false;
+        try
+        {
+            var access = await _notifications.RequestWindowsAccessAsync();
+            if (Application.Current is App app)
+                app.UpdatePreferences(settings => settings.WindowsNotificationsEnabled =
+                    access.State == WindowsNotificationAccessState.Allowed);
+        }
+        finally
+        {
+            _requestingWindowsAccess = false;
+            if (!_closing) ConnectWindowsButton.IsEnabled = true;
+            if (!_closing) DispatchRefresh();
+        }
+    }
     private void MarkAllRead_Click(object sender, RoutedEventArgs e) => _notifications.MarkAllRead();
     private void Clear_Click(object sender, RoutedEventArgs e) => _notifications.Clear();
     private void Window_KeyDown(object sender, KeyEventArgs e)

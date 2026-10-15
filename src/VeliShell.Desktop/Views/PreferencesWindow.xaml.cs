@@ -59,6 +59,10 @@ public partial class PreferencesWindow : VeliShellWindow
         LightChoice.IsChecked = s.Appearance == Appearance.Light;
         DarkChoice.IsChecked = s.Appearance == Appearance.Dark;
         SystemChoice.IsChecked = s.Appearance == Appearance.System;
+        GlossSlider.Value = s.GlassGloss;
+        TransparencySlider.Value = s.GlassTransparency;
+        GlossLabel.Text = $"{s.GlassGloss:0}%";
+        TransparencyLabel.Text = $"{s.GlassTransparency:0}%";
         foreach (var item in LanguageChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.Language.ToString(), StringComparison.Ordinal);
         foreach (var item in UpdateModeChoice.Items.OfType<ComboBoxItem>())
@@ -176,6 +180,15 @@ public partial class PreferencesWindow : VeliShellWindow
     {
         if (!_loading && sender is RadioButton { Tag: string value } && Enum.TryParse<Appearance>(value, out var mode))
             _app.UpdatePreferences(s => s.Appearance = mode);
+    }
+    private void Glass_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loading || GlossSlider is null || TransparencySlider is null) return;
+        _app.UpdatePreferences(s =>
+        {
+            s.GlassGloss = GlossSlider.Value;
+            s.GlassTransparency = TransparencySlider.Value;
+        });
     }
     private void LanguageChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -696,6 +709,11 @@ public partial class PreferencesWindow : VeliShellWindow
     private void OpenWindowsSettings_Click(object sender, RoutedEventArgs e) => LaunchService.Open("ms-settings:");
     private void AddProgram_Click(object sender, RoutedEventArgs e) => _app.Dock.AddPrograms();
     private void AddFolder_Click(object sender, RoutedEventArgs e) => _app.Dock.AddFolder();
+    private void AddProtocol_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ProtocolPinWindow { Owner = this };
+        if (dialog.ShowDialog() == true) _app.Dock.AddPaths([dialog.ProtocolTarget]);
+    }
     private void AddVirtualFolder_Click(object sender, RoutedEventArgs e) => _app.Dock.CreateVirtualFolder();
     private void ShowDockPage_Click(object sender, RoutedEventArgs e)
     {

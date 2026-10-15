@@ -32,8 +32,17 @@ internal static class LaunchService
         if (PackagedAppService.AppIdFromTarget(path) is { } appId)
             return new Pin(Guid.NewGuid().ToString("N"),
                 PackagedAppService.NameForAppId(appId) ?? appId.Split('!')[0], path);
+        if (StableLaunchTargetService.IsRegisteredProtocol(path))
+            return new Pin(Guid.NewGuid().ToString("N"),
+                Uri.TryCreate(path, UriKind.Absolute, out var uri) ? uri.Scheme : path,
+                path, uri?.Scheme);
         if (Directory.Exists(path))
             return new Pin(Guid.NewGuid().ToString("N"), new DirectoryInfo(path).Name, path);
+        if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            path = StableLaunchTargetService.PreferShortcut(path);
+        if (PackagedAppService.AppIdFromTarget(path) is { } upgradedAppId)
+            return new Pin(Guid.NewGuid().ToString("N"),
+                PackagedAppService.NameForAppId(upgradedAppId) ?? upgradedAppId.Split('!')[0], path);
         var extension = Path.GetExtension(path);
         if (!File.Exists(path)) return null;
 
@@ -44,7 +53,13 @@ internal static class LaunchService
         {
             var resolved = ShellLinkService.ResolveTarget(path);
             if (resolved?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                if (StableLaunchTargetService.PreferPackagedIdentity(resolved) is { } packagedTarget)
+                    return new Pin(Guid.NewGuid().ToString("N"),
+                        Path.GetFileNameWithoutExtension(path), packagedTarget,
+                        Path.GetFileNameWithoutExtension(resolved));
                 process = Path.GetFileNameWithoutExtension(resolved);
+            }
         }
 
         var name = Path.GetFileNameWithoutExtension(path);

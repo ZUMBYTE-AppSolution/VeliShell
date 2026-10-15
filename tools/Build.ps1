@@ -106,6 +106,7 @@ try {
             'LICENSE',
             'THIRD-PARTY-NOTICES.md',
             'THIRD-PARTY-LICENSES\README.md',
+            'THIRD-PARTY-LICENSES\Material-Symbols-APACHE-2.0.txt',
             "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",
             "THIRD-PARTY-LICENSES\Microsoft.NETCore.App.Runtime.win-x64-$runtimeNoticeVersion-THIRD-PARTY-NOTICES.txt",
             "THIRD-PARTY-LICENSES\Microsoft.WindowsDesktop.App.Runtime.win-x64-$runtimeNoticeVersion-LICENSE.txt",

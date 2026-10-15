@@ -213,7 +213,7 @@ internal sealed class ShellBackdropHost : IDisposable
         var dpi = VisualTreeHelper.GetDpi(_overlay);
         var roundX = Math.Max(2, (int)Math.Round(_cornerRadius * 2 * dpi.DpiScaleX));
         var roundY = Math.Max(2, (int)Math.Round(_cornerRadius * 2 * dpi.DpiScaleY));
-        var region = NativeMethods.CreateRoundRectRgn(0, 0, width + 1, height + 1, roundX, roundY);
+        var region = NativeMethods.CreateRoundRectRgn(0, 0, width, height, roundX, roundY);
         if (region != 0 && NativeMethods.SetWindowRgn(_surfaceHandle, region, true) == 0)
             NativeMethods.DeleteObject(region); // On success Windows owns the region.
     }

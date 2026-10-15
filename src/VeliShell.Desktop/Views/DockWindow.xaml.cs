@@ -194,7 +194,8 @@ public partial class DockWindow : Window
             Visibility = fullscreen ? Visibility.Hidden : Visibility.Visible;
             PositionDock();
             // Polling is a fallback for system theme changes that don't raise a preference event.
-            _app.Themes.Apply(_app.Preferences.Appearance);
+            _app.Themes.Apply(_app.Preferences.Appearance,
+                _app.Preferences.GlassGloss, _app.Preferences.GlassTransparency);
         }
         catch (Exception ex) { App.Log("Window enumeration failed", ex); }
         finally { _refreshing = false; }
@@ -518,7 +519,8 @@ public partial class DockWindow : Window
                     AddMenuItem(menu, L("Dock.MoveRight"), () => MovePin(pin.Id, 1));
                 AddMenuItem(menu, L("Dock.Remove"), () => RemovePin(pin));
             }
-            else if (File.Exists(item.Target) || PackagedAppService.AppIdFromTarget(item.Target) is not null)
+            else if (File.Exists(item.Target) || PackagedAppService.AppIdFromTarget(item.Target) is not null ||
+                     StableLaunchTargetService.IsRegisteredProtocol(item.Target))
             {
                 menu.Items.Add(new Separator());
                 AddMenuItem(menu, L("Dock.Keep"), () => AddPaths([item.Target]));
@@ -760,6 +762,7 @@ public partial class DockWindow : Window
     {
         AddMenuItem(menu, L("Dock.PinProgram"), AddPrograms);
         AddMenuItem(menu, L("Dock.PinFolder"), AddFolder);
+        AddMenuItem(menu, L("Dock.PinProtocol"), AddProtocol);
         AddMenuItem(menu, L("FolderPopover.CreateVirtual"), CreateVirtualFolder);
         AddMenuItem(menu, L("Search.Open"), _app.ShowSearch);
         AddMenuItem(menu, L("Dock.Settings"), _app.ShowPreferences);
@@ -778,6 +781,12 @@ public partial class DockWindow : Window
     {
         var picker = new OpenFolderDialog { Title = L("Dock.FolderPicker") };
         if (picker.ShowDialog() == true) AddPaths([picker.FolderName]);
+    }
+
+    public void AddProtocol()
+    {
+        var dialog = new ProtocolPinWindow { Owner = this };
+        if (dialog.ShowDialog() == true) AddPaths([dialog.ProtocolTarget]);
     }
 
     internal void AddPaths(IEnumerable<string> paths, int? insertionIndex = null)
@@ -1409,7 +1418,8 @@ public partial class DockWindow : Window
     private static bool IsSafeDropPath(string? path) =>
         !string.IsNullOrWhiteSpace(path) && path.Length <= MaximumDropPathLength &&
         path.IndexOf('\0') < 0 && (File.Exists(path) || Directory.Exists(path) ||
-                                  PackagedAppService.AppIdFromTarget(path) is not null);
+                                  PackagedAppService.AppIdFromTarget(path) is not null ||
+                                  StableLaunchTargetService.IsRegisteredProtocol(path));
 
     private static bool IsVirtualFolderHotZone(DockTile tile, DragEventArgs e)
     {

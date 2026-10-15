@@ -100,16 +100,22 @@
        contents stay legible while the desktop colour can still influence the
        panel. The artwork is native VeliShell XAML, not copied platform assets. -->
   <LinearGradientBrush x:Key="GlassPanelSurface" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#F4FFFFFF" Offset="0" />
-    <GradientStop Color="#EDEFF2F8" Offset="0.5" />
-    <GradientStop Color="#E7E3E7F0" Offset="1" />
+    <GradientStop Color="#D4FFFFFF" Offset="0" />
+    <GradientStop Color="#C8EFF2F8" Offset="0.5" />
+    <GradientStop Color="#BCE3E7F0" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="GlassPanelStroke" Color="#D6FFFFFF" />
-  <LinearGradientBrush x:Key="GlassCardSurface" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#B8FFFFFF" Offset="0" />
-    <GradientStop Color="#76FFFFFF" Offset="1" />
+  <LinearGradientBrush x:Key="GlassCardSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#B0FFFFFF" Offset="0" />
+    <GradientStop Color="#78F8FAFF" Offset="0.53" />
+    <GradientStop Color="#58E8EAF5" Offset="1" />
   </LinearGradientBrush>
-  <SolidColorBrush x:Key="GlassCardStroke" Color="#9AFFFFFF" />
+  <SolidColorBrush x:Key="GlassCardStroke" Color="#B8FFFFFF" />
+  <LinearGradientBrush x:Key="GlassListSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#9AFFFFFF" Offset="0" />
+    <GradientStop Color="#48F7F7FC" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="GlassListStroke" Color="#8AFFFFFF" />
   <SolidColorBrush x:Key="GlassControlSurface" Color="#86FFFFFF" />
   <SolidColorBrush x:Key="GlassControlHover" Color="#C8FFFFFF" />
   <LinearGradientBrush x:Key="GlassActiveSurface" StartPoint="0,0" EndPoint="1,1">

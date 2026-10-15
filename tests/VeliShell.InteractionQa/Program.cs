@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using VeliShell.Core;
 using VeliShell.Desktop.Services;
 using VeliShell.Desktop.Native;
+using VeliShell.Desktop.Controls;
 
 internal static class Program
 {
@@ -123,6 +124,11 @@ internal static class Program
             TestTrayIconMirror();
             TestRunCommandParser();
             TestTransientAudioPanelClose(owner, anchor);
+            TestGlassMaterialAndRoundedClip();
+            var chatGptShortcutChecked = TestInstalledChatGptShortcut();
+            var policyType = RequireType("VeliShell.Desktop.Services.AudioDefaultDeviceService");
+            var policyAvailable = (bool)RequireMethod(policyType, "IsSwitchInterfaceAvailable")
+                .Invoke(null, null)!;
             RenderMaskContactSheet(Path.Combine(AppContext.BaseDirectory, "squircle-sizes.png"));
             var iconSurfacesPath = Path.Combine(AppContext.BaseDirectory, "icon-surfaces.png");
             RenderIconSurfaceContactSheet(iconSurfacesPath);
@@ -151,6 +157,13 @@ internal static class Program
             Console.WriteLine("PASS: Menu-bar Control Center and combined VeliShell/Windows Notification Center expose bounded, reversible and privacy-preserving contracts; unpackaged builds fail closed.");
             Console.WriteLine("PASS: The Windows tray mirror returns bounded, stable icons from running apps without changing Explorer settings.");
             Console.WriteLine("PASS: The audio-device panel closes without a reentrant deactivation crash.");
+            Console.WriteLine("PASS: Glass sliders change panel opacity and sheen; the dock clips overlay content to rounded corners.");
+            Console.WriteLine(chatGptShortcutChecked
+                ? "PASS: Versioned ChatGPT executable pins resolve to a stable AppsFolder identity when running, or retain the Start-menu link."
+                : "INFO: ChatGPT Start-menu shortcut is not present; the versioned shortcut integration probe was skipped.");
+            Console.WriteLine(policyAvailable
+                ? "PASS: The local Windows audio policy switch interface is available. No device was changed."
+                : "INFO: This Windows version did not expose the optional direct audio switch interface. No device was changed.");
             Console.WriteLine($"PASS: Rendered real 58-DIP VeliShell/files/browser/notes/system surfaces to {iconSurfacesPath}");
             Console.WriteLine($"PASS: Rendered aligned freeform empty/full Recycle Bin surfaces to {trashSurfacesPath}");
             Console.WriteLine(hasSteamIconSample
@@ -1388,6 +1401,67 @@ internal static class Program
         }
     }
 
+    private static bool TestInstalledChatGptShortcut()
+    {
+        var shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
+            "Programs", "ChatGPT.lnk");
+        if (!File.Exists(shortcut)) return false;
+        var linkType = RequireType("VeliShell.Desktop.Services.ShellLinkService");
+        var target = RequireMethod(linkType, "ResolveTarget").Invoke(null, [shortcut]) as string;
+        var chatGpt = Process.GetProcessesByName("ChatGPT").FirstOrDefault(process =>
+            process.Id > 0);
+        string? packagedTarget = null;
+        if (chatGpt is not null)
+        {
+            var packagedType = RequireType("VeliShell.Desktop.Services.PackagedAppService");
+            var identity = RequireMethod(packagedType, "ForProcess").Invoke(null, [checked((uint)chatGpt.Id)]);
+            packagedTarget = identity?.GetType().GetProperty("Target")?.GetValue(identity) as string;
+        }
+        if (target is null || !target.EndsWith("ChatGPT.exe", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var launchType = RequireType("VeliShell.Desktop.Services.LaunchService");
+        var pin = (Pin?)RequireMethod(launchType, "PinFromPath").Invoke(null, [target]);
+        var expected = packagedTarget ?? shortcut;
+        Require(pin is not null && string.Equals(pin.Target, expected, StringComparison.OrdinalIgnoreCase),
+            "A versioned ChatGPT executable was pinned as an unstable absolute path.");
+        var resolver = RequireType("VeliShell.Desktop.Services.StableLaunchTargetService");
+        var previousVersion = System.Text.RegularExpressions.Regex.Replace(target,
+            @"(?<=OpenAI\.Codex_)\d+\.\d+\.\d+\.\d+", "1.0.0.0",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!string.Equals(previousVersion, target, StringComparison.OrdinalIgnoreCase))
+        {
+            var recovered = RequireMethod(resolver, "PreferShortcut")
+                .Invoke(null, [previousVersion, "ChatGPT"]) as string;
+            Require(string.Equals(recovered, expected, StringComparison.OrdinalIgnoreCase),
+                "A stale versioned ChatGPT path could not recover its persistent shortcut.");
+        }
+        return true;
+    }
+
+    private static void TestGlassMaterialAndRoundedClip()
+    {
+        var clipped = new Grid { Width = 100, Height = 50 };
+        VeliShell.Desktop.Controls.RoundedClip.SetRadius(clipped, 10);
+        clipped.Measure(new Size(100, 50));
+        clipped.Arrange(new Rect(0, 0, 100, 50));
+        Require(clipped.Clip is RectangleGeometry { RadiusX: 10, RadiusY: 10 },
+            "The dock's content clip is not a rounded geometry.");
+        if (SystemParameters.HighContrast) return;
+        using var theme = new ThemeService();
+        theme.Apply(Appearance.Dark, 50, 50);
+        var basePanel = (LinearGradientBrush)Application.Current.FindResource("GlassPanelSurface");
+        var baseMilk = (RadialGradientBrush)Application.Current.FindResource("DockMilkOverlay");
+        var baseAlpha = basePanel.GradientStops[0].Color.A;
+        var baseSheen = baseMilk.GradientStops[0].Color.A;
+        theme.Apply(Appearance.Dark, 100, 100);
+        var clearPanel = (LinearGradientBrush)Application.Current.FindResource("GlassPanelSurface");
+        var glossyMilk = (RadialGradientBrush)Application.Current.FindResource("DockMilkOverlay");
+        Require(clearPanel.GradientStops[0].Color.A < baseAlpha &&
+                glossyMilk.GradientStops[0].Color.A > baseSheen,
+            "The glass controls did not alter transparency and sheen independently.");
+        theme.Apply(Appearance.Light, 50, 50);
+    }
+
     private static void TestDockTileHoverMask()
     {
         var surfaceType = RequireType("VeliShell.Desktop.Controls.AppIconSurface");
@@ -2332,10 +2406,10 @@ internal static class Program
         }
 
         var menuType = RequireType("VeliShell.Desktop.Views.MenuBarWindow");
-        Require(menuType.GetMethod("TrayOverflow_Opened", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
-                menuType.GetMethod("TrayOverflow_Closed", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+        Require(menuType.GetMethod("SetTrayExpanded", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
+                menuType.GetMethod("AnimateTrayReveal", BindingFlags.Instance | BindingFlags.NonPublic) is not null &&
                 menuType.GetField("_trayCollapseTimer", BindingFlags.Instance | BindingFlags.NonPublic) is not null,
-            "The tray overflow lost its automatic-collapse lifecycle.");
+            "The inline tray reveal lost its animation or automatic-collapse lifecycle.");
     }
 
     private static int RenderShellPanels(Application application)
@@ -2345,6 +2419,10 @@ internal static class Program
 
         try
         {
+            var materialPaths = RequireType("VeliShell.Desktop.Controls.MaterialSymbolPaths");
+            foreach (var kind in Enum.GetValues<VeliSymbolKind>())
+                Require(RequireMethod(materialPaths, "For").Invoke(null, [kind]) is Geometry,
+                    $"Material Symbol {kind} is missing or cannot be parsed.");
             PopulateSyntheticNotifications();
             foreach (var dark in new[] { false, true })
             {
@@ -2366,6 +2444,12 @@ internal static class Program
                             ?? throw new InvalidOperationException("Could not create audio panel."));
                 RequireMethod(audioType, "RefreshDevices").Invoke(audio, null);
                 RenderShellPanel(audio, Path.Combine(outputDirectory, $"audio-devices-{suffix}.png"), dark);
+
+                var mixerType = RequireType("VeliShell.Desktop.Views.AudioMixerWindow");
+                var mixer = (Window)(Activator.CreateInstance(mixerType, nonPublic: true)
+                            ?? throw new InvalidOperationException("Could not create volume mixer."));
+                RequireMethod(mixerType, "RefreshEndpoints").Invoke(mixer, null);
+                RenderShellPanel(mixer, Path.Combine(outputDirectory, $"audio-mixer-{suffix}.png"), dark);
 
                 var notificationServiceType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
                 var notificationService = notificationServiceType

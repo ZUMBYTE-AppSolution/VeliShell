@@ -109,6 +109,16 @@
        </RadioButton>
       </UniformGrid>
       <TextBlock x:Name="ThemeStatus" Style="{StaticResource SecondaryText}" Margin="3,12,0,0" />
+      <TextBlock Text="{services:Loc Appearance.GlassSection}" Style="{StaticResource SectionLabel}" />
+      <Border Style="{StaticResource Card}"><StackPanel>
+       <TextBlock Text="{services:Loc Appearance.GlassDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,13" />
+       <DockPanel><TextBlock Text="{services:Loc Appearance.Gloss}" /><TextBlock x:Name="GlossLabel" HorizontalAlignment="Right" /></DockPanel>
+       <Slider x:Name="GlossSlider" Minimum="0" Maximum="100" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="Glass_ValueChanged"
+               Margin="0,9,0,14" AutomationProperties.Name="{services:Loc Appearance.Gloss}" />
+       <DockPanel><TextBlock Text="{services:Loc Appearance.Transparency}" /><TextBlock x:Name="TransparencyLabel" HorizontalAlignment="Right" /></DockPanel>
+       <Slider x:Name="TransparencySlider" Minimum="0" Maximum="100" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="Glass_ValueChanged"
+               Margin="0,9,0,0" AutomationProperties.Name="{services:Loc Appearance.Transparency}" />
+      </StackPanel></Border>
       <TextBlock Text="{services:Loc Appearance.SharedControls}" Style="{StaticResource SectionLabel}" />
       <Border Style="{StaticResource Card}"><StackPanel>
        <TextBlock Text="{services:Loc Appearance.SharedControlsDescription}" Style="{StaticResource SecondaryText}" Margin="0,0,0,14" />
@@ -202,6 +212,7 @@
       <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
        <Button Content="{services:Loc Apps.AddProgram}" Style="{StaticResource PrimaryButton}" Click="AddProgram_Click" />
        <Button Content="{services:Loc Apps.AddFolder}" Margin="8,0,0,0" Click="AddFolder_Click" />
+       <Button Content="{services:Loc Dock.PinProtocol}" Margin="8,0,0,0" Click="AddProtocol_Click" />
        <Button Content="{services:Loc FolderPopover.CreateVirtual}" Margin="8,0,0,0" Click="AddVirtualFolder_Click" />
       </StackPanel>
       <TextBox x:Name="PinSearch" TextChanged="PinSearch_Changed" Margin="0,0,0,10" ToolTip="{services:Loc Apps.FilterPins}" AutomationProperties.Name="{services:Loc Apps.FilterPins}" />
