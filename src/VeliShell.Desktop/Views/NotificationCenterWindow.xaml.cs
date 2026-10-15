@@ -29,7 +29,7 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         _notifications.WindowsAccessChanged += WindowsAccessChanged;
         Loaded += async (_, _) =>
         {
-            _backdrop.Apply();
+            RefreshBackdrop();
             DateLabel.Text = DateTime.Now.ToString("dddd, d. MMMM",
                 LocalizationService.Current.ActiveCulture);
             RefreshItems();
@@ -52,7 +52,7 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         };
     }
 
-    private void RefreshBackdrop() => _backdrop.Apply();
+    private void RefreshBackdrop() => _backdrop.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     public void CloseOnce()
     {

@@ -6,6 +6,17 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.8] - 2026-10-15
+
+### Behoben
+
+- Die Menüleiste füllt ihre reservierte Bildschirmhöhe nun vollständig aus; der schmale Spalt unter ihr entfällt.
+- Die Glasfläche des Docks wird nicht mehr durch einen künstlichen Glanzstrich simuliert. Ein eigenes schlankes Hintergrundfenster lässt die Farben des Desktops tatsächlich weichgezeichnet durchscheinen, ohne die abgerundeten Ecken zu übermalen.
+
+### Verbessert
+
+- Dock, Menüleiste, Kontextmenüs und schwebende Panels verwenden die native Glasfläche zusammen mit abgestimmten, transparenteren Hell- und Dunkelmodus-Farben. Falls der Effekt auf einem System nicht verfügbar ist, bleibt eine lesbare Ersatzfläche erhalten.
+
 ## [0.13.7] - 2026-10-15
 
 ### Behoben

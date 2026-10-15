@@ -38,7 +38,7 @@ public partial class VirtualFolderNameWindow : Window
         };
     }
 
-    private void RefreshBackdrop() => _backdrop.Apply();
+    private void RefreshBackdrop() => _backdrop.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     private void CenterOnOwnerDisplay()
     {

@@ -141,8 +141,7 @@ public partial class MenuBarWindow : Window
     private void ApplyBackdrop()
     {
         if (_handle == 0 || _closed) return;
-        MenuBody.SetResourceReference(Border.BackgroundProperty,
-            _backdrop.Apply() ? "MenuBarAcrylicSurface" : "MenuBarSurface");
+        _backdrop.ApplyMaterial("MenuBarAcrylicSurface", "MenuBarSurface");
     }
 
     private void PositionBar()

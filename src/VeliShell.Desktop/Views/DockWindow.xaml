@@ -21,8 +21,6 @@
       CornerRadius="9.5" IsHitTestVisible="False" />
      <Border Margin="1" BorderBrush="{DynamicResource DockInnerStroke}" BorderThickness="1"
       CornerRadius="9.5" IsHitTestVisible="False" />
-     <Border Height="1" Margin="25,1,25,0" VerticalAlignment="Top"
-      Background="{DynamicResource DockHighlight}" CornerRadius="0.5" IsHitTestVisible="False" />
     </Grid>
    </Border>
    <StackPanel x:Name="ItemsPanel" Orientation="Horizontal" VerticalAlignment="Bottom"

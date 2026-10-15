@@ -68,11 +68,11 @@
     <GradientStop Color="#96F5F6FA" Offset="0.46" />
     <GradientStop Color="#89DEE3EB" Offset="1" />
   </LinearGradientBrush>
-  <Color x:Key="ShellAcrylicTint">#55EDF2FA</Color>
+  <Color x:Key="ShellAcrylicTint">#3CEDF2FA</Color>
   <LinearGradientBrush x:Key="DockAcrylicSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Color="#75FFFFFF" Offset="0" />
-    <GradientStop Color="#62F5F6FA" Offset="0.46" />
-    <GradientStop Color="#54DEE3EB" Offset="1" />
+    <GradientStop Color="#5AFFFFFF" Offset="0" />
+    <GradientStop Color="#48F5F6FA" Offset="0.46" />
+    <GradientStop Color="#3ADEE3EB" Offset="1" />
   </LinearGradientBrush>
   <RadialGradientBrush x:Key="DockMilkOverlay" Center="0.42,0.05" GradientOrigin="0.42,-0.18" RadiusX="0.78" RadiusY="0.95">
     <GradientStop Color="#2DFFFFFF" Offset="0" />
@@ -91,9 +91,9 @@
     <GradientStop Color="#87E3E7F0" Offset="1" />
   </LinearGradientBrush>
   <LinearGradientBrush x:Key="MenuBarAcrylicSurface" StartPoint="0,0" EndPoint="1,1">
-    <GradientStop Color="#75FFFFFF" Offset="0" />
-    <GradientStop Color="#62EFF2F8" Offset="0.5" />
-    <GradientStop Color="#54E3E7F0" Offset="1" />
+    <GradientStop Color="#5AFFFFFF" Offset="0" />
+    <GradientStop Color="#48EFF2F8" Offset="0.5" />
+    <GradientStop Color="#3AE3E7F0" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="SwitchOff" Color="#CBCBD0" />
   <!-- Transient shell surfaces use a neutral, luminous material so the
@@ -104,10 +104,20 @@
     <GradientStop Color="#C8EFF2F8" Offset="0.5" />
     <GradientStop Color="#BCE3E7F0" Offset="1" />
   </LinearGradientBrush>
+  <LinearGradientBrush x:Key="GlassPanelAcrylicSurface" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#90FFFFFF" Offset="0" />
+    <GradientStop Color="#78EFF2F8" Offset="0.5" />
+    <GradientStop Color="#66E3E7F0" Offset="1" />
+  </LinearGradientBrush>
   <LinearGradientBrush x:Key="GlassMenuSurface" StartPoint="0,0" EndPoint="0,1">
     <GradientStop Color="#C7F8FAFF" Offset="0" />
     <GradientStop Color="#B4E9EDF6" Offset="0.5" />
     <GradientStop Color="#A8DDE3EF" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="GlassMenuAcrylicSurface" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#88F8FAFF" Offset="0" />
+    <GradientStop Color="#70E9EDF6" Offset="0.5" />
+    <GradientStop Color="#5CDDE3EF" Offset="1" />
   </LinearGradientBrush>
   <SolidColorBrush x:Key="GlassPanelStroke" Color="#D6FFFFFF" />
   <LinearGradientBrush x:Key="GlassCardSurface" StartPoint="0,0" EndPoint="1,1">

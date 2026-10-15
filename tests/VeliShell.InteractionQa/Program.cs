@@ -1,7 +1,13 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -34,6 +40,10 @@ internal static class Program
             return RenderFolderViews();
         if (args.Contains("--render-glass-dialogs", StringComparer.OrdinalIgnoreCase))
             return RenderGlassDialogs();
+        if (args.Contains("--render-native-glass", StringComparer.OrdinalIgnoreCase))
+            return RenderNativeGlass();
+        if (args.Contains("--glass-wallpaper", StringComparer.OrdinalIgnoreCase))
+            return RunGlassWallpaper();
         if (args.Contains("--live-multidisplay-dock", StringComparer.OrdinalIgnoreCase))
             return RunLiveMultiDisplayDockProbe();
         if (args.Contains("--live-real-multidisplay-menu", StringComparer.OrdinalIgnoreCase))
@@ -1359,6 +1369,109 @@ internal static class Program
         DrainDispatcher();
         Thread.Sleep(450);
         DrainDispatcher();
+    }
+
+    private static int RenderNativeGlass()
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Dark.xaml")
+        });
+        using var wallpaper = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, "--glass-wallpaper")
+        {
+            UseShellExecute = false, CreateNoWindow = true
+        }) ?? throw new InvalidOperationException("Could not launch the test wallpaper.");
+        var plate = new Border
+        {
+            Width = 620, Height = 120, CornerRadius = new CornerRadius(11),
+            BorderThickness = new Thickness(1),
+            BorderBrush = (Brush)application.FindResource("DockStroke"),
+            Background = (Brush)application.FindResource("DockAcrylicSurfaceGradient")
+        };
+        var overlay = new Window
+        {
+            Width = 680, Height = 180, Left = 140, Top = 170,
+            WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            ShowInTaskbar = false, ShowActivated = false, Topmost = true,
+            Background = Brushes.Transparent, Content = plate
+        };
+        try
+        {
+            Thread.Sleep(700);
+            overlay.Show();
+            using var backdrop = new ShellBackdropHost(overlay, plate, 11);
+            var active = backdrop.ApplyMaterial("DockAcrylicSurfaceGradient", "DockSurfaceGradient");
+            SettleUi();
+            var path = Path.Combine(AppContext.BaseDirectory, "native-glass-preview.png");
+            using var bitmap = new System.Drawing.Bitmap(760, 320);
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                graphics.CopyFromScreen(100, 100, 0, 0, new System.Drawing.Size(760, 320));
+            bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            var left = bitmap.GetPixel(130, 160);
+            var right = bitmap.GetPixel(630, 160);
+            var colorBleed = Math.Abs(left.R - right.R) > 20 || Math.Abs(left.B - right.B) > 20;
+            Console.WriteLine($"Native glass active: {active}; color bleed: {colorBleed}; preview: {path}");
+            return active && colorBleed ? 0 : 1;
+        }
+        finally
+        {
+            overlay.Close();
+            if (!wallpaper.HasExited) wallpaper.Kill();
+            application.Shutdown();
+        }
+    }
+
+    private static int RunGlassWallpaper()
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var wallpaperBrush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(1, 0),
+            GradientStops = new GradientStopCollection
+            {
+                new(Colors.DodgerBlue, 0), new(Colors.Magenta, 0.5), new(Colors.OrangeRed, 1)
+            }
+        };
+        var wallpaper = new Window
+        {
+            Width = 760, Height = 320, Left = 100, Top = 100,
+            WindowStyle = WindowStyle.None, ShowInTaskbar = false, Topmost = true,
+            Content = new Grid
+            {
+                Background = wallpaperBrush,
+                Children =
+                {
+                    new Border
+                    {
+                        Background = new DrawingBrush
+                        {
+                            TileMode = TileMode.Tile,
+                            Viewport = new Rect(0, 0, 16, 16),
+                            ViewportUnits = BrushMappingMode.Absolute,
+                            Drawing = new GeometryDrawing(
+                                new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), null,
+                                new RectangleGeometry(new Rect(0, 0, 2, 16)))
+                        }
+                    }
+                }
+            }
+        };
+        try
+        {
+            wallpaper.Show();
+            for (var index = 0; index < 100; index++)
+            {
+                DrainDispatcher();
+                Thread.Sleep(50);
+            }
+            return 0;
+        }
+        finally
+        {
+            wallpaper.Close();
+            application.Shutdown();
+        }
     }
 
     private static NativeRect WindowBounds(nint handle)

@@ -5,11 +5,11 @@
  xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
  Title="{services:Loc MenuBar.Title}" WindowStyle="None" AllowsTransparency="True"
  Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="False" ShowActivated="False"
- Topmost="True" Height="35" Width="900" UseLayoutRounding="True"
+ Topmost="True" Height="30" Width="900" UseLayoutRounding="True"
  MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave"
  Activated="MenuBar_Activated" Deactivated="MenuBar_Deactivated">
  <Grid Background="Transparent">
-  <Border x:Name="MenuBody" Height="30" VerticalAlignment="Top"
+  <Border x:Name="MenuBody" VerticalAlignment="Stretch"
           Background="{DynamicResource MenuBarSurface}"
           BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="0,0,0,1">
    <Border.RenderTransform><TranslateTransform x:Name="Slide" /></Border.RenderTransform>

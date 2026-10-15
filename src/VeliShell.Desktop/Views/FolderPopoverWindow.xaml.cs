@@ -80,7 +80,7 @@ public partial class FolderPopoverWindow : Window, ITransientPanel
         };
     }
 
-    private void RefreshBackdrop() => _backdrop?.Apply();
+    private void RefreshBackdrop() => _backdrop?.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     public void CloseOnce()
     {

@@ -20,7 +20,7 @@ public partial class AudioMixerWindow : Window
         InitializeComponent();
         _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
         if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
-        Loaded += (_, _) => { _backdrop.Apply(); RefreshEndpoints(); };
+        Loaded += (_, _) => { RefreshBackdrop(); RefreshEndpoints(); };
         Closed += (_, _) =>
         {
             if (Application.Current is App app) app.Themes.Changed -= RefreshBackdrop;
@@ -28,7 +28,7 @@ public partial class AudioMixerWindow : Window
         };
     }
 
-    private void RefreshBackdrop() => _backdrop.Apply();
+    private void RefreshBackdrop() => _backdrop.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     private void RefreshEndpoints()
     {

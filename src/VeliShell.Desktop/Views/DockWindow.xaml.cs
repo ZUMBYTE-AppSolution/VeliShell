@@ -187,8 +187,7 @@ public partial class DockWindow : Window
     private void ApplyBackdrop()
     {
         if (_handle == 0 || _closed) return;
-        DockPlate.SetResourceReference(Border.BackgroundProperty,
-            _backdrop.Apply() ? "DockAcrylicSurfaceGradient" : "DockSurfaceGradient");
+        _backdrop.ApplyMaterial("DockAcrylicSurfaceGradient", "DockSurfaceGradient");
     }
 
     private async Task RefreshWindows()

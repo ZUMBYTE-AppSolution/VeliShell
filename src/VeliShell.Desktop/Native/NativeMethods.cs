@@ -133,6 +133,22 @@ internal static class NativeMethods
         [MarshalAs(UnmanagedType.Bool)] public bool Visible;
         [MarshalAs(UnmanagedType.Bool)] public bool SourceClientAreaOnly;
     }
+    internal delegate nint WindowProcedure(nint window, int message, nint wParam, nint lParam);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct WindowClass
+    {
+        public uint Size;
+        public uint Style;
+        public nint Procedure;
+        public int ClassExtra;
+        public int WindowExtra;
+        public nint Instance;
+        public nint Icon;
+        public nint Cursor;
+        public nint Background;
+        public string? MenuName;
+        public string Name;
+        public nint SmallIcon;
+    }
 
     [Flags]
     internal enum ShellItemImageFactoryFlags : uint
@@ -305,6 +321,18 @@ internal static class NativeMethods
         out DataBlob dataOut);
     [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
     [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? module);
+    [DllImport("user32.dll", EntryPoint = "RegisterClassExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern ushort RegisterClass(ref WindowClass windowClass);
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern nint CreateWindowEx(int extendedStyle, string className, string title,
+        int style, int x, int y, int width, int height, nint parent, nint menu, nint instance, nint parameter);
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    internal static extern nint DefWindowProc(nint window, int message, nint wParam, nint lParam);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ValidateRect(nint window, nint rect);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool DestroyWindow(nint window);
     [DllImport("user32.dll", EntryPoint = "SetWindowCompositionAttribute", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetWindowCompositionAttribute(nint hwnd, ref WindowCompositionAttributeData data);

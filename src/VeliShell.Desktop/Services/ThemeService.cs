@@ -37,6 +37,7 @@ public sealed class ThemeService : IDisposable
                      {
                          "WindowSurface", "SidebarSurface", "CardSurface", "DockSurface", "MenuSurface",
                          "WindowBackdropGradient", "SidebarGradient", "CardSurfaceGradient", "GlassMenuSurface",
+                         "GlassMenuAcrylicSurface", "GlassPanelAcrylicSurface",
                          "DockSurfaceGradient", "DockAcrylicSurfaceGradient", "DockMilkOverlay", "DockHover",
                          "MenuBarAcrylicSurface"
                      })
@@ -75,7 +76,8 @@ public sealed class ThemeService : IDisposable
         // panels still retain enough tint for text contrast.
         var opacityScale = 1 + (50 - transparency) * 0.012;
         foreach (var key in new[] { "DockSurfaceGradient", "DockAcrylicSurfaceGradient",
-                     "MenuBarSurface", "MenuBarAcrylicSurface", "GlassPanelSurface", "GlassMenuSurface",
+                     "MenuBarSurface", "MenuBarAcrylicSurface", "GlassPanelSurface", "GlassPanelAcrylicSurface",
+                     "GlassMenuSurface", "GlassMenuAcrylicSurface",
                      "WindowBackdropGradient", "SidebarGradient", "CardSurfaceGradient",
                      "ControlSurfaceGradient" })
         {

@@ -20,7 +20,7 @@ public partial class ControlCenterWindow : Window, ITransientPanel
         if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
         Loaded += (_, _) =>
         {
-            _backdrop.Apply();
+            RefreshBackdrop();
             RefreshStatus();
             _statusTimer.Start();
         };
@@ -35,7 +35,7 @@ public partial class ControlCenterWindow : Window, ITransientPanel
         };
     }
 
-    private void RefreshBackdrop() => _backdrop.Apply();
+    private void RefreshBackdrop() => _backdrop.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     public void CloseOnce()
     {

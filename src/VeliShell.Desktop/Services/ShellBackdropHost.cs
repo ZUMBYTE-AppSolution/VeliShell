@@ -17,23 +17,26 @@ internal sealed class ShellBackdropHost : IDisposable
 {
     private const int AccentAcrylicBlurBehind = 4;
     private const int AccentPolicyAttribute = 19;
+    private const string AcrylicWindowClassName = "VeliShellAcrylicBackdrop";
     private const int WmNcHitTest = 0x0084;
     private const int HtTransparent = -1;
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
     private const uint SwpNoActivate = 0x0010;
+    private static readonly NativeMethods.WindowProcedure AcrylicProcedure = AcrylicWindowProcedure;
+    private static readonly Lazy<ushort> AcrylicClass = new(RegisterAcrylicClass);
 
     private readonly FrameworkElement _overlay;
     private readonly Window? _overlayWindow;
     private readonly FrameworkElement _plate;
     private readonly double _cornerRadius;
     private readonly DispatcherTimer _motionTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
-    private Window? _surface;
-    private HwndSource? _source;
     private nint _surfaceHandle;
     private NativeMethods.Rect _lastBounds;
     private bool _hasBounds;
     private bool _active;
+    private bool _surfaceVisible;
+    private bool _surfaceTopmost;
     private bool _disposed;
     private long _motionUntil;
 
@@ -67,7 +70,7 @@ internal sealed class ShellBackdropHost : IDisposable
             CloseSurface();
             return false;
         }
-        if (_surface is null && !CreateSurface()) return false;
+        if (_surfaceHandle == 0 && !CreateSurface()) return false;
         if (!SetAccent(tint))
         {
             CloseSurface();
@@ -78,12 +81,23 @@ internal sealed class ShellBackdropHost : IDisposable
         return true;
     }
 
+    internal bool ApplyMaterial(string acrylicResource, string fallbackResource)
+    {
+        var active = Apply();
+        var resource = active ? acrylicResource : fallbackResource;
+        if (_plate is Border border)
+            border.SetResourceReference(Border.BackgroundProperty, resource);
+        else if (_plate is Control control)
+            control.SetResourceReference(Control.BackgroundProperty, resource);
+        return active;
+    }
+
     internal void Sync()
     {
-        if (!_active || _disposed || _surface is null) return;
+        if (!_active || _disposed || _surfaceHandle == 0) return;
         if (!_overlay.IsVisible || !_plate.IsVisible || _plate.ActualWidth <= 0 || _plate.ActualHeight <= 0)
         {
-            if (_surface.IsVisible) _surface.Hide();
+            HideSurface();
             return;
         }
         var topLeft = _plate.PointToScreen(new Point());
@@ -106,7 +120,7 @@ internal sealed class ShellBackdropHost : IDisposable
         var insetY = 0;
         if (_cornerRadius > 0)
         {
-            // Acrylic composition can paint the full rectangular HWND despite
+            // The legacy accent can paint the full rectangular HWND despite
             // SetWindowRgn. Keep even that rectangle inside the WPF round-rect:
             // at its nearest corner, 2 * (radius - inset)^2 <= radius^2.
             // Two extra physical pixels cover antialiasing and DPI rounding.
@@ -122,23 +136,26 @@ internal sealed class ShellBackdropHost : IDisposable
         var height = bounds.Bottom - bounds.Top;
         if (width < 2 || height < 2)
         {
-            if (_surface.IsVisible) _surface.Hide();
+            HideSurface();
             return;
         }
-        var wasVisible = _surface.IsVisible;
-        if (!wasVisible) _surface.Show();
+        var wasVisible = _surfaceVisible;
+        if (!wasVisible)
+        {
+            NativeMethods.ShowWindow(_surfaceHandle, NativeMethods.SwShowNoActivate);
+            _surfaceVisible = true;
+        }
         var topmost = OverlayTopmost(overlayHandle);
-        var topmostChanged = _surface.Topmost != topmost;
-        if (topmostChanged) _surface.Topmost = topmost;
+        var topmostChanged = _surfaceTopmost != topmost;
+        _surfaceTopmost = topmost;
         var changed = !_hasBounds || bounds.Left != _lastBounds.Left || bounds.Top != _lastBounds.Top ||
                       bounds.Right != _lastBounds.Right || bounds.Bottom != _lastBounds.Bottom;
         if (changed)
         {
             if (!NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
                     bounds.Left, bounds.Top, width, height, SwpNoActivate)) return;
-            // A layered WPF host can lose its native region when it is shown
-            // again or moved between monitors. Restore the rounded clipping
-            // whenever the acrylic window's bounds change.
+            // Restore the rounded clipping whenever the backdrop window's
+            // bounds change or it is moved between monitors.
             ApplyRegion(width, height, insetX, insetY);
             _lastBounds = bounds;
             _hasBounds = true;
@@ -171,51 +188,34 @@ internal sealed class ShellBackdropHost : IDisposable
 
     private bool CreateSurface()
     {
-        try
-        {
-            var surface = new Window
-            {
-                Width = 2, Height = 2, Left = -10000, Top = -10000,
-                WindowStyle = WindowStyle.None, AllowsTransparency = true,
-                Background = Brushes.Transparent, ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false, ShowActivated = false, Topmost = OverlayTopmost(OverlayHandle()),
-                Content = new Grid { Background = Brushes.Transparent }
-            };
-            _surface = surface;
-            surface.SourceInitialized += (_, _) =>
-            {
-                _surfaceHandle = new WindowInteropHelper(surface).Handle;
-                var style = NativeMethods.GetWindowLongPtr(_surfaceHandle, NativeMethods.GwlExStyle).ToInt64();
-                NativeMethods.SetWindowLongPtr(_surfaceHandle, NativeMethods.GwlExStyle,
-                    (nint)(style | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate |
-                           NativeMethods.WsExTransparent));
-                _source = HwndSource.FromHwnd(_surfaceHandle);
-                _source?.AddHook(WindowHook);
-            };
-            surface.Closed += (_, _) =>
-            {
-                _active = false;
-                _source?.RemoveHook(WindowHook);
-                _source = null;
-                _surfaceHandle = 0;
-                _hasBounds = false;
-                if (ReferenceEquals(_surface, surface)) _surface = null;
-            };
-            surface.Show();
-            return _surfaceHandle != 0;
-        }
-        catch (InvalidOperationException)
-        {
-            CloseSurface();
-            return false;
-        }
+        if (AcrylicClass.Value == 0) return false;
+        _surfaceHandle = NativeMethods.CreateWindowEx(
+            (int)(NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate |
+                  NativeMethods.WsExTransparent),
+            AcrylicWindowClassName, "", unchecked((int)0x80000000),
+            -10000, -10000, 2, 2, 0, 0, NativeMethods.GetModuleHandle(null), 0);
+        return _surfaceHandle != 0;
     }
 
-    private nint WindowHook(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
+    private static ushort RegisterAcrylicClass()
     {
-        if (message == WmNcHitTest) { handled = true; return HtTransparent; }
-        if (message == WmMouseActivate) { handled = true; return MaNoActivate; }
-        return 0;
+        var registration = new NativeMethods.WindowClass
+        {
+            Size = (uint)Marshal.SizeOf<NativeMethods.WindowClass>(),
+            Procedure = Marshal.GetFunctionPointerForDelegate(AcrylicProcedure),
+            Instance = NativeMethods.GetModuleHandle(null),
+            Name = AcrylicWindowClassName
+        };
+        return NativeMethods.RegisterClass(ref registration);
+    }
+
+    private static nint AcrylicWindowProcedure(nint window, int message, nint wParam, nint lParam)
+    {
+        if (message == WmNcHitTest) return HtTransparent;
+        if (message == WmMouseActivate) return MaNoActivate;
+        if (message == 0x0014) return 1; // WM_ERASEBKGND: leave the acrylic material visible.
+        if (message == 0x000F) { NativeMethods.ValidateRect(window, 0); return 0; } // WM_PAINT
+        return NativeMethods.DefWindowProc(window, message, wParam, lParam);
     }
 
     private nint OverlayHandle() =>
@@ -277,13 +277,18 @@ internal sealed class ShellBackdropHost : IDisposable
     {
         _active = false;
         _motionTimer.Stop();
-        var surface = _surface;
-        _surface = null;
-        if (surface is not null)
-        {
-            try { surface.Close(); }
-            catch (InvalidOperationException) { /* WPF is already closing the surface. */ }
-        }
+        var handle = _surfaceHandle;
+        _surfaceHandle = 0;
+        _surfaceVisible = false;
+        _hasBounds = false;
+        if (handle != 0) NativeMethods.DestroyWindow(handle);
+    }
+
+    private void HideSurface()
+    {
+        if (!_surfaceVisible || _surfaceHandle == 0) return;
+        NativeMethods.ShowWindow(_surfaceHandle, NativeMethods.SwHide);
+        _surfaceVisible = false;
     }
 
     public void Dispose()

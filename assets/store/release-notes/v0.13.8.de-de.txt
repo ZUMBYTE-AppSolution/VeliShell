@@ -1,0 +1,5 @@
+Neu in VeliShell 0.13.8:
+
+- Die Menüleiste schließt jetzt bündig an den Desktop an. Der schmale Spalt darunter ist entfernt.
+- Das Dock zeigt echtes, weichgezeichnetes Hintergrundglas statt eines künstlichen Glanzstrichs. Die Hintergrundfarben scheinen durch, während die Ecken sauber abgerundet bleiben.
+- Menüleiste, Kontextmenüs und schwebende Panels nutzen denselben transparenteren Glasstil in Hell und Dunkel. Wo der Effekt nicht verfügbar ist, bleibt die Oberfläche gut lesbar.

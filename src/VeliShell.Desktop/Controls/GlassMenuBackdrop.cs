@@ -88,7 +88,7 @@ public static class GlassMenuBackdrop
         {
             Close();
             _backdrop = new ShellBackdropHost(plate, plate, 14);
-            _backdrop.Apply();
+            _backdrop.ApplyMaterial("GlassMenuAcrylicSurface", "GlassMenuSurface");
             if (Application.Current is App { Themes: not null } app)
             {
                 _theme = app.Themes;
@@ -104,6 +104,6 @@ public static class GlassMenuBackdrop
             _backdrop = null;
         }
 
-        private void Refresh() => _backdrop?.Apply();
+        private void Refresh() => _backdrop?.ApplyMaterial("GlassMenuAcrylicSurface", "GlassMenuSurface");
     }
 }

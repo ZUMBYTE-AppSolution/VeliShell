@@ -1,0 +1,5 @@
+New in VeliShell 0.13.8:
+
+- The menu bar now meets the desktop seamlessly, removing the thin gap below it.
+- The dock uses real blurred background glass instead of an artificial highlight line. Desktop colors show through while the corners remain neatly rounded.
+- The menu bar, context menus, and floating panels share the more transparent glass style in light and dark modes. A readable fallback remains available where the effect is unsupported.

@@ -21,7 +21,7 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
     {
         InitializeComponent();
         _backdrop = new ShellBackdropHost(this, GlassPlate, 24);
-        Loaded += (_, _) => _backdrop.Apply();
+        Loaded += (_, _) => RefreshBackdrop();
         if (Application.Current is App app) app.Themes.Changed += RefreshBackdrop;
         Loaded += (_, _) => RefreshDevices();
         Deactivated += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(CloseOnce));
@@ -193,7 +193,7 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
         mixer.Activate();
     }
 
-    private void RefreshBackdrop() => _backdrop.Apply();
+    private void RefreshBackdrop() => _backdrop.ApplyMaterial("GlassPanelAcrylicSurface", "GlassPanelSurface");
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
