@@ -8,6 +8,7 @@ internal static class NativeMethods
     internal const int GwlExStyle = -20;
     internal const long WsExToolWindow = 0x80;
     internal const long WsExTransparent = 0x20;
+    internal const long WsExTopmost = 0x8;
     internal const long WsExNoActivate = 0x08000000;
     internal const int SwHide = 0, SwShowNoActivate = 4;
     internal const uint SpiSetWorkArea = 0x002F;

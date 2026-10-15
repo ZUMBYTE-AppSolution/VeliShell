@@ -129,6 +129,7 @@ internal static class Program
             TestTransientAudioPanelClose(owner, anchor);
             TestAudioPackagedSessionGrouping();
             TestGlassMaterialAndRoundedClip();
+            TestGlassContextMenu(owner, anchor);
             var chatGptShortcutChecked = TestInstalledChatGptShortcut();
             var policyType = RequireType("VeliShell.Desktop.Services.AudioDefaultDeviceService");
             var policyAvailable = (bool)RequireMethod(policyType, "IsSwitchInterfaceAvailable")
@@ -163,6 +164,7 @@ internal static class Program
             Console.WriteLine("PASS: The Windows tray mirror returns bounded, stable icons from running apps without changing Explorer settings.");
             Console.WriteLine("PASS: The audio-device panel closes without a reentrant deactivation crash.");
             Console.WriteLine("PASS: Glass sliders change panel opacity and sheen; the dock clips overlay content to rounded corners.");
+            Console.WriteLine("PASS: Glass context menus and their submenus open with the shared material and dismiss cleanly.");
             Console.WriteLine(chatGptShortcutChecked
                 ? "PASS: Versioned ChatGPT executable pins resolve to a stable AppsFolder identity when running, or retain the Start-menu link."
                 : "INFO: ChatGPT Start-menu shortcut is not present; the versioned shortcut integration probe was skipped.");
@@ -359,6 +361,8 @@ internal static class Program
                 RenderShellPanel(search, Path.Combine(outputDirectory, $"search-{suffix}.png"), dark);
 
                 var settings = new VeliShell.Desktop.Views.PreferencesWindow(application);
+                Require(settings.AllowsTransparency && settings.Background is SolidColorBrush { Color.A: 0 },
+                    "Settings must use antialiased per-pixel corners, not a hard Win32 window region.");
                 RenderShellPanel(settings, Path.Combine(outputDirectory, $"settings-{suffix}.png"), dark);
 
                 var folderDialogType = RequireType("VeliShell.Desktop.Views.VirtualFolderNameWindow");
@@ -376,12 +380,38 @@ internal static class Program
                         .TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
                     Require(button.ActualWidth >= 110 && bounds.Bottom < plate.ActualHeight - 8,
                         $"The {name} is clipped in the app-folder dialog.");
-                    if (name == "SaveButton")
-                        Require(button.Foreground is SolidColorBrush { Color: var color } &&
-                                color == Colors.White,
-                            $"The primary dialog button lost its high-contrast text color: {button.Foreground}.");
+                    Require(ReferenceEquals(button.Style,
+                            Application.Current.FindResource("GlassDialogButton")),
+                        $"The {name} reverted to a colored button instead of the neutral glass action.");
                 }
             }
+            var liveSettings = new VeliShellWindow
+            {
+                Left = -10000, Top = -10000,
+                Width = 870, Height = 660,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                ShowActivated = false, ShowInTaskbar = false,
+                Content = new Border
+                {
+                    Background = (Brush)Application.Current.FindResource("WindowBackdropGradient"),
+                    CornerRadius = new CornerRadius(16),
+                    BorderThickness = new Thickness(1),
+                    Child = new Grid { Width = 868, Height = 658 }
+                }
+            };
+            try
+            {
+                liveSettings.Show();
+                DrainDispatcher();
+                Require(liveSettings.IsVisible && new WindowInteropHelper(liveSettings).Handle != 0,
+                    "The transparent settings window did not open as a real layered window.");
+                liveSettings.Width += 20;
+                liveSettings.Height += 20;
+                DrainDispatcher();
+                Require(liveSettings.ActualWidth >= 880 && liveSettings.ActualHeight >= 670,
+                    "The transparent settings window stopped responding to resize changes.");
+            }
+            finally { liveSettings.Close(); }
             var workArea = SystemParameters.WorkArea;
             var owner = new Window
             {
@@ -1570,6 +1600,16 @@ internal static class Program
 
     private static void TestGlassMaterialAndRoundedClip()
     {
+        var backdropType = RequireType("VeliShell.Desktop.Services.ShellBackdropHost");
+        var insetMethod = RequireMethod(backdropType, "SafeBackdropInset");
+        foreach (var radius in new[] { 11d, 21d })
+        foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
+        {
+            var physicalRadius = radius * scale;
+            var inset = (int)insetMethod.Invoke(null, [radius, scale])!;
+            Require(2 * Math.Pow(physicalRadius - inset, 2) < physicalRadius * physicalRadius,
+                $"A square native acrylic corner escapes the {radius}-DIP rounded panel at {scale}x DPI.");
+        }
         var clipped = new Grid { Width = 100, Height = 50 };
         VeliShell.Desktop.Controls.RoundedClip.SetRadius(clipped, 10);
         clipped.Measure(new Size(100, 50));
@@ -1580,16 +1620,66 @@ internal static class Program
         using var theme = new ThemeService();
         theme.Apply(Appearance.Dark, 50, 50);
         var basePanel = (LinearGradientBrush)Application.Current.FindResource("GlassPanelSurface");
+        var baseMenu = (LinearGradientBrush)Application.Current.FindResource("GlassMenuSurface");
         var baseMilk = (RadialGradientBrush)Application.Current.FindResource("DockMilkOverlay");
         var baseAlpha = basePanel.GradientStops[0].Color.A;
+        var baseMenuAlpha = baseMenu.GradientStops[0].Color.A;
         var baseSheen = baseMilk.GradientStops[0].Color.A;
         theme.Apply(Appearance.Dark, 100, 100);
         var clearPanel = (LinearGradientBrush)Application.Current.FindResource("GlassPanelSurface");
+        var clearMenu = (LinearGradientBrush)Application.Current.FindResource("GlassMenuSurface");
         var glossyMilk = (RadialGradientBrush)Application.Current.FindResource("DockMilkOverlay");
         Require(clearPanel.GradientStops[0].Color.A < baseAlpha &&
+                clearMenu.GradientStops[0].Color.A < baseMenuAlpha &&
                 glossyMilk.GradientStops[0].Color.A > baseSheen,
             "The glass controls did not alter transparency and sheen independently.");
         theme.Apply(Appearance.Light, 50, 50);
+    }
+
+    private static void TestGlassContextMenu(Window owner, FrameworkElement anchor)
+    {
+        var submenuItem = new MenuItem { Header = "Open with" };
+        submenuItem.Items.Add(new MenuItem { Header = "Test application" });
+        var menu = new ContextMenu
+        {
+            PlacementTarget = anchor,
+            Placement = PlacementMode.Bottom,
+            Items = { submenuItem, new MenuItem { Header = "Remove from Dock" } }
+        };
+        try
+        {
+            owner.Activate();
+            menu.IsOpen = true;
+            DrainDispatcher();
+            Require(menu.IsOpen && GlassMenuBackdrop.GetEnabled(menu),
+                "The dock context menu did not open with the shared glass backdrop behavior.");
+            var states = typeof(GlassMenuBackdrop).GetField("States", BindingFlags.Static | BindingFlags.NonPublic)!
+                .GetValue(null)!;
+            var stateArgs = new object?[] { menu, null };
+            Require((bool)states.GetType().GetMethod("TryGetValue")!.Invoke(states, stateArgs)! &&
+                    stateArgs[1] is not null,
+                "The dock context menu did not create its native glass state.");
+            var host = stateArgs[1]!.GetType().GetField("_backdrop", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(stateArgs[1]);
+            Require(host is not null,
+                "The dock context menu did not create a bounded acrylic host.");
+            var handle = (nint)host!.GetType().GetField("_surfaceHandle", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(host)!;
+            Console.WriteLine(handle != 0
+                ? "PASS: Context-menu acrylic is active behind the rounded plate."
+                : "INFO: Context-menu acrylic is unavailable on this Windows session; the translucent material remains active.");
+            submenuItem.IsSubmenuOpen = true;
+            DrainDispatcher();
+            var popup = submenuItem.Template.FindName("PART_Popup", submenuItem) as Popup;
+            Require(popup is { IsOpen: true } && GlassMenuBackdrop.GetEnabled(popup),
+                "The context submenu did not inherit the glass backdrop behavior.");
+        }
+        finally
+        {
+            submenuItem.IsSubmenuOpen = false;
+            menu.IsOpen = false;
+            DrainDispatcher();
+        }
     }
 
     private static void TestDockTileHoverMask()

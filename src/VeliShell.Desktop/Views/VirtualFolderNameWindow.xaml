@@ -35,9 +35,9 @@
      <Grid.ColumnDefinitions>
       <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
      </Grid.ColumnDefinitions>
-     <Button x:Name="CancelButton" Grid.Column="1" Content="{services:Loc Common.Cancel}" MinWidth="110" MinHeight="40"
+     <Button x:Name="CancelButton" Grid.Column="1" Content="{services:Loc Common.Cancel}" Style="{StaticResource GlassDialogButton}" MinWidth="110" MinHeight="40"
              Padding="16,9" Margin="0,0,9,0" Click="Cancel_Click" />
-     <Button x:Name="SaveButton" Grid.Column="2" Content="{services:Loc FolderPopover.SaveName}" Style="{StaticResource PrimaryButton}"
+     <Button x:Name="SaveButton" Grid.Column="2" Content="{services:Loc FolderPopover.SaveName}" Style="{StaticResource GlassDialogButton}" FontWeight="SemiBold"
              MinWidth="110" MinHeight="40" Padding="16,9" Click="Save_Click" />
     </Grid>
    </Grid>

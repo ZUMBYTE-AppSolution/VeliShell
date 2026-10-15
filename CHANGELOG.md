@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.7] - 2026-10-15
+
+### Behoben
+
+- Dock und schwebende Panels begrenzen die native Hintergrundweichzeichnung auf ihre abgerundete Glasfläche. Dadurch erscheinen an den Ecken keine rechteckigen Schatten- oder Glasreste mehr.
+- Das Einstellungsfenster und weitere VeliShell-Dialoge verwenden transparent gerenderte, weichere Ecken statt einer pixeligen Fensterregion.
+
+### Verbessert
+
+- Dock-Kontextmenüs und Untermenüs übernehmen die eingestellte Matt-/Glanzwirkung und Transparenz. Dialogschaltflächen und die Ränder von Auswahl- und Updatefenstern sind gestalterisch angeglichen.
+- Beim Verkleinern der Dock-Symbole wächst der Abstand zwischen den Symbolen nicht mehr unverhältnismäßig mit.
+
 ## [0.13.6] - 2026-10-15
 
 ### Behoben

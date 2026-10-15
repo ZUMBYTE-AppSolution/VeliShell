@@ -277,6 +277,11 @@ try
     Test("No magnification outside radius", () => Check(DockMath.ScaleAt(200, 52, true) == 1));
     Test("Disabled magnification", () => Check(DockMath.ScaleAt(0, 52, false) == 1));
     Test("Symmetric magnification", () => Check(DockMath.ScaleAt(-30, 52, true) == DockMath.ScaleAt(30, 52, true)));
+    Test("Compact icons retain proportional dock spacing", () => Check(
+        DockMath.TileGap(24) < DockMath.TileGap(52) &&
+        DockMath.TileGap(52) <= DockMath.TileGap(96) &&
+        DockMath.TileGap(96) == 22 &&
+        DockMath.TileWidth(24) == 24 + DockMath.TileGap(24)));
     Test("Capacity bounded", () => Check(DockMath.VisibleCapacity(1920, 52) >= 20 && DockMath.VisibleCapacity(100, 52) == 3));
     Test("Recycle Bin unavailable state", () => Check(RecycleBinState.From(false, 42) == RecycleBinFillState.Unavailable));
     Test("Recycle Bin empty state", () => Check(RecycleBinState.From(true, 0) == RecycleBinFillState.Empty));

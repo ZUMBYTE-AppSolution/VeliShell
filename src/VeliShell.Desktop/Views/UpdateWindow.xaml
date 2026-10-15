@@ -7,7 +7,7 @@
  WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
  <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="12"
          BorderBrush="{DynamicResource CardStroke}" BorderThickness="1">
-  <Grid ClipToBounds="True">
+  <Grid controls:RoundedClip.Radius="11">
    <Grid.RowDefinitions>
     <RowDefinition Height="50" />
     <RowDefinition Height="*" />

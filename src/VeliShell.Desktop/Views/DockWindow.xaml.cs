@@ -326,9 +326,9 @@ public partial class DockWindow : Window
                 tile.StartLaunchBounce(preferences.ReducedMotion);
             previousKey = item.Key;
         }
-        _baseDockWidth = items.Count * (preferences.IconSize + 22) + 78 +
+        _baseDockWidth = items.Count * DockMath.TileWidth(preferences.IconSize) + 78 +
                          (preferences.ShowWindowsStartDockItem ? 16 : 0);
-        Width = _baseDockWidth + (_dropPlaceholderAddsWidth ? preferences.IconSize + 22 : 0);
+        Width = _baseDockWidth + (_dropPlaceholderAddsWidth ? DockMath.TileWidth(preferences.IconSize) : 0);
         Height = preferences.IconSize * 1.62 + 62;
         DockPlate.Height = preferences.IconSize + 32;
         PositionDock();
@@ -1138,7 +1138,7 @@ public partial class DockWindow : Window
         if (_dropPlaceholderAddsWidth != needsExtraWidth)
         {
             _dropPlaceholderAddsWidth = needsExtraWidth;
-            Width = _baseDockWidth + (needsExtraWidth ? _app.Preferences.IconSize + 22 : 0);
+            Width = _baseDockWidth + (needsExtraWidth ? DockMath.TileWidth(_app.Preferences.IconSize) : 0);
             PositionDock();
         }
 
@@ -1183,7 +1183,7 @@ public partial class DockWindow : Window
 
         var placeholder = new Grid
         {
-            Width = size + 22,
+            Width = DockMath.TileWidth(size),
             Height = size + 22,
             VerticalAlignment = VerticalAlignment.Bottom,
             IsHitTestVisible = false,

@@ -228,6 +228,26 @@
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+ <Style x:Key="GlassDialogButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+  <Setter Property="Background" Value="{DynamicResource GlassControlSurface}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassCardStroke}" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Body" Background="{TemplateBinding Background}" CornerRadius="11"
+    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                      TextElement.Foreground="{TemplateBinding Foreground}" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter TargetName="Body" Property="Background" Value="{DynamicResource GlassControlHover}" />
+     <Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource GlassPanelStroke}" />
+    </Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Body" Property="Opacity" Value="0.7" /></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style x:Key="DockButton" TargetType="Button">
   <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
   <Setter Property="Cursor" Value="Hand" /><Setter Property="Padding" Value="0" />
@@ -376,7 +396,7 @@
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="GlassMenuPlate" TargetType="Border">
-  <Setter Property="Background" Value="{DynamicResource GlassPanelSurface}" />
+  <Setter Property="Background" Value="{DynamicResource GlassMenuSurface}" />
   <Setter Property="BorderBrush" Value="{DynamicResource GlassPanelStroke}" />
   <Setter Property="BorderThickness" Value="1" />
   <Setter Property="CornerRadius" Value="14" />
@@ -386,14 +406,16 @@
   </Setter>
  </Style>
  <Style TargetType="ContextMenu">
-  <Setter Property="Background" Value="{DynamicResource MenuSurface}" />
+  <Setter Property="controls:GlassMenuBackdrop.Enabled" Value="True" />
+  <Setter Property="Background" Value="{DynamicResource GlassMenuSurface}" />
+  <Setter Property="HasDropShadow" Value="False" />
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="FontFamily" Value="{StaticResource UiFont}" /><Setter Property="FontSize" Value="13" />
   <Setter Property="MinWidth" Value="210" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
    <Border Style="{StaticResource GlassMenuPlate}">
     <Grid controls:RoundedClip.Radius="13">
-     <Border Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
+     <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="13" IsHitTestVisible="False" />
      <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
     </Grid>
    </Border>
@@ -420,13 +442,14 @@
      </Grid>
     </Border>
     <Popup x:Name="PART_Popup" Placement="Right"
+           controls:GlassMenuBackdrop.Enabled="True"
            PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
            HorizontalOffset="-3" VerticalOffset="-5"
            IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
            AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
      <Border Style="{StaticResource GlassMenuPlate}" MinWidth="210">
       <Grid controls:RoundedClip.Radius="13">
-       <Border Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />
+       <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="13" IsHitTestVisible="False" />
        <ScrollViewer CanContentScroll="True" MaxHeight="640" VerticalScrollBarVisibility="Auto">
         <ItemsPresenter />
        </ScrollViewer>

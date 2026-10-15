@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Shell;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Services;
@@ -10,11 +12,15 @@ namespace VeliShell.Desktop.Controls;
 public class VeliShellWindow : Window
 {
     private HwndSource? _source;
+    private CornerRadius? _normalCornerRadius;
+    private Thickness? _normalBorderThickness;
+    private double? _normalClipRadius;
     public VeliShellWindow()
     {
         WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
         ResizeMode = ResizeMode.CanResize;
-        SetResourceReference(BackgroundProperty, "WindowSurface");
+        Background = Brushes.Transparent;
         SetResourceReference(ForegroundProperty, "TextPrimary");
         FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI");
         FontSize = 13;
@@ -22,7 +28,7 @@ public class VeliShellWindow : Window
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = 50, ResizeBorderThickness = new Thickness(6),
-            GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(12),
+            GlassFrameThickness = new Thickness(0), CornerRadius = new CornerRadius(0),
             UseAeroCaptionButtons = false
         });
         SourceInitialized += (_, _) =>
@@ -30,13 +36,26 @@ public class VeliShellWindow : Window
             var handle = new WindowInteropHelper(this).Handle;
             _source = HwndSource.FromHwnd(handle);
             _source?.AddHook(WindowHook);
-            var rounded = 2;
-            NativeMethods.DwmSetWindowAttribute(handle, 33, ref rounded, sizeof(int));
-            WindowShapeService.ApplyRoundedRegion(this, 12);
         };
-        SizeChanged += (_, _) => WindowShapeService.ApplyRoundedRegion(this, 12);
-        StateChanged += (_, _) => WindowShapeService.ApplyRoundedRegion(this, 12);
+        // A Win32 window region has hard, pixel-stepped edges. Layered WPF
+        // transparency uses the actual antialiased border alpha instead, even
+        // where DWM window rounding is unavailable (for example in a VM).
+        StateChanged += (_, _) => UpdateMaximizedShape();
         Closed += (_, _) => _source?.RemoveHook(WindowHook);
+    }
+
+    private void UpdateMaximizedShape()
+    {
+        if (Content is not Border plate) return;
+        _normalCornerRadius ??= plate.CornerRadius;
+        _normalBorderThickness ??= plate.BorderThickness;
+        if (plate.Child is FrameworkElement clipped)
+            _normalClipRadius ??= RoundedClip.GetRadius(clipped);
+        var maximized = WindowState == WindowState.Maximized;
+        plate.CornerRadius = maximized ? new CornerRadius(0) : _normalCornerRadius.Value;
+        plate.BorderThickness = maximized ? new Thickness(0) : _normalBorderThickness.Value;
+        if (plate.Child is FrameworkElement view && _normalClipRadius is double radius)
+            RoundedClip.SetRadius(view, maximized ? 0 : radius);
     }
 
     private nint WindowHook(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)

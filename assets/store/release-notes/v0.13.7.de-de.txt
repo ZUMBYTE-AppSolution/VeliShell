@@ -1,0 +1,6 @@
+Neu in VeliShell 0.13.7:
+
+- Die Glasfläche von Dock und Panels bleibt jetzt sauber innerhalb ihrer abgerundeten Ecken. Rechteckige Reste an den Rundungen wurden behoben.
+- Das Einstellungsfenster und weitere Dialoge zeigen glattere, transparente Fensterecken.
+- Dock-Kontextmenüs und Untermenüs folgen den gewählten Matt-/Glanz- und Transparenzeinstellungen. Weitere Dialoge und Schaltflächen sind optisch angeglichen.
+- Kleinere Dock-Symbole behalten einen passenden Abstand zueinander.

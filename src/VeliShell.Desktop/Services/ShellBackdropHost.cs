@@ -23,7 +23,8 @@ internal sealed class ShellBackdropHost : IDisposable
     private const int MaNoActivate = 3;
     private const uint SwpNoActivate = 0x0010;
 
-    private readonly Window _overlay;
+    private readonly FrameworkElement _overlay;
+    private readonly Window? _overlayWindow;
     private readonly FrameworkElement _plate;
     private readonly double _cornerRadius;
     private readonly DispatcherTimer _motionTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
@@ -36,15 +37,20 @@ internal sealed class ShellBackdropHost : IDisposable
     private bool _disposed;
     private long _motionUntil;
 
-    internal ShellBackdropHost(Window overlay, FrameworkElement plate, double cornerRadius)
+    internal ShellBackdropHost(FrameworkElement overlay, FrameworkElement plate, double cornerRadius)
     {
         _overlay = overlay;
+        _overlayWindow = overlay as Window;
         _plate = plate;
         _cornerRadius = cornerRadius;
-        _overlay.LocationChanged += OnGeometryChanged;
-        _overlay.SizeChanged += OnGeometryChanged;
+        if (_overlayWindow is not null)
+        {
+            _overlayWindow.LocationChanged += OnGeometryChanged;
+            _overlayWindow.SizeChanged += OnGeometryChanged;
+        }
         _overlay.IsVisibleChanged += OnVisibilityChanged;
-        _plate.LayoutUpdated += OnLayoutUpdated;
+        _overlay.LayoutUpdated += OnLayoutUpdated;
+        if (!ReferenceEquals(_overlay, _plate)) _plate.LayoutUpdated += OnLayoutUpdated;
         _motionTimer.Tick += OnMotionTick;
     }
 
@@ -89,20 +95,24 @@ internal sealed class ShellBackdropHost : IDisposable
             Right = (int)Math.Round(bottomRight.X),
             Bottom = (int)Math.Round(bottomRight.Y)
         };
-        var overlayHandle = new WindowInteropHelper(_overlay).Handle;
+        var overlayHandle = OverlayHandle();
+        if (overlayHandle == 0) return;
         if (!NativeMethods.GetWindowRect(overlayHandle, out var overlayBounds)) return;
         bounds.Left = Math.Max(bounds.Left, overlayBounds.Left);
         bounds.Top = Math.Max(bounds.Top, overlayBounds.Top);
         bounds.Right = Math.Min(bounds.Right, overlayBounds.Right);
         bounds.Bottom = Math.Min(bounds.Bottom, overlayBounds.Bottom);
+        var insetX = 0;
+        var insetY = 0;
         if (_cornerRadius > 0)
         {
-            // Keep the native acrylic strictly inside the antialiased WPF rim.
-            // The native round-rect region has hard pixel edges; without this
-            // inset they can show up as square corners behind the soft border.
+            // Acrylic composition can paint the full rectangular HWND despite
+            // SetWindowRgn. Keep even that rectangle inside the WPF round-rect:
+            // at its nearest corner, 2 * (radius - inset)^2 <= radius^2.
+            // Two extra physical pixels cover antialiasing and DPI rounding.
             var dpi = VisualTreeHelper.GetDpi(_overlay);
-            var insetX = Math.Max(1, (int)Math.Ceiling(2 * dpi.DpiScaleX));
-            var insetY = Math.Max(1, (int)Math.Ceiling(2 * dpi.DpiScaleY));
+            insetX = SafeBackdropInset(_cornerRadius, dpi.DpiScaleX);
+            insetY = SafeBackdropInset(_cornerRadius, dpi.DpiScaleY);
             bounds.Left += insetX;
             bounds.Top += insetY;
             bounds.Right -= insetX;
@@ -117,8 +127,9 @@ internal sealed class ShellBackdropHost : IDisposable
         }
         var wasVisible = _surface.IsVisible;
         if (!wasVisible) _surface.Show();
-        var topmostChanged = _surface.Topmost != _overlay.Topmost;
-        if (topmostChanged) _surface.Topmost = _overlay.Topmost;
+        var topmost = OverlayTopmost(overlayHandle);
+        var topmostChanged = _surface.Topmost != topmost;
+        if (topmostChanged) _surface.Topmost = topmost;
         var changed = !_hasBounds || bounds.Left != _lastBounds.Left || bounds.Top != _lastBounds.Top ||
                       bounds.Right != _lastBounds.Right || bounds.Bottom != _lastBounds.Bottom;
         if (changed)
@@ -128,7 +139,7 @@ internal sealed class ShellBackdropHost : IDisposable
             // A layered WPF host can lose its native region when it is shown
             // again or moved between monitors. Restore the rounded clipping
             // whenever the acrylic window's bounds change.
-            ApplyRegion(width, height);
+            ApplyRegion(width, height, insetX, insetY);
             _lastBounds = bounds;
             _hasBounds = true;
         }
@@ -137,7 +148,7 @@ internal sealed class ShellBackdropHost : IDisposable
             // A Topmost change can move the material above the interactive WPF window.
             NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
                 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate);
-            if (!wasVisible) ApplyRegion(width, height);
+            if (!wasVisible) ApplyRegion(width, height, insetX, insetY);
         }
     }
 
@@ -152,7 +163,7 @@ internal sealed class ShellBackdropHost : IDisposable
     internal void AlignZOrder()
     {
         if (!_active || _disposed || _surfaceHandle == 0) return;
-        var overlayHandle = new WindowInteropHelper(_overlay).Handle;
+        var overlayHandle = OverlayHandle();
         if (overlayHandle == 0) return;
         NativeMethods.SetWindowPos(_surfaceHandle, overlayHandle,
             0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate);
@@ -167,7 +178,7 @@ internal sealed class ShellBackdropHost : IDisposable
                 Width = 2, Height = 2, Left = -10000, Top = -10000,
                 WindowStyle = WindowStyle.None, AllowsTransparency = true,
                 Background = Brushes.Transparent, ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false, ShowActivated = false, Topmost = _overlay.Topmost,
+                ShowInTaskbar = false, ShowActivated = false, Topmost = OverlayTopmost(OverlayHandle()),
                 Content = new Grid { Background = Brushes.Transparent }
             };
             _surface = surface;
@@ -207,6 +218,13 @@ internal sealed class ShellBackdropHost : IDisposable
         return 0;
     }
 
+    private nint OverlayHandle() =>
+        (PresentationSource.FromVisual(_overlay) as HwndSource)?.Handle ?? 0;
+
+    private bool OverlayTopmost(nint handle) => _overlayWindow?.Topmost ??
+        (handle != 0 && (NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64() &
+                         NativeMethods.WsExTopmost) != 0);
+
     private bool SetAccent(Color tint)
     {
         var policy = new NativeMethods.AccentPolicy
@@ -231,12 +249,15 @@ internal sealed class ShellBackdropHost : IDisposable
         finally { Marshal.FreeHGlobal(memory); }
     }
 
-    private void ApplyRegion(int width, int height)
+    internal static int SafeBackdropInset(double radius, double dpiScale) =>
+        Math.Max(2, (int)Math.Ceiling(radius * dpiScale * (1 - 1 / Math.Sqrt(2))) + 2);
+
+    private void ApplyRegion(int width, int height, int insetX, int insetY)
     {
         if (_cornerRadius <= 0) return;
         var dpi = VisualTreeHelper.GetDpi(_overlay);
-        var roundX = Math.Max(2, (int)Math.Round(_cornerRadius * 2 * dpi.DpiScaleX));
-        var roundY = Math.Max(2, (int)Math.Round(_cornerRadius * 2 * dpi.DpiScaleY));
+        var roundX = Math.Max(2, (int)Math.Round((_cornerRadius * dpi.DpiScaleX - insetX) * 2));
+        var roundY = Math.Max(2, (int)Math.Round((_cornerRadius * dpi.DpiScaleY - insetY) * 2));
         var region = NativeMethods.CreateRoundRectRgn(0, 0, width, height, roundX, roundY);
         if (region != 0 && NativeMethods.SetWindowRgn(_surfaceHandle, region, true) == 0)
             NativeMethods.DeleteObject(region); // On success Windows owns the region.
@@ -269,10 +290,14 @@ internal sealed class ShellBackdropHost : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _overlay.LocationChanged -= OnGeometryChanged;
-        _overlay.SizeChanged -= OnGeometryChanged;
+        if (_overlayWindow is not null)
+        {
+            _overlayWindow.LocationChanged -= OnGeometryChanged;
+            _overlayWindow.SizeChanged -= OnGeometryChanged;
+        }
         _overlay.IsVisibleChanged -= OnVisibilityChanged;
-        _plate.LayoutUpdated -= OnLayoutUpdated;
+        _overlay.LayoutUpdated -= OnLayoutUpdated;
+        if (!ReferenceEquals(_overlay, _plate)) _plate.LayoutUpdated -= OnLayoutUpdated;
         _motionTimer.Tick -= OnMotionTick;
         CloseSurface();
     }

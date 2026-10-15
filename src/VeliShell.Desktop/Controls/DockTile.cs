@@ -26,7 +26,7 @@ internal sealed class DockTile : Button
     {
         Item = item;
         IconSize = size;
-        Width = size + 22;
+        Width = DockMath.TileWidth(size);
         Height = size + 22;
         VerticalAlignment = VerticalAlignment.Bottom;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -37,7 +37,7 @@ internal sealed class DockTile : Button
         ToolTipService.SetPlacement(this, System.Windows.Controls.Primitives.PlacementMode.Top);
         AutomationProperties.SetName(this, item.Name);
         UpdateAutomationStatus(item);
-        var grid = new Grid { Width = size + 22, Height = size + 22, ClipToBounds = false };
+        var grid = new Grid { Width = DockMath.TileWidth(size), Height = size + 22, ClipToBounds = false };
         _folderDropHalo = new Border
         {
             Width = size + 14, Height = size + 14,
@@ -70,7 +70,7 @@ internal sealed class DockTile : Button
             artwork.Children.Add(_folderPreview);
             _folderName = new TextBlock
             {
-                Width = size + 22, Height = 14,
+                Width = DockMath.TileWidth(size), Height = 14,
                 FontSize = Math.Clamp(size * 0.19, 9, 11),
                 FontWeight = FontWeights.Medium,
                 TextAlignment = TextAlignment.Center,

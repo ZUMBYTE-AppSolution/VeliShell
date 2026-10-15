@@ -104,6 +104,11 @@
     <GradientStop Color="#C8EFF2F8" Offset="0.5" />
     <GradientStop Color="#BCE3E7F0" Offset="1" />
   </LinearGradientBrush>
+  <LinearGradientBrush x:Key="GlassMenuSurface" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#C7F8FAFF" Offset="0" />
+    <GradientStop Color="#B4E9EDF6" Offset="0.5" />
+    <GradientStop Color="#A8DDE3EF" Offset="1" />
+  </LinearGradientBrush>
   <SolidColorBrush x:Key="GlassPanelStroke" Color="#D6FFFFFF" />
   <LinearGradientBrush x:Key="GlassCardSurface" StartPoint="0,0" EndPoint="1,1">
     <GradientStop Color="#B0FFFFFF" Offset="0" />
