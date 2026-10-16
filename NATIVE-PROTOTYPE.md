@@ -4,6 +4,11 @@ Ab VeliShell 0.14.0 enthält das normale GitHub-Paket einen freiwilligen nativen
 Adapter für kompatible klassische 64-Bit-Apps. Das Modul ist **standardmäßig aus**.
 Es ersetzt keine Windows-Systemdateien, keine Shell und nicht das Innere fremder Apps.
 
+Der Arbeitsstand **0.14.1-test.1 auf `test`** ergänzt klassische 32-Bit-Apps, WPF
+mit Standardrahmen und einen gemeinsamen Glasrahmen rund um das Fenster. Die folgende
+Anleitung beschreibt diesen Teststand. Die veröffentlichte 0.14.0 gestaltet weiterhin
+nur klassische x64-Titelbereiche; ein lokaler Teststand ist noch kein Kanal-Update.
+
 ## Aktivieren
 
 1. Zuerst in einer VM mit Snapshot testen. Windows 11 ab Build 22621, x64,
@@ -21,6 +26,12 @@ Es ersetzt keine Windows-Systemdateien, keine Shell und nicht das Innere fremder
    werden die Rahmen zurückgesetzt; beim nächsten normalen Start darf die gespeicherte
    Zustimmung wieder aufgenommen werden. Nach einem Notfall gilt stattdessen die Sperre unten.
 
+Wenn Stable parallel installiert ist, dort die Fenstergestaltung zuerst deaktivieren
+und die Rücksetzung abwarten. Beide Ausgaben beanspruchen denselben echten Notfall-Hotkey;
+sie sollen nicht gleichzeitig fremde Apps gestalten. Zwischen unterschiedlichen
+Adapterversionen betroffene Apps selbst schließen, damit keine ältere inaktive DLL
+geladen bleibt. Der eigene isolierte QA-Modus benötigt diesen Wechsel nicht.
+
 Die Ausnahmeliste akzeptiert einen EXE-Namen wie `beispiel.exe` oder einen vollständigen
 EXE-Pfad. Der Name gilt auch nach einem App-Update mit geändertem Installationspfad.
 Ein neuer Ausschluss setzt bereits gestaltete Fenster der betroffenen App zurück;
@@ -28,17 +39,22 @@ die App bleibt geöffnet. Nach Entfernen eines Ausschlusses darf sie wieder erfa
 
 ## Welche Fenster werden erfasst?
 
-Sichtbare, nicht minimierte klassische x64-Hauptfenster mit Standardrahmen in derselben
+Sichtbare, nicht minimierte klassische x86-/x64-Hauptfenster mit Standardrahmen in derselben
 Benutzersitzung und mit mittlerer Berechtigungsstufe. Vor der Einbindung werden Prozess,
 Startzeit, EXE-Hash, Fenster und UI-Thread geprüft. Ein kurzer, auf genau diesen Thread
 begrenzter DLL-Hook dient zum Bootstrap und wird anschließend entfernt. Die native
 Unterklasse arbeitet nur am jeweiligen Fenster. Globale Hooks, Dienste und automatische
 Rechteerhöhung gibt es nicht.
 
-Ausgeschlossen sind unter anderem erhöhte Apps, Systemfenster, Explorer, Browser,
-WPF-/WinUI-Sonderrahmen, geschützte Hosts, bekannte Spiel-Fensterklassen sowie Fenster
-mit eigener Region oder ungeeigneten Fensterstilen. 32-Bit-Fenster werden derzeit
-nicht umgestaltet. Das Modul ist experimentell; die Erkennung ersetzt keinen
+WPF wird nicht pauschal ausgeschlossen: Die native Titelhöhe und der Beginn des
+App-Inhalts müssen zu einem echten Standardrahmen passen. Für 32-Bit-Ziele startet
+ein kleiner nativer x86-Helfer; der Hauptwächter bleibt x64. Beide Architekturen
+verwenden passende DLLs und dieselben Zustimmungs-, Identitäts- und Rücksetzprüfungen.
+
+Vom vollständigen Rahmenersatz ausgeschlossen bleiben erhöhte Apps, Systemfenster,
+Explorer, Browser, WPF-/WinUI-Sonderrahmen, geschützte Hosts, bekannte Spiel-Fensterklassen
+sowie Fenster mit eigener Region oder ungeeigneten Fensterstilen.
+Das Modul ist experimentell; die Erkennung ersetzt keinen
 Kompatibilitätstest mit deiner konkreten App. Die Aufnahme ist begrenzt und gestaffelt,
 damit viele gleichzeitig geöffnete Fenster nicht auf einmal eingebunden werden.
 
@@ -49,9 +65,10 @@ DirectWrite zeichnen Titel und linke Fensterbuttons. Farben kommen aus VeliShell
 Hell-/Dunkel-Theme, Matt-/Glas- und Transparenzwerte werden übernommen. Eine begrenzte
 Deckkraft schützt die Lesbarkeit des Titels.
 
-Die native Titelfläche liegt innerhalb der ursprünglichen Fenstergrenzen. Ihr eigener
-Kompositions-Host gehört zur Ziel-App und nimmt genau den bestehenden Titelbereich ein;
-die darunterliegende Fensterregion wird vorübergehend angepasst. Kein abstehender
+Der Glasrahmen umfasst Titel, Seiten, Unterkante und alle vier Rundungen innerhalb
+der ursprünglichen Fenstergrenzen. Sein eigener Kompositions-Host gehört zur Ziel-App;
+ein ausgesparter Innenbereich hält Menü und App-Inhalt frei. Die Fensterregion wird
+vorübergehend angepasst, nicht die logische Client-Geometrie. Kein abstehender
 Aufsatz und keine Desktop-Bildkopie. Menü und Clientbereich behalten ihre ursprüngliche
 Geometrie und Gestaltung. Der Adapter ersetzt also **nicht** sämtliche Steuerelemente
 oder die Oberfläche fremder Programme. Die Fensterregion wird beim Rücksetzen entfernt,
@@ -60,6 +77,27 @@ sofern sie noch unsere ist; eigene zwischenzeitliche Änderungen der App werden 
 Minimieren, Maximieren/Wiederherstellen, Schließen, Ziehen und das Windows-Systemmenü
 bleiben vorhanden. **Alt + Leertaste** bietet das tastaturbedienbare Fenstermenü.
 Ein zusätzlicher UI-Automation-Anbieter für die linken nativen Buttons ist noch offen.
+
+## Explorer, WinUI und eigene Titelleisten
+
+**Explorer & eigene Titelleisten: native Farbanpassung** ist eine getrennte,
+standardmäßig ausgeschaltete Freigabe. Sie benötigt zusätzlich die Hauptautomatik
+und berücksichtigt dieselbe Ausnahmeliste. Es wird keine DLL in diese Apps geladen.
+Ein unabhängiger Helfer sichert verfügbare DWM-Werte und passt Rahmen-/Titelfarben,
+Rundung und das verfügbare Windows-Material an. Die Glasregler wählen dabei einen
+Windows-Materialtyp, keine frei steuerbare Composition-Weichzeichnung.
+
+Tabs, Suchfelder, eigene Buttons und App-Inhalte bleiben unverändert. Die Buttons
+bleiben rechts, wenn die App sie selbst zeichnet. Manche Apps verdecken diese
+Windows-Materialien vollständig. Die Anzeige unterscheidet deshalb ausdrücklich
+**Native Farbanpassung** von einem vollständigen Glasrahmen mit linken Buttons.
+Es gibt keine Zusage für alle Windows-11- oder WPF-Fenster und keinen Eingriff in
+geschützte Sicherheitsdialoge, Taskleiste, Desktop oder Systemdateien.
+
+Beim Ausschalten wird zurückgesetzt. Ändert eine App ihre DWM-Werte zwischenzeitlich
+selbst, überschreibt die Wiederherstellung ihre neuere Änderung nicht. Der Helfer
+überwacht den Wächter; bei einem Helferabsturz kann der Wächter die gesicherten Werte
+selbst zurücksetzen. Ein unerwarteter Helferausfall stoppt die gesamte Aufnahme.
 
 ## Rollback und unabhängiger Notfall-Rückweg
 
@@ -93,11 +131,16 @@ gelesenen, von uns veränderten DWM-Werte; keine bytegenaue Kopie aller internen
 
 ## Mitgeliefertes Beispielfenster und Testkanal
 
-`VeliShell.ClassicSample.exe` ist eine unabhängige klassische Win32-App mit Menü und
+`VeliShell.ClassicSample.exe` und `VeliShell.ClassicSample.x86.exe` sind unabhängige klassische Win32-Apps mit Menü und
 Textfeld, ohne eingebaute VeliShell-Anbindung. Damit kannst du das Modul zuerst gefahrlos
 in einer VM ausprobieren. `VeliShell.exe --native-windows-preview` öffnet eine gesonderte
 Testverwaltung: Diese darf ausschließlich bytegleiche ClassicSample-Prozesse aus dem
-eigenen Paketordner gestalten, niemals deine anderen Apps. Sie startet weder Dock noch
+eigenen Paketordner und ausdrücklich markierte, eigene WPF-Beispielfenster gestalten,
+niemals deine anderen Apps. `VeliShell.exe --native-wpf-fixture standard` bzw. `custom`
+startet solche temporären WPF-Beispiele ohne Speichern von Einstellungen.
+Der isolierte QA-Modus registriert kein globales Notfallkürzel, um eine laufende
+Installation nicht zu stören; er prüft Rücksetzsignal und Helfer-Ausfall separat.
+Er startet weder Dock noch
 Menüleiste und speichert keine globale Aktivierungszustimmung.
 
 Unter **Info & Lizenzen → Update-Kanal** wählst du Stable oder Test. Test verwendet

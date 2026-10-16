@@ -31,6 +31,15 @@ try
         var s = new Settings { NativeFrameExclusions = [" sample.exe ", "SAMPLE.EXE", "*.exe", "bad/name.exe", "not-an-app", @"C:\Apps\keep.exe"] }; s.Normalize();
         Check(s.NativeFrameExclusions.SequenceEqual(new[]{"sample.exe", @"C:\Apps\keep.exe"}));
     });
+    Test("Modern window appearance is a separate opt-in", () => {
+        var s = new Settings { NativeModernMaterialsEnabled = true }; s.Normalize(); Check(!s.NativeModernMaterialsEnabled);
+        s.NativeModernMaterialsConsentVersion = 1; s.NativeModernMaterialsEnabled = true; s.Normalize(); Check(s.NativeModernMaterialsEnabled);
+        Check(!s.NativeFramesEnabled);
+    });
+    Test("Modern appearance consent survives settings roundtrip", () => {
+        var store = new SettingsStore(Path.Combine(temp,"modern-frames")); store.Save(new Settings { NativeModernMaterialsEnabled=true,NativeModernMaterialsConsentVersion=1 });
+        var s = store.Load(); Check(s.NativeModernMaterialsEnabled && s.NativeModernMaterialsConsentVersion==1 && !s.NativeFramesEnabled);
+    });
     Test("Native styling consent and exclusions survive settings roundtrip", () => {
         var store = new SettingsStore(Path.Combine(temp,"native-frames")); store.Save(new Settings { NativeFramesEnabled=true,NativeFramesConsentVersion=1,NativeFrameExclusions=["keep.exe"] });
         var s=store.Load();Check(s.NativeFramesEnabled&&s.NativeFramesConsentVersion==1&&s.NativeFrameExclusions.Single()=="keep.exe");

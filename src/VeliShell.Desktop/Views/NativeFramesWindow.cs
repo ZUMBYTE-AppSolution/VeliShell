@@ -15,6 +15,7 @@ internal sealed class NativeFramesWindow : VeliShellWindow
     private readonly ThemeService _theme;
     private readonly Action<Action<Settings>> _save;
     private readonly CheckBox _enabled = new();
+    private readonly CheckBox _materials = new();
     private readonly ListBox _exceptions = new() { Height = 105 };
     private readonly ListBox _windows = new() { Height = 110 };
     private readonly TextBox _entry = new() { MinWidth = 330, Margin = new Thickness(0, 0, 8, 8) };
@@ -36,6 +37,9 @@ internal sealed class NativeFramesWindow : VeliShellWindow
         _enabled.Content = L("NativeFrames.Enable"); _enabled.SetResourceReference(StyleProperty, "ToggleSwitch"); _enabled.Margin = new Thickness(0, 16, 0, 0); _enabled.Checked += Toggle; _enabled.Unchecked += Toggle; body.Children.Add(_enabled); body.Children.Add(_status);
         System.Windows.Automation.AutomationProperties.SetAutomationId(_enabled, "NativeFramesEnable");
         System.Windows.Automation.AutomationProperties.SetAutomationId(_entry, "NativeFramesException");
+        _materials.Content = L("NativeFrames.Materials"); _materials.SetResourceReference(StyleProperty, "ToggleSwitch"); _materials.Margin = new Thickness(0, 0, 0, 10);
+        System.Windows.Automation.AutomationProperties.SetAutomationId(_materials, "NativeFramesMaterials");
+        _materials.Checked += ChangeMaterials; _materials.Unchecked += ChangeMaterials; body.Children.Add(_materials); body.Children.Add(Description("NativeFrames.MaterialsHint"));
         var rollback = new Button { Content = L("NativeFrames.Rollback"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 14) };
         rollback.Click += (_, _) => { _save(s => s.NativeFramesEnabled = false); _controller.Stop(); Refresh(); }; body.Children.Add(rollback);
         body.Children.Add(new TextBlock { Text = L("NativeFrames.Exceptions"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 8) });
@@ -61,12 +65,26 @@ internal sealed class NativeFramesWindow : VeliShellWindow
         try {
             if (!_busy && _controller.Status.Stopping && _settings.NativeFramesEnabled) _save(s => s.NativeFramesEnabled = false);
             _enabled.IsChecked = _settings.NativeFramesEnabled;
-            _enabled.IsEnabled = !_busy && NativeFramesController.Supported;
+            _enabled.IsEnabled = !_busy && NativeFramesController.Supported && !_controller.Restoring;
+            _materials.IsChecked = _settings.NativeModernMaterialsEnabled;
+            _materials.IsEnabled = !_busy && NativeFramesController.Supported;
             _status.Text = L(!NativeFramesController.Supported ? "NativeFrames.Unsupported" : _busy ? "NativeFrames.Starting" : _controller.Status.Stopping ? "NativeFrames.Restoring" : _controller.Active ? "NativeFrames.Active" : "NativeFrames.Off");
             if (_controller.Status.Error is { } error) _status.Text += "\n" + error;
             var selected = _exceptions.SelectedItem as string; _exceptions.ItemsSource = _settings.NativeFrameExclusions.ToArray(); _exceptions.SelectedItem = selected;
             var selectedWindow = _windows.SelectedItem as NativeFrameStatus; _windows.ItemsSource = _controller.Status.Windows; if (selectedWindow is not null) _windows.SelectedItem = _controller.Status.Windows.FirstOrDefault(row => row.Path == selectedWindow.Path && row.Title == selectedWindow.Title);
         } finally { _syncing = false; }
+    }
+    private async void ChangeMaterials(object sender, RoutedEventArgs args)
+    {
+        if (_syncing || _busy) return;
+        bool enable = _materials.IsChecked == true;
+        _busy = true; _materials.IsEnabled = false;
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        try {
+            if (enable && MessageBox.Show(this, L("NativeFrames.MaterialConsent"), Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            _save(s => { s.NativeModernMaterialsEnabled = enable; if (enable) s.NativeModernMaterialsConsentVersion = 1; });
+            _controller.Update(_settings, _theme.IsDark);
+        } finally { _busy = false; Refresh(); }
     }
     private async void Toggle(object sender, RoutedEventArgs args)
     {

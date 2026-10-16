@@ -106,6 +106,15 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 > Testpakete sind ausdrücklich als Vorabversion markiert und ersetzen weder das
 > stabile GitHub-Release noch die Microsoft-Store-Ausgabe.
 
+Der aktuelle Arbeitsstand auf `test` erweitert die Fenstergestaltung um **32-Bit-Apps,
+WPF mit Standardrahmen und Glas rund um den gesamten Außenrahmen**. Eine getrennte,
+freiwillige native Farbanpassung berücksichtigt außerdem geeignete Explorer- und
+App-Fenster mit eigener Titelleiste, ohne Tabs oder Suchfelder zu verdecken. Diese
+begrenzte Anpassung verschiebt keine app-eigenen Buttons und ersetzt nicht deren
+Oberfläche. Die Kompatibilitätsanzeige erklärt, warum ein Fenster übersprungen wird.
+Diese Ergänzungen sind erst nach einer gesonderten Testveröffentlichung über den
+Update-Kanal erhältlich; der Branch allein ändert keine installierte Version.
+
 VeliShell fragt GitHub ausschließlich nach der neuesten veröffentlichten Version. Das Verhalten bestimmst du selbst: nur manuell prüfen, bei neuen Versionen benachrichtigen oder das geprüfte Paket automatisch herunterladen. Das vollständige Changelog bleibt dabei sichtbar; die Installation beginnt nie von allein.
 
 Ist das an die öffentliche IP gebundene GitHub-API-Limit ausgeschöpft, wechselt die Prüfung automatisch auf die offizielle Release-Seite und deren Feed. Release-Tag, Changelog, Dateigröße und SHA-256-Prüfsumme werden dabei weiterhin ausschließlich aus taggebundenen Quellen des offiziellen Repositories zusammengesetzt und gegengeprüft; ein eigener GitHub-Schlüssel ist dafür nicht nötig.

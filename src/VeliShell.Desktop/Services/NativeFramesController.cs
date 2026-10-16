@@ -7,9 +7,9 @@ using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
 
-internal sealed record NativeFramesConfig(bool Enabled, bool Dark, int Gloss, int Transparency, string[] Exclusions, bool Preview, uint Tint);
-internal sealed record NativeFrameStatus(string Title, string Path, string State)
-{ public override string ToString() => Title + " · " + LocalizationService.Current.Get("NativeFrames.State." + State); }
+internal sealed record NativeFramesConfig(bool Enabled, bool Dark, int Gloss, int Transparency, string[] Exclusions, bool Preview, uint Tint, bool ModernMaterials = false);
+internal sealed record NativeFrameStatus(string Title, string Path, string State, string? Reason = null)
+{ public override string ToString() => Title + " · " + LocalizationService.Current.Get("NativeFrames.State." + State) + (Reason is null ? "" : " · " + LocalizationService.Current.Get("NativeFrames.Reason." + Reason)); }
 internal sealed record NativeFramesStatus(bool Ready, bool Stopping, NativeFrameStatus[] Windows, string? Error = null);
 internal sealed record NativeFrameLoaded(int Pid, long Started, string Path);
 
@@ -31,6 +31,7 @@ internal sealed class NativeFramesController : IDisposable
     internal NativeFramesStatus Status { get; private set; } = new(false, false, []);
     internal event Action? Changed;
     internal bool Active => _guard is { HasExited: false } && !_stopped;
+    internal bool Restoring => _guard is { HasExited: false } && _stopped;
     internal NativeFramesController(bool preview = false)
     {
         _preview = preview; _timer.Tick += (_, _) => {
@@ -54,7 +55,7 @@ internal sealed class NativeFramesController : IDisposable
         var color = (System.Windows.Media.Color)dictionary["NativeCaptionTint"];
         return (uint)(color.A << 24 | color.R << 16 | color.G << 8 | color.B);
     }
-    private NativeFramesConfig Config(Settings settings, bool dark) => new(settings.NativeFramesEnabled, dark, (int)settings.GlassGloss, (int)settings.GlassTransparency, settings.NativeFrameExclusions.ToArray(), _preview, CaptionTint(dark));
+    private NativeFramesConfig Config(Settings settings, bool dark) => new(settings.NativeFramesEnabled, dark, (int)settings.GlassGloss, (int)settings.GlassTransparency, settings.NativeFrameExclusions.ToArray(), _preview, CaptionTint(dark), settings.NativeModernMaterialsEnabled && settings.NativeModernMaterialsConsentVersion == 1);
     internal async Task EnableAsync(Settings settings, bool dark, bool explicitConsent)
     {
         if (_disposed || !Supported || settings.NativeFramesConsentVersion != 1) throw new InvalidOperationException(LocalizationService.Current.Get("NativeFrames.Unsupported"));

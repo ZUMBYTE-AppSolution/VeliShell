@@ -11,6 +11,12 @@ internal static class NativePrototypeMethods
     [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     internal static extern int VeliClassicEligible(nint window);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicReason(nint window, int crossBitness);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliMaterialEligible(nint window);
     [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     internal static extern nint VeliClassicBegin(nint window, string session, uint expectedPid, ulong expectedStart, int dark, int gloss, int transparency, uint tint);

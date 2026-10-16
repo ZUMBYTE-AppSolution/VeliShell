@@ -6,6 +6,20 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1-test.1] - 2026-10-16
+
+### Erweiterte Fenstergestaltung im Teststand
+
+- Passende native x86-DLL und kleiner 32-Bit-Helfer für klassische 32-Bit-Apps, statt diese wie bisher pauschal abzulehnen. Die x64-App bleibt erhalten; kein zusätzliches .NET-/Visual-Studio-Paket zum Starten nötig.
+- WPF mit echtem Standardrahmen wird anhand der tatsächlichen Fenstergeometrie erkannt. App-gezeichnete Titelbereiche, Tabs und Suchfelder werden nicht abgeschnitten oder überdeckt.
+- Der vollständige klassische Außenrahmen verwendet Windows Composition: Titelbereich, Seiten, Unterkante und alle Rundungen. Der innere Ausschnitt lässt App-Inhalt und Menüs an ihrer ursprünglichen Position; Rahmenkanten und Titel übernehmen dieselben Theme-/Glaswerte.
+- Separate Freigabe für native Windows-Farben, Rundung und verfügbare Mica-/Acrylic-Materialien bei geeigneten Explorer-, WPF-/WinUI- und eigenen Titelleisten. Kein DLL-Laden in diese Fenster und kein Verschieben ihrer Buttons; Apps können Systemmaterialien selbst überzeichnen. Das ist ausdrücklich kein vollständiger Skin eigener Titelleisten oder App-Inhalte.
+- Die Kompatibilitätsanzeige erklärt übersprungene Fenster, unter anderem eigene Formen, Sonderrahmen, Ausnahmen, geschützte Systeme oder abweichende Rechte.
+- Ein ausgefallener Kompatibilitätshelfer löst gemeinsames Rollback aus. Die Material-Helfer überwachen zusätzlich den Hauptwächter; der Wächter kann bei einem Material-Helferabsturz die gesicherten DWM-Werte selbst zurücksetzen. Keine automatische Wiederaufnahme nach einem Ausfall.
+- Eigene isolierte x86-/x64- und WPF-Testfenster prüfen Live-Hintergrund, Außenkanten, linke Buttons, App-Geometrie, getrennte Materialfreigabe sowie Rollback und Helfer-Ausfälle in Hell/Dunkel. Keine Änderungen an der parallel installierten stabilen Ausgabe. Der reale Notfall-Hotkey bleibt ihr im isolierten QA-Modus vorbehalten.
+
+Dieser Stand wird auf `test` vorbereitet. Ein Versionsabschnitt allein bedeutet keine Veröffentlichung; Stable und Microsoft Store werden nicht automatisch aktualisiert.
+
 ## [0.14.0] - 2026-10-16
 
 ### Neu

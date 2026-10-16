@@ -18,13 +18,14 @@ internal static class ClassicFrameSession
     internal const string Guard = "--classic-frame-guard";
     internal static string Folder => Path.Combine(App.DataDirectory, "classic-frames");
     internal static string Event(Guid id, string kind) => @"Local\VeliShell.ClassicFrame." + id.ToString("N") + "." + kind;
-    internal sealed record Candidate(nint Window, int Pid, long Started, string Path, string Hash, string Title)
+    internal sealed record Candidate(nint Window, int Pid, long Started, string Path, string Hash, string Title, bool Is32Bit = false, bool Material = false)
     { public override string ToString() => $"{Title}  ·  {System.IO.Path.GetFileName(Path)}  ·  PID {Pid}"; }
-    internal static Candidate? Inspect(nint window, bool includeHash = true)
+    internal static Candidate? Inspect(nint window, bool includeHash = true, bool crossBitness = false, bool material = false)
     {
         try
         {
-            if (NativePrototypeMethods.VeliClassicEligible(window) != 1) return null;
+            var reason = NativePrototypeMethods.VeliClassicReason(window, crossBitness ? 1 : 0);
+            if (material ? NativePrototypeMethods.VeliMaterialEligible(window) != 1 : reason != 0 && !(crossBitness && reason == 100)) return null;
             NativeMethods.GetWindowThreadProcessId(window, out var pid);
             using var target = Process.GetProcessById((int)pid);
             var path = target.MainModule?.FileName;
@@ -32,7 +33,7 @@ internal static class ClassicFrameSession
             var title = new System.Text.StringBuilder(512); NativeMethods.GetWindowText(window, title, title.Capacity);
             var hash = "";
             if (includeHash) { using var input = File.OpenRead(path); hash = Convert.ToHexString(SHA256.HashData(input)); }
-            return new(window, target.Id, target.StartTime.ToUniversalTime().ToFileTimeUtc(), path, hash, title.ToString());
+            return new(window, target.Id, target.StartTime.ToUniversalTime().ToFileTimeUtc(), path, hash, title.ToString(), reason == 100, material);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException or InvalidOperationException) { return null; }
     }

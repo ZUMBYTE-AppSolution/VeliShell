@@ -33,11 +33,11 @@ Einstellungsprofil. Es überschreibt weder die stabile Installation noch deren
 Autostart- oder Explorer-Kontextmenüregistrierung. Store-Pakete bleiben Store-verwaltet.
 
 Das freiwillige Modul Fenstergestaltung darf erst nach ausdrücklicher Zustimmung
-geeignete klassische 64-Bit-Fenster automatisch erfassen. Eine Ausnahmeliste ist
+geeignete klassische 32-/64-Bit-Fenster und WPF-Standardrahmen automatisch erfassen. Eine Ausnahmeliste ist
 vorher und währenddessen verfügbar. Ein threadgebundener DLL-Hook dient nur zum
 Bootstrap pro Ziel-UI-Thread und wird danach entfernt. PID, Startzeit, EXE-Hash,
 HWND, Thread und temporärer Zustimmungsmarker werden geprüft; keine globalen Hooks.
-System-/erhöhte Apps und bekannte eigene Titelleisten werden abgewiesen. Es gibt
+System-/erhöhte Apps und eigene Titelleisten werden vom vollständigen Rahmenersatz abgewiesen. Eine getrennte, freiwillige Materialanpassung kann bei geeigneten Explorer-/WinUI-/App-Fenstern lesbare DWM-Werte verändern, ohne dort eine DLL zu laden; Apps können diese Effekte überzeichnen. Sie verändert weder Tabs noch Suchfelder oder eigene Buttons. Es gibt
 keinen Austausch von Systemdateien und keine automatische Rechteerhöhung.
 Ein unabhängiger Helfer empfängt vor der Aktivierung das Notfallkürzel. Ein lokaler
 Heartbeat löst bei dessen Ausfall das Rücksetzen auf dem Ziel-UI-Thread aus. Bei
@@ -49,6 +49,16 @@ automatisch. Ein lokaler Notfall-Latch verhindert unbewusstes Wiederaktivieren n
 einem Ausfall. Keine allgemeine Verträglichkeitszusage für Spiele oder Sonderrahmen;
 solche Programme müssen vor Aktivierung ausgeschlossen werden. Siehe
 [Test- und Wiederherstellungshinweise](NATIVE-PROTOTYPE.md).
+
+Im Teststand verbindet ein pointerfreies, pro Sitzung benanntes Kernelobjekt den
+x64-Wächter mit den nativen x86-Helfern. Prozessidentität und Fenster werden auf
+beiden Seiten geprüft. Der Verlust eines Kompatibilitätshelfers stoppt die Aufnahme;
+Materialwerte liegen zusätzlich im gemeinsamen Speicher für den Rückweg durch den
+Wächter. Ein weiterlebender Material-Helfer setzt auch bei Wächterausfall zurück.
+Eine zeitgleich von der Ziel-App selbst geänderte DWM-Eigenschaft wird beim Rollback
+nicht mit einem älteren Snapshot überschrieben. Der isolierte QA-Modus lässt
+ausschließlich eigene, verifizierte Beispielfenster zu und registriert kein globales
+Notfallkürzel einer parallel laufenden Installation um.
 
 Sicherheitskorrekturen werden grundsätzlich für die neueste veröffentlichte stabile
 Version bereitgestellt. Vorabstände und selbst kompilierte Änderungen können davon

@@ -38,7 +38,7 @@ struct Shared {
     unsigned attributes;
 };
 struct Broker { HANDLE mapping{}; Shared* data{}; HHOOK hook{}; ATOM atom{}; };
-struct Frame { HANDLE mapping; Shared* data; int hover = -1, pressed = -1; HWND caption{}; ClassicGlass* glass{}; HRGN region{}; bool syncing=false,retired=false,restoring=false; int references=1; UINT_PTR timer{}; };
+struct Frame { HANDLE mapping; Shared* data; int hover = -1, pressed = -1; HWND caption{}; ClassicGlass* glass{}; HRGN region{}; bool syncing=false,retired=false,restoring=false,wasIconic=false,syncQueued=false; int references=1; UINT_PTR timer{}; RECT hostHole{}; int hostWidth=0,hostHeight=0,captionHeight=0; ULONGLONG invalidSince=0; };
 static thread_local std::map<UINT_PTR,HWND> recoveryTimers;
 ULONGLONG Heartbeat(Shared* data) { return static_cast<ULONGLONG>(InterlockedCompareExchange64(&data->heartbeat,0,0)); }
 void Release(Frame*);
@@ -85,32 +85,58 @@ bool SameToken(HANDLE process) {
     }
     CloseHandle(ours); CloseHandle(theirs); return same;
 }
-bool Eligible(HWND window) {
+// Stable diagnostic codes, shared with the supervisor. 100 is an eligible x86
+// window inspected from x64; only its same-bitness bridge may attach it.
+int Probe(HWND window,bool crossBitness,bool material=false) {
     HIGHCONTRASTW contrast{sizeof(contrast)};
-    if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) return false;
-    if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) || GetAncestor(window, GA_ROOT) != window || GetWindow(window, GW_OWNER)) return false;
-    DWORD pid{}; if (!GetWindowThreadProcessId(window, &pid) || pid == GetCurrentProcessId()) return false;
+    if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) return 1;
+    if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) || GetAncestor(window, GA_ROOT) != window || GetWindow(window, GW_OWNER)) return 2;
+    DWORD pid{}; if (!GetWindowThreadProcessId(window, &pid) || pid == GetCurrentProcessId()) return 2;
     const LONG_PTR style = GetWindowLongPtrW(window, GWL_STYLE), ex = GetWindowLongPtrW(window, GWL_EXSTYLE);
-    if ((style & (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME)) != (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME) ||
-        (ex & (WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYOUTRTL)) || (style & WS_CHILD)) return false;
-    HRGN region=CreateRectRgn(0,0,0,0); if(!region) return false;
-    int regionType=GetWindowRgn(window,region); DeleteObject(region); if(regionType!=ERROR) return false;
+    if ((!material && (style & (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME)) != (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME)) ||
+        (ex & (WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_LAYOUTRTL)) || (style & WS_CHILD)) return 3;
+    HRGN region=CreateRectRgn(0,0,0,0); if(!region) return 3;
+    int regionType=GetWindowRgn(window,region); DeleteObject(region); if(!material && regionType!=ERROR) return 4;
     wchar_t cls[256]{}; GetClassNameW(window, cls, 256);
-    // Modern custom chrome cannot be reliably replaced by a classic NC adapter.
-    for (auto denied : {L"Chrome", L"Mozilla", L"HwndWrapper", L"ApplicationFrame", L"WinUIDesktop", L"CabinetWClass", L"Progman", L"WorkerW", L"Shell_", L"Windows.UI", L"UnityWndClass", L"UnrealWindow", L"SDL_app", L"GLFW", L"Qt"})
-        if (wcsstr(cls, denied)) return false;
+    for(auto denied : {L"Progman",L"WorkerW",L"Shell_",L"UnityWndClass",L"UnrealWindow",L"SDL_app",L"GLFW"}) if(wcsstr(cls,denied)) return 5;
+    if(!material) for (auto denied : {L"Chrome", L"Mozilla", L"ApplicationFrame", L"WinUIDesktop", L"CabinetWClass", L"Windows.UI", L"Qt"})
+        if (wcsstr(cls, denied)) return 6;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
-    if (!process) return false;
+    if (!process) return 7;
     USHORT machine{}, native{}; DWORD ourSession{}, session{};
     wchar_t path[32768]{}, system[32768]{}; DWORD size = 32768;
-    bool okay = SameToken(process) && IsWow64Process2(process, &machine, &native) && machine == IMAGE_FILE_MACHINE_UNKNOWN && native == IMAGE_FILE_MACHINE_AMD64 &&
+    bool okay = SameToken(process) && IsWow64Process2(process, &machine, &native) && native == IMAGE_FILE_MACHINE_AMD64 &&
         ProcessIdToSessionId(pid, &session) && ProcessIdToSessionId(GetCurrentProcessId(), &ourSession) && session == ourSession &&
         QueryFullProcessImageNameW(process, 0, path, &size);
     GetWindowsDirectoryW(system, 32768);
-    if (okay && (_wcsnicmp(path, system, wcslen(system)) == 0 || wcsstr(path, L"\\WindowsApps\\"))) okay = false;
+    if(!okay) { CloseHandle(process); return 7; }
+    const bool x86=machine==IMAGE_FILE_MACHINE_I386;
+    if(machine!=IMAGE_FILE_MACHINE_UNKNOWN && !x86) { CloseHandle(process); return 8; }
+#ifdef _WIN64
+    if(!material && !crossBitness && x86) { CloseHandle(process); return 8; }
+#else
+    if(!material && !crossBitness && !x86) { CloseHandle(process); return 8; }
+#endif
+    if (_wcsnicmp(path, system, wcslen(system)) == 0 || wcsstr(path,L"\\WindowsApps\\")) {
+        bool permitted=material && (wcsstr(path,L"\\WindowsApps\\")!=nullptr);
+        auto file=wcsrchr(path,L'\\'); file=file?file+1:path;
+        if(material && (wcscmp(cls,L"CabinetWClass")==0 && _wcsicmp(file,L"explorer.exe")==0 ||
+            _wcsicmp(file,L"SystemSettings.exe")==0 || _wcsicmp(file,L"notepad.exe")==0 || _wcsicmp(file,L"mspaint.exe")==0 || _wcsicmp(file,L"ApplicationFrameHost.exe")==0)) permitted=true;
+        if(!permitted) { CloseHandle(process); return 9; }
+    }
     int cloaked{}; DwmGetWindowAttribute(window, 14, &cloaked, sizeof(cloaked));
-    CloseHandle(process); return okay && !cloaked;
+    CloseHandle(process); if(cloaked)return 2;
+    if(!material) {
+        // WPF is allowed when it genuinely has a standard non-client caption.
+        // Never clip app-drawn tabs/search fields merely because HTCAPTION exists.
+        RECT bounds{}; POINT client{}; GetWindowRect(window,&bounds); ClientToScreen(window,&client);
+        UINT dpi=GetDpiForWindow(window);
+        int minimum=GetSystemMetricsForDpi(SM_CYCAPTION,dpi)+GetSystemMetricsForDpi(SM_CYSIZEFRAME,dpi)+GetSystemMetricsForDpi(SM_CXPADDEDBORDER,dpi)-2;
+        if(client.y-bounds.top<minimum)return 10;
+    }
+    return !material && crossBitness && x86 ? 100 : 0;
 }
+bool Eligible(HWND window) { return Probe(window,false)==0; }
 int Dip(HWND w, int value) { return MulDiv(value, static_cast<int>(GetDpiForWindow(w)), 96); }
 RECT Caption(HWND w) {
     RECT r{}; GetWindowRect(w, &r); r.right -= r.left; r.bottom -= r.top; r.left = r.top = 0;
@@ -128,6 +154,7 @@ int ButtonAt(HWND w, LPARAM point) {
     return -1;
 }
 void Paint(HWND w, Frame* frame) {
+    if(frame->glass)return; // All four non-client edges are rendered by Composition.
     HDC dc = GetWindowDC(w); if (!dc) return;
     RECT bounds{}, client{}; POINT origin{}; GetWindowRect(w,&bounds); GetClientRect(w,&client); ClientToScreen(w,&origin);
     const int widthWindow=bounds.right-bounds.left, heightWindow=bounds.bottom-bounds.top;
@@ -192,17 +219,34 @@ bool OurRegion(HWND w,Frame* f) {
 bool Sync(HWND w,Frame* f) {
     if(f->retired)return false;
     if(f->syncing || f->restoring) return true;
-    if(!IsWindowVisible(w) || IsIconic(w)) { ShowWindow(f->caption,SW_HIDE); return true; }
+    if(!IsWindowVisible(w) || IsIconic(w)) { if(IsIconic(w))f->wasIconic=true; ShowWindow(f->caption,SW_HIDE); return true; }
     f->syncing=true;
     RECT bounds{}; GetWindowRect(w,&bounds); RECT area=Caption(w);
     const int inset=IsZoomed(w)?area.top:0;
-    const int width=bounds.right-bounds.left-2*inset, height=area.bottom-inset;
-    if(width<200 || height<20 || !OurRegion(w,f)) { f->data->error=21; f->syncing=false; return false; }
-    if(!f->caption || !f->glass || !IsWindow(f->caption)) { f->syncing=false; return false; }
-    const HRESULT painted=f->glass->Paint(w,width,height,f->data->dark,f->data->gloss,f->data->transparency,f->data->tint,f->hover,IsZoomed(w)!=FALSE);
+    const int width=bounds.right-bounds.left-2*inset, height=bounds.bottom-bounds.top-2*inset;
+    const int captionHeight=area.bottom-inset;
+    if(width<100 || height<20) {
+        if(!f->invalidSince)f->invalidSince=GetTickCount64();
+        ShowWindow(f->caption,SW_HIDE); f->syncing=false;
+        if(GetTickCount64()-f->invalidSince<1000)return true;
+        f->data->error=27; return false;
+    }
+    f->invalidSince=0;
+    if(!OurRegion(w,f)) {
+        HRGN actual=CreateRectRgn(0,0,0,0); int kind=actual?GetWindowRgn(w,actual):NULLREGION; if(actual)DeleteObject(actual);
+        // Windows may clear a region during icon/maximize transitions. Reacquire
+        // an absent region only; never overwrite a new shape supplied by the app.
+        if(kind!=ERROR || !(f->wasIconic || f->hostWidth!=width || f->hostHeight!=height)) { f->data->error=21; f->syncing=false; return false; }
+        if(f->region)DeleteObject(f->region); f->region=nullptr;
+    }
+    f->wasIconic=false;
+    if(!f->caption || !f->glass || !IsWindow(f->caption)) { f->data->error=24; f->syncing=false; return false; }
+    const HRESULT painted=f->glass->Paint(w,width,height,captionHeight,f->data->dark,f->data->gloss,f->data->transparency,f->data->tint,f->hover,IsZoomed(w)!=FALSE);
     if(FAILED(painted)) { f->data->error=static_cast<LONG>(painted); f->syncing=false; return false; }
     RECT previous{}; if(f->region) GetRgnBox(f->region,&previous);
-    RECT next{0,area.bottom,bounds.right-bounds.left,bounds.bottom-bounds.top};
+    RECT client{}; POINT origin{}; GetClientRect(w,&client); ClientToScreen(w,&origin);
+    RECT next{origin.x-bounds.left,area.bottom,origin.x-bounds.left+client.right,origin.y-bounds.top+client.bottom};
+    if(next.left<0 || next.right>bounds.right-bounds.left || next.bottom>bounds.bottom-bounds.top || next.bottom<=next.top) { f->data->error=25; f->syncing=false; return false; }
     if(!f->region || !EqualRect(&previous,&next)) {
         HRGN region=CreateRectRgn(next.left,next.top,next.right,next.bottom), copy=CreateRectRgn(next.left,next.top,next.right,next.bottom);
         if(!region || !copy) { if(region)DeleteObject(region); if(copy)DeleteObject(copy); f->data->error=22; f->syncing=false; return false; }
@@ -211,6 +255,16 @@ bool Sync(HWND w,Frame* f) {
         if(old)DeleteObject(old);
         if(f->retired) { f->syncing=false; return false; }
     }
+    RECT hole{next.left-inset,next.top-inset,next.right-inset,next.bottom-inset};
+    if(f->hostWidth!=width || f->hostHeight!=height || !EqualRect(&hole,&f->hostHole)) {
+        HRGN ring=CreateRectRgn(0,0,width,height), inner=CreateRectRgn(hole.left,hole.top,hole.right,hole.bottom);
+        bool okay=ring && inner && CombineRgn(ring,ring,inner,RGN_DIFF)!=ERROR;
+        if(inner)DeleteObject(inner);
+        if(!okay || !SetWindowRgn(f->caption,ring,TRUE)) { if(ring)DeleteObject(ring); f->data->error=26; f->syncing=false; return false; }
+        f->hostWidth=width; f->hostHeight=height; f->hostHole=hole;
+    }
+    f->captionHeight=captionHeight;
+    SetPropW(w,L"VeliShell.ClassicFrame.CaptionHeight",reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(captionHeight)));
     // Ownership supplies the z-order. Never lift an inactive app's title over
     // unrelated foreground windows on a periodic synchronization tick.
     SetWindowPos(f->caption,nullptr,bounds.left+inset,bounds.top+inset,width,height,SWP_NOACTIVATE|SWP_NOZORDER|SWP_SHOWWINDOW);
@@ -218,8 +272,8 @@ bool Sync(HWND w,Frame* f) {
 }
 int CaptionButton(HWND host,LPARAM point) {
     auto f=reinterpret_cast<Frame*>(GetWindowLongPtrW(host,GWLP_USERDATA)); if(!f) return -1;
-    int x=GET_X_LPARAM(point), y=GET_Y_LPARAM(point); RECT r{}; GetClientRect(host,&r);
-    if(y<0 || y>=r.bottom) return -1;
+    int x=GET_X_LPARAM(point), y=GET_Y_LPARAM(point);
+    if(y<0 || y>=f->captionHeight) return -1;
     for(int i=0;i<3;++i) if(abs(x-Dip(f->data->window,24+22*i))<=Dip(f->data->window,9)) return i;
     return -1;
 }
@@ -276,6 +330,7 @@ bool Restore(HWND w) {
     if(f->timer) { KillTimer(nullptr,f->timer); recoveryTimers.erase(f->timer); }
     RemovePropW(w,Active); RemovePropW(w,Consent);
     RemovePropW(w,L"VeliShell.ClassicFrame.Caption"); RemovePropW(w,L"VeliShell.ClassicFrame.Glass");
+    RemovePropW(w,L"VeliShell.ClassicFrame.CaptionHeight");
     SetWindowPos(w,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
     RedrawWindow(w,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_ALLCHILDREN);
     InterlockedExchange(&f->data->state,Restored); Release(f); return true;
@@ -288,10 +343,12 @@ LRESULT CALLBACK Procedure(HWND w, UINT message, WPARAM wp, LPARAM lp, UINT_PTR,
         f->retired=true;
         if(f->timer) { KillTimer(nullptr,f->timer); recoveryTimers.erase(f->timer); }
         RemovePropW(w,Active); RemovePropW(w,Consent); RemovePropW(w,L"VeliShell.ClassicFrame.Caption"); RemovePropW(w,L"VeliShell.ClassicFrame.Glass"); RemoveWindowSubclass(w,Procedure,Subclass);
+        RemovePropW(w,L"VeliShell.ClassicFrame.CaptionHeight");
         InterlockedExchange(&f->data->state,Gone); Release(f); return DefSubclassProc(w,message,wp,lp);
     }
     if(f->restoring || f->retired)return DefSubclassProc(w,message,wp,lp);
     if(message==Bootstrap()) {
+        f->syncQueued=false;
         if(f->data->stop || GetTickCount64()-Heartbeat(f->data)>3000) Restore(w);
         else if(f->glass && !Sync(w,f)) { InterlockedExchange(&f->data->stop,1); Restore(w); }
         return DefSubclassProc(w,message,wp,lp);
@@ -303,7 +360,12 @@ LRESULT CALLBACK Procedure(HWND w, UINT message, WPARAM wp, LPARAM lp, UINT_PTR,
     if(message==WM_NCPAINT || message==WM_NCACTIVATE || message==WM_SETTEXT || message==WM_SIZE || message==WM_THEMECHANGED || message==WM_WINDOWPOSCHANGED || message==WM_DPICHANGED) {
         LRESULT result=DefSubclassProc(w,message,wp,lp);
         if(GetPropW(w,Active)!=f)return result;
-        Paint(w,f); if(f->glass && !Sync(w,f)) InterlockedExchange(&f->data->stop,1); return result;
+        Paint(w,f);
+        if(IsIconic(w) || !IsWindowVisible(w)) { f->wasIconic|=IsIconic(w)!=FALSE; if(f->caption)ShowWindow(f->caption,SW_HIDE); }
+        // DefWindowProc can send nested WM_SIZE before completing its region
+        // transition. Synchronize from the queue, not from that half-built layout.
+        else if(!f->syncQueued) { f->syncQueued=true; PostMessageW(w,Bootstrap(),0,0); }
+        return result;
     }
     if(message==WM_NCHITTEST) {
         auto hit=DefSubclassProc(w,message,wp,lp);
@@ -386,6 +448,8 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK VeliClassicHook(int code, WPAR
     return CallNextHookEx(nullptr,code,wp,lp);
 }
 extern "C" __declspec(dllexport) int __cdecl VeliClassicEligible(HWND window) { return Eligible(window)?1:0; }
+extern "C" __declspec(dllexport) int __cdecl VeliClassicReason(HWND window,int crossBitness) { return Probe(window,crossBitness!=0); }
+extern "C" __declspec(dllexport) int __cdecl VeliMaterialEligible(HWND window) { return Probe(window,true,true)==0?1:0; }
 extern "C" __declspec(dllexport) void* __cdecl VeliClassicBegin(HWND window, const wchar_t* session, DWORD expectedPid, ULONGLONG expectedStart, int dark, int gloss, int transparency,DWORD tint) {
     if(!Eligible(window) || GetPropW(window,Active) || !session || wcslen(session)!=32) return nullptr;
     RECT bounds{}; GetWindowRect(window,&bounds); DWORD_PTR hit{};

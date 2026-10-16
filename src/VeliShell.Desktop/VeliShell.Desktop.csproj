@@ -24,6 +24,9 @@
   <ItemGroup>
     <Content Include="obj/native/VeliShell.NativeFrame.dll" Link="VeliShell.NativeFrame.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="obj/native/VeliShell.ClassicSample.exe" Link="VeliShell.ClassicSample.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="obj/native/VeliShell.NativeFrame.x86.dll" Link="VeliShell.NativeFrame.x86.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="obj/native/VeliShell.FrameBridge.x86.exe" Link="VeliShell.FrameBridge.x86.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="obj/native/VeliShell.ClassicSample.x86.exe" Link="VeliShell.ClassicSample.x86.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../WINDOW-RECOVERY.cmd" Link="WINDOW-RECOVERY.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../NATIVE-TEST.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-TEST.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../CLASSIC-APPS.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="CLASSIC-APPS.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -41,5 +44,8 @@
   </ItemGroup>
   <Target Name="BuildNativeFramePrototype" BeforeTargets="BeforeBuild" Inputs="../../native/VeliShell.NativeFrame/NativeFrame.cpp;../../native/VeliShell.NativeFrame/ClassicFrame.cpp;../../native/VeliShell.NativeFrame/ClassicGlass.h;../../tests/VeliShell.InteractionQa/ClassicFixture.cpp;../../tools/Build-NativePrototype.ps1" Outputs="$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.exe">
     <Exec Command="pwsh.exe -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../tools/Build-NativePrototype.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll&quot; -FixturePath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.exe&quot;" />
+  </Target>
+  <Target Name="BuildNativeFrameX86" BeforeTargets="BeforeBuild" Inputs="../../native/VeliShell.NativeFrame/NativeFrame.cpp;../../native/VeliShell.NativeFrame/ClassicFrame.cpp;../../native/VeliShell.NativeFrame/ClassicGlass.h;../../native/VeliShell.NativeFrame/FrameBridge.cpp;../../tests/VeliShell.InteractionQa/ClassicFixture.cpp;../../tools/Build-NativePrototype.ps1" Outputs="$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.x86.dll;$(MSBuildProjectDirectory)/obj/native/VeliShell.FrameBridge.x86.exe;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.x86.exe">
+    <Exec Command="pwsh.exe -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../tools/Build-NativePrototype.ps1&quot; -Architecture x86 -OutputPath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.x86.dll&quot; -FixturePath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.x86.exe&quot; -BridgePath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.FrameBridge.x86.exe&quot;" />
   </Target>
 </Project>

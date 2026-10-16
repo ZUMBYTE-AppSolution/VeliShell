@@ -12,7 +12,7 @@ using VeliShell.Desktop.Services;
 
 internal static partial class Program
 {
-    private static int VerifyAutomaticFrames()
+    private static int VerifyAutomaticFrames(bool x86 = false)
     {
         var app = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown }; int code = 1;
         app.Dispatcher.BeginInvoke(async () =>
@@ -21,15 +21,15 @@ internal static partial class Program
             try
             {
                 if (!NativeFramesController.Supported) throw new InvalidOperationException("Windows 11 graphics desktop required for native frame QA.");
-                string canonical = Path.Combine(AppContext.BaseDirectory,"VeliShell.ClassicSample.exe");
-                string excludedPath = Path.Combine(AppContext.BaseDirectory,"VeliShell.ClassicSample.Excluded.exe");
+                string canonical = Path.Combine(AppContext.BaseDirectory,x86 ? "VeliShell.ClassicSample.x86.exe" : "VeliShell.ClassicSample.exe");
+                string excludedPath = Path.Combine(AppContext.BaseDirectory,x86 ? "VeliShell.ClassicSample.x86.Excluded.exe" : "VeliShell.ClassicSample.Excluded.exe");
                 File.Copy(canonical,excludedPath,true);
                 string renders = Path.Combine(AppContext.BaseDirectory,"automatic-frame-renders"); Directory.CreateDirectory(renders);
-                scene = new Window { WindowStyle = WindowStyle.None, ShowInTaskbar = false, Left = 80, Top = 100, Width = 1100, Height = 740,
+                scene = new Window { WindowStyle = WindowStyle.None, ShowInTaskbar = false, Topmost = true, Left = 80, Top = 100, Width = 1100, Height = 740,
                     Background = new LinearGradientBrush(Color.FromRgb(15,95,190),Color.FromRgb(122,45,165),0) }; scene.Show();
                 async Task<Process> Spawn(string path)
                 {
-                    var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute=false })!; fixtures.Add(process);
+                    var process = Process.Start(new ProcessStartInfo(path,"--isolated") { UseShellExecute=false })!; fixtures.Add(process);
                     await Until(()=> { process.Refresh(); return process.MainWindowHandle!=0; },"Sample app start"); return process;
                 }
                 foreach(bool dark in new[]{false,true})
@@ -44,8 +44,9 @@ internal static partial class Program
                         ((ValuePattern)input.GetCurrentPattern(ValuePattern.Pattern)).SetValue(Path.GetFileName(excludedPath));
                         InvokeNamed(root,LocalizationService.Current.Get("NativeFrames.Add"));
                     });
-                    await EnableAutomaticUi(ui);
                     var one=first.MainWindowHandle; var two=second.MainWindowHandle;
+                    NativePrototypeMethods.GetClientRect(one,out var originalClient); var originalOrigin=new NativeMethods.Point(); NativePrototypeMethods.ClientToScreen(one,ref originalOrigin);
+                    await EnableAutomaticUi(ui);
                     bool Glass(nint w)=>NativePrototypeMethods.GetProp(w,"VeliShell.ClassicFrame.Glass")==1;
                     await Until(()=>Glass(one)&&Glass(two),"Automatic admission of two existing windows");
                     Require(!Glass(excluded.MainWindowHandle),"Excluded app was modified.");
@@ -55,23 +56,37 @@ internal static partial class Program
                     NativeMethods.SetWindowPos(one,(nint)(-1),120,160,800,480,0x40); NativeMethods.SetForegroundWindow(one); await Task.Delay(600);
                     var caption=NativePrototypeMethods.GetProp(one,"VeliShell.ClassicFrame.Caption");
                     NativeMethods.GetWindowRect(one,out var ownerBounds); NativeMethods.GetWindowRect(caption,out var header);
+                    await Until(()=> { var visible=NativeMethods.WindowFromPoint(new NativeMethods.Point { X=header.Left+150,Y=header.Top+15 }); NativeMethods.GetWindowThreadProcessId(visible,out var visiblePid);return visiblePid==first.Id; },"Visible QA surface (leave the desktop visible; unrelated apps are never captured)");
+                    NativePrototypeMethods.GetClientRect(one,out var styledClient); var styledOrigin=new NativeMethods.Point(); NativePrototypeMethods.ClientToScreen(one,ref styledOrigin);
+                    Require(styledClient.Right==originalClient.Right && styledClient.Bottom==originalClient.Bottom && styledOrigin.X==originalOrigin.X && styledOrigin.Y==originalOrigin.Y,"Frame styling changed the app's client geometry.");
                     Require(header.Left>=ownerBounds.Left && header.Right<=ownerBounds.Right && header.Top==ownerBounds.Top,"Caption protrudes outside the original window.");
                     Require((NativeMethods.GetWindowLongPtr(caption,-20).ToInt64()&8)==(NativeMethods.GetWindowLongPtr(one,-20).ToInt64()&8),"Caption has a different topmost state than its owner.");
                     using(var bitmap=new System.Drawing.Bitmap(800,480))using(var graphics=System.Drawing.Graphics.FromImage(bitmap)) {
-                        graphics.CopyFromScreen(ownerBounds.Left,ownerBounds.Top,0,0,new System.Drawing.Size(800,480)); bitmap.Save(Path.Combine(renders,dark?"automatic-dark.png":"automatic-light.png"));
+                        graphics.CopyFromScreen(ownerBounds.Left,ownerBounds.Top,0,0,new System.Drawing.Size(800,480)); bitmap.Save(Path.Combine(renders,$"automatic-{(x86?"x86":"x64")}-{(dark?"dark":"light")}.png"));
                     }
                     System.Drawing.Color Pixel() { using var b=new System.Drawing.Bitmap(1,1);using var g=System.Drawing.Graphics.FromImage(b);g.CopyFromScreen(header.Left+150,header.Top+15,0,0,new System.Drawing.Size(1,1));return b.GetPixel(0,0); }
+                    System.Drawing.Color Edge(int x,int y) { using var b=new System.Drawing.Bitmap(1,1);using var g=System.Drawing.Graphics.FromImage(b);g.CopyFromScreen(x,y,0,0,new System.Drawing.Size(1,1));return b.GetPixel(0,0); }
+                    var edges=new[]{(X:ownerBounds.Left+3,Y:ownerBounds.Top+200),(X:ownerBounds.Right-4,Y:ownerBounds.Top+200),(X:ownerBounds.Left+300,Y:ownerBounds.Bottom-4)};
+                    var edgeBefore=edges.Select(p=>Edge(p.X,p.Y)).ToArray();
                     var before=Pixel(); scene.Background=new SolidColorBrush(Color.FromRgb(205,95,20)); await Task.Delay(600); var after=Pixel();
                     Require(Math.Abs(before.R-after.R)+Math.Abs(before.G-after.G)+Math.Abs(before.B-after.B)>30,$"Native caption did not transmit a live backdrop change: {before} -> {after}.");
+                    // Narrow border bands mix with the neighbouring opaque client
+                    // through Windows' blur kernel; require actual change, not title-level intensity.
+                    for(int i=0;i<edges.Length;i++) { var a=edgeBefore[i];var b=Edge(edges[i].X,edges[i].Y);Require(Math.Abs(a.R-b.R)+Math.Abs(a.G-b.G)+Math.Abs(a.B-b.B)>5,$"Frame edge {i} did not transmit its live backdrop: {a} -> {b}"); }
                     var cover=new Window { WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,Topmost=true,Left=header.Left,Top=header.Top,Width=800,Height=80,Background=Brushes.Lime };
                     cover.Show(); await Task.Delay(900); var covered=Pixel(); Require(covered.G>220 && covered.R<40,"An inactive title bar floated over an unrelated foreground window."); cover.Close(); await Task.Delay(300);
                     // Exercise the actual native caption host, not the owner's legacy NC handler.
                     static async Task ClickCaption(nint owner,int index) {
                         var host=NativePrototypeMethods.GetProp(owner,"VeliShell.ClassicFrame.Caption"); NativePrototypeMethods.GetClientRect(host,out var r);
-                        nint point=(nint)(((r.Bottom/2)<<16)|(24+22*index)); NativePrototypeMethods.PostMessage(host,0x201,1,point); NativePrototypeMethods.PostMessage(host,0x202,0,point); await Task.Delay(300);
+                        int titleHeight=(int)NativePrototypeMethods.GetProp(owner,"VeliShell.ClassicFrame.CaptionHeight");
+                        nint point=(nint)(((titleHeight/2)<<16)|(24+22*index)); NativePrototypeMethods.PostMessage(host,0x201,1,point); NativePrototypeMethods.PostMessage(host,0x202,0,point); await Task.Delay(300);
                     }
-                    await ClickCaption(one,1); await Until(()=>NativeMethods.IsIconic(one),"Glass host minimize button"); NativeMethods.ShowWindowAsync(one,9); await Task.Delay(400);
-                    await ClickCaption(one,2); await Until(()=>NativeMethods.IsZoomed(one),"Glass host maximize button"); await ClickCaption(one,2); await Until(()=>!NativeMethods.IsZoomed(one),"Glass host restore button");
+                    for(int repeat=0;repeat<3;repeat++) {
+                        await ClickCaption(one,1); await Until(()=>NativeMethods.IsIconic(one),"Glass host minimize button"); NativeMethods.ShowWindowAsync(one,9);
+                        await Until(()=>!NativeMethods.IsIconic(one)&&Glass(one),"Glass frame after unminimize"); await Task.Delay(400);
+                        await ClickCaption(one,2); await Until(()=>NativeMethods.IsZoomed(one)&&Glass(one),"Glass host maximize button");
+                        await ClickCaption(one,2); await Until(()=>!NativeMethods.IsZoomed(one)&&Glass(one),"Glass host restore button");
+                    }
                     var recovery=FindAutomaticGuardian(manager.Id); Require(recovery!=0,"Independent automatic recovery helper missing.");
                     NativeMethods.GetWindowThreadProcessId(recovery,out var oldGuardPid);
                     using var oldGuard=Process.GetProcessById((int)oldGuardPid);
@@ -85,7 +100,7 @@ internal static partial class Program
                     // Explicit activation must wait for that complete rollback, not a fixed delay.
                     await oldGuard.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15)); await Task.Delay(1500);
                     Require(!Glass(one)&&!Glass(two)&&!Glass(three),"Emergency recovery automatically reapplied styling.");
-                    NativeMethods.SetWindowPos(one,(nint)(-2),120,160,800,480,0x10);
+                    NativeMethods.SetWindowPos(one,(nint)(-1),120,160,800,480,0x10);
                     await EnableAutomaticUi(ui); await Until(()=>Glass(one)&&Glass(two)&&Glass(three),"Explicit reactivation after emergency");
                     recovery=FindAutomaticGuardian(manager.Id); NativeMethods.GetWindowThreadProcessId(recovery,out var guardPid);
                     using(var guard=Process.GetProcessById((int)guardPid)) { Require(guard.MainModule?.FileName==manager.MainModule?.FileName,"Wrong guardian identity"); guard.Kill(); await guard.WaitForExitAsync(); }
@@ -94,11 +109,15 @@ internal static partial class Program
                     NativePrototypeMethods.PostMessage(ui,0x10,0,0); await manager.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); manager.Dispose(); manager=null;
                     foreach(var process in new[]{first,second,excluded,late}) { NativePrototypeMethods.PostMessage(process.MainWindowHandle,0x10,0,0); await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); }
                     fixtures.ForEach(p=>p.Dispose());fixtures.Clear(); scene.Background=new LinearGradientBrush(Color.FromRgb(15,95,190),Color.FromRgb(122,45,165),0);
-                    Console.WriteLine("PASS automatic "+(dark?"dark":"light")+": one consent, existing/new apps, exclusion, flush real live glass, native host buttons, multi-window hung recovery, helper-crash rollback");
+                    Console.WriteLine("PASS automatic "+(x86?"x86 ":"x64 ")+(dark?"dark":"light")+": one consent, existing/new apps, exclusion, flush real live glass, native host buttons, multi-window hung recovery, helper-crash rollback");
                 }
                 code=0;
             }
-            catch(Exception error) { Console.WriteLine("FAIL automatic native frames: "+error); }
+            catch(Exception error) {
+                Console.WriteLine("FAIL automatic native frames: "+error);
+                foreach(var status in Directory.EnumerateFiles(NativeFramesController.Folder,"*.status").OrderByDescending(File.GetLastWriteTimeUtc).Take(1))Console.WriteLine(File.ReadAllText(status));
+                foreach(var fixture in fixtures) { fixture.Refresh(); var hwnd=fixture.MainWindowHandle; Console.WriteLine($"Fixture {fixture.Id}: exited={fixture.HasExited}, hwnd={hwnd}, active={NativePrototypeMethods.GetProp(hwnd,NativePrototypeMethods.ClassicActive)}, caption={NativePrototypeMethods.GetProp(hwnd,"VeliShell.ClassicFrame.Caption")}, max={NativeMethods.IsZoomed(hwnd)}"); }
+            }
             finally {
                 if(manager is not null) { if(!manager.HasExited)manager.Kill();manager.Dispose(); }
                 foreach(var process in fixtures) { if(!process.HasExited)process.Kill();process.Dispose(); }
