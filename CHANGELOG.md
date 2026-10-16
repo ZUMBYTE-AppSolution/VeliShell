@@ -6,6 +6,28 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1-test.3] - 2026-10-16
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Helle Seitenkante: Bei aktivem Glasrahmen wird der Windows-Standardrahmen nicht
+  zusätzlich nachgezeichnet. Aktivierungswechsel bleiben erhalten; minimierte Fenster
+  und die ursprüngliche App-Geometrie werden nicht umdefiniert.
+- Echte, einstellbare Gauß-Weichzeichnung im Windows-Composition-Effektgraphen über
+  dem Live-Host-Hintergrund. Matt/Glas steuert die Streuung, Transparenz die Tönung
+  der gesamten Fläche; der Rand ist nur noch eine dezente Kontur.
+- Weniger deckende Tönung für mehr Hintergrundfarbe. Die Titel bleiben mit einem
+  feinen Kontrastsaum unmittelbar an den Buchstaben lesbar, ohne dunklen Innenbalken.
+- Größen-/DPI-/Maximierungszustand wird beim Aktualisieren der Rundung berücksichtigt.
+- Hintergrundtests für x86/x64: echter Composition-Effekt, Direct2D-Pixelberechnung
+  und ein eigener, niemals angezeigter Kompositions-Host; keine Eingriffe in Arbeits-Apps.
+- Rollback, unabhängiger Wächter und Notfall-Wiederherstellung bleiben unverändert.
+  Fremde, nicht zuverlässig auslesbare DWM-Randfarben werden nicht überschrieben.
+
+Die VM-Aufnahme von test.2 bestätigt sichtbare linke Buttons und erhaltene Tabzeilen
+bei Explorer/Editor, aber weder diesen Kanten-/Glasfix noch Paint oder einen vollständigen
+Rücksetztest. Die visuelle Abnahme dieses neuen Pakets an echten VM-Apps steht aus.
+
 ## [0.14.1-test.2] - 2026-10-16
 
 Lokaler Prüfstand, noch nicht veröffentlicht oder an echten Apps abgenommen.

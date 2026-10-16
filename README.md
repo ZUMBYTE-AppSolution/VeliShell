@@ -103,6 +103,12 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 > Die automatische Glas-Fenstergestaltung ist ab 0.14.0 auch im regulären GitHub-Paket
 > enthalten, bleibt aber ausdrücklich optional und standardmäßig ausgeschaltet.
 > [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
+
+> **Lokaler Arbeitsstand 0.14.1-test.3:** Die optionalen Titelleisten erhalten einen
+> nativen Gauß-Glaseffekt mit mehr Farbdurchlass; zusätzliches Windows-Zeichnen der
+> hellen Seitenkante wird unterdrückt. Rollback und unabhängige Notfall-Rücksetzung
+> bleiben erhalten. Die Änderungen werden im Hintergrund geprüft; die visuelle
+> Abnahme des neuen Stands an echten VM-Apps steht noch aus. Kein Stable-/Store-Update.
 > Testpakete sind ausdrücklich als Vorabversion markiert und ersetzen weder das
 > stabile GitHub-Release noch die Microsoft-Store-Ausgabe.
 

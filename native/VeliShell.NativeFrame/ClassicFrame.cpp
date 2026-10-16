@@ -381,6 +381,18 @@ LRESULT CALLBACK Procedure(HWND w, UINT message, WPARAM wp, LPARAM lp, UINT_PTR,
         InterlockedExchange(&f->data->state,Gone); Release(f); return DefSubclassProc(w,message,wp,lp);
     }
     if(f->restoring || f->retired)return DefSubclassProc(w,message,wp,lp);
+    if(f->glass && !IsIconic(w) && message==WM_NCPAINT) {
+        // We own the complete NC ring. Forwarding this to Windows draws an
+        // additional classic/light border over the Composition edge.
+        if(!f->syncQueued) { f->syncQueued=true;PostMessageW(w,Bootstrap(),0,0); }
+        return 0;
+    }
+    if(f->glass && !IsIconic(w) && message==WM_NCACTIVATE) {
+        // Preserve the app's activation notification without a second NC paint.
+        LRESULT result=DefSubclassProc(w,message,wp,-1);
+        if(GetPropW(w,Active)==f && !f->syncQueued) { f->syncQueued=true;PostMessageW(w,Bootstrap(),0,0); }
+        return result;
+    }
     if(message==WM_NCCALCSIZE && f->extraHeader) {
         const int base=wp?reinterpret_cast<NCCALCSIZE_PARAMS*>(lp)->rgrc[0].top:reinterpret_cast<RECT*>(lp)->top;
         LRESULT result=DefSubclassProc(w,message,wp,lp);

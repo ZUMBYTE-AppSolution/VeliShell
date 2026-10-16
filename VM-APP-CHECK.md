@@ -1,8 +1,11 @@
-# VeliShell 0.14.1-test.2: Prüfung echter Apps in der VM
+# VeliShell 0.14.1-test.3: Prüfung echter Apps in der VM
 
 **Lokaler, noch nicht freigegebener Prüfstand.** Die neuen Rahmenadapter für
 Explorer, Paint und Editor sind noch nicht an echten Apps abgenommen.
 Build und unsichtbare Layout-/Logiktests allein bestätigen ihre Funktion nicht.
+Dieser Stand adressiert die helle Seitenkante und die zu deckende Titelleiste aus
+der test.2-Aufnahme. Er ist nicht automatisch installiert und noch nicht visuell
+an deinen VM-Fenstern bestätigt.
 
 ## So bleibt dein Haupt-PC frei
 
@@ -25,6 +28,11 @@ Build und unsichtbare Layout-/Logiktests allein bestätigen ihre Funktion nicht.
 ## In jedem der drei echten Programme prüfen
 
 - Glas und Rundungen liegen bündig innerhalb des Fensters, linke Buttons sichtbar.
+- Insbesondere beim Editor: keine zusätzliche weiße Seitenlinie, auch nicht nach
+  Aktivieren/Deaktivieren des Fensters oder Maximieren/Wiederherstellen.
+- Die Titelleiste vor unterschiedlich farbigen Hintergründen bewegen: Farbe soll
+  durchscheinen, Details weich bleiben. Matt/Glas und Transparenz verändern die
+  Fläche, nicht nur eine Kontur. Windows-Transparenzeffekte müssen aktiv sein.
 - Tabs, Suche und Menüs sind vollständig vorhanden und benutzbar.
 - Minimieren, Maximieren und Wiederherstellen funktionieren. Schließen nur mit
   einer leeren Testinstanz prüfen; keine ungespeicherten Daten riskieren.

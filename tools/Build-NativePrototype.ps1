@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$OutputPath, [string]$FixturePath, [ValidateSet('x64','x86')][string]$Architecture = 'x64', [string]$BridgePath)
+param([Parameter(Mandatory)][string]$OutputPath, [string]$FixturePath, [ValidateSet('x64','x86')][string]$Architecture = 'x64', [string]$BridgePath, [string]$MaterialCheckPath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -21,7 +21,7 @@ New-Item -ItemType Directory -Path $taskOutputDirectory -Force | Out-Null
 $taskObjectDirectory = Join-Path $taskOutputDirectory "native-build-$Architecture"
 New-Item -ItemType Directory -Path $taskObjectDirectory -Force | Out-Null
 $taskSource = Join-Path $taskRoot 'native\VeliShell.NativeFrame\NativeFrame.cpp'
-& (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /LD /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro $taskSource (Join-Path $taskRoot 'native\VeliShell.NativeFrame\ClassicFrame.cpp') "/Fo$taskObjectDirectory\" /link "/OUT:$OutputPath" "/IMPLIB:$taskObjectDirectory\NativeFrame.lib" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib gdi32.lib uxtheme.lib advapi32.lib comctl32.lib dwmapi.lib d3d11.lib d2d1.lib dwrite.lib CoreMessaging.lib windowsapp.lib
+& (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /LD /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro $taskSource (Join-Path $taskRoot 'native\VeliShell.NativeFrame\ClassicFrame.cpp') "/Fo$taskObjectDirectory\" /link "/OUT:$OutputPath" "/IMPLIB:$taskObjectDirectory\NativeFrame.lib" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib gdi32.lib uxtheme.lib advapi32.lib comctl32.lib dwmapi.lib d3d11.lib d2d1.lib dwrite.lib dxguid.lib CoreMessaging.lib windowsapp.lib
 if ($LASTEXITCODE -ne 0) { throw 'Native prototype build failed.' }
 if ($FixturePath) {
     $FixturePath = [IO.Path]::GetFullPath($FixturePath)
@@ -33,4 +33,10 @@ if ($BridgePath) {
     $BridgePath = [IO.Path]::GetFullPath($BridgePath)
     & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE (Join-Path $taskRoot 'native\VeliShell.NativeFrame\FrameBridge.cpp') "/Fo$taskObjectDirectory\FrameBridge.obj" /link "/OUT:$BridgePath" /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT /CETCOMPAT "$taskObjectDirectory\NativeFrame.lib" user32.lib dwmapi.lib shell32.lib advapi32.lib
     if ($LASTEXITCODE -ne 0) { throw 'Native compatibility bridge build failed.' }
+}
+if ($MaterialCheckPath) {
+    $MaterialCheckPath = [IO.Path]::GetFullPath($MaterialCheckPath)
+    New-Item -ItemType Directory -Path (Split-Path -Parent $MaterialCheckPath) -Force | Out-Null
+    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE (Join-Path $taskRoot 'tests\VeliShell.InteractionQa\FrameMaterialChecks.cpp') "/Fo$taskObjectDirectory\FrameMaterialChecks.obj" /link "/OUT:$MaterialCheckPath" /SUBSYSTEM:CONSOLE /DYNAMICBASE /NXCOMPAT /CETCOMPAT "$taskObjectDirectory\NativeFrame.lib" user32.lib gdi32.lib dwmapi.lib d3d11.lib d2d1.lib dxguid.lib CoreMessaging.lib windowsapp.lib
+    if ($LASTEXITCODE -ne 0) { throw 'Background-only native material check build failed.' }
 }

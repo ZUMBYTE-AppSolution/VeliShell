@@ -4,16 +4,17 @@ Ab VeliShell 0.14.0 enthält das normale GitHub-Paket einen freiwilligen nativen
 Adapter für kompatible klassische 64-Bit-Apps. Das Modul ist **standardmäßig aus**.
 Es ersetzt keine Windows-Systemdateien, keine Shell und nicht das Innere fremder Apps.
 
-Der Arbeitsstand **0.14.1-test.2 auf `test`** ergänzt klassische 32-Bit-Apps, WPF
+Der Arbeitsstand **0.14.1-test.3 auf `test`** ergänzt klassische 32-Bit-Apps, WPF
 mit Standardrahmen und einen gemeinsamen Glasrahmen rund um das Fenster. Die folgende
 Anleitung beschreibt diesen Teststand. Die veröffentlichte 0.14.0 gestaltet weiterhin
 nur klassische x64-Titelbereiche; ein lokaler Teststand ist noch kein Kanal-Update.
 
-**Prüfstatus dieses lokalen Stands:** Build, Kerntests und unsichtbare
-DE-/EN-Hell-/Dunkel-Layouttests sind geprüft. Die neuen Explorer-, Paint- und
-Editor-Rahmenadapter sind noch nicht an echten Apps abgenommen. Eine bestandene
-Erkennung oder ein gerendertes VeliShell-Einstellungsfenster ist kein Nachweis
-für deren tatsächliche Titelleisten, Tab-Bedienung oder Wiederherstellung.
+**Prüfstatus dieses lokalen Stands:** Hintergrundprüfungen umfassen Build, Kerntests,
+DE-/EN-Hell-/Dunkel-Layout, den nativen Composition-Effekt und synthetische
+Direct2D-Glaspixel. Dabei werden keine Arbeitsfenster gestaltet. Die vorliegende
+VM-Aufnahme von test.2 zeigt linke Buttons und erhaltene Tabzeilen bei Explorer
+und Editor. Sie bestätigt noch nicht den neuen Kanten-/Glasfix, Paint, die vollständige
+Bedienung oder Wiederherstellung. Diese Echte-App-Abnahme bleibt offen.
 
 ## Aktivieren
 
@@ -67,10 +68,18 @@ damit viele gleichzeitig geöffnete Fenster nicht auf einmal eingebunden werden.
 
 ## Glas und Bedienung
 
-Windows Composition liefert den live weichgezeichneten Hintergrund; Direct2D und
-DirectWrite zeichnen Titel und linke Fensterbuttons. Farben kommen aus VeliShells
-Hell-/Dunkel-Theme, Matt-/Glas- und Transparenzwerte werden übernommen. Eine begrenzte
-Deckkraft schützt die Lesbarkeit des Titels.
+Windows Composition liefert den Live-Host-Hintergrund durch einen Gauß-Effekt;
+Direct2D und DirectWrite zeichnen Titel und linke Fensterbuttons. Matt/Glas verändert
+die Streuung (bei 100 % Skalierung 28 bis 12 Pixel), Transparenz die Tönung der
+gesamten Fläche. Auch bei Glas bleibt der Hintergrund weich, statt nur einen hellen
+Rand einzublenden. Farben folgen dem Hell-/Dunkel-Theme. Ein schmaler Kontrastsaum
+an den Buchstaben schützt die Titel-Lesbarkeit ohne deckenden Innenbalken.
+Windows-Transparenz-, Kontrast- und Energieeinstellungen können den Effekt begrenzen.
+
+Ein aktiver Glasrahmen unterdrückt zusätzliche Standard-NC-Zeichenaufrufe von
+Windows, die sonst eine helle Seitenkante verursachen können. Es wird keine
+nicht sicher wiederherstellbare Randfarbe in fremden Apps gesetzt. Der eigene
+Glas-Host besitzt keine zusätzliche Windows-Kontur und wird beim Rücksetzen entfernt.
 
 Der Glasrahmen umfasst Titel, Seiten, Unterkante und alle vier Rundungen innerhalb
 der ursprünglichen Fenstergrenzen. Sein eigener Kompositions-Host gehört zur Ziel-App;
