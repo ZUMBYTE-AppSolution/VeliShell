@@ -12,6 +12,7 @@
       Compressed="yes">
 
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
     <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von VeliShell ist bereits installiert." />
 
     <Property Id="ARPCONTACT" Value="Zumbyte.de Support" />
@@ -85,6 +86,7 @@
               WorkingDirectory="INSTALLFOLDER"
               Advertise="no" />
           <RemoveFolder Id="RemoveVeliShellProgramMenuFolder" On="uninstall" />
+          <Shortcut Id="NativeWindowsRecovery" Name="VeliShell Notfall-Wiederherstellung" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--restore-native-prototype" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
           <RegistryValue
               Root="HKCU"
               Key="Software\Zumbyte\VeliShell"

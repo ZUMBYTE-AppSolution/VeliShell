@@ -12,8 +12,8 @@
 #include <windows.ui.composition.interop.h>
 #include <cwchar>
 
-// Cooperative prototype only: the owning test application loads this DLL.
-// No injection, global hooks, foreign subclassing or system-file replacement.
+// These exports serve only the cooperative own-window demo. ClassicFrame.cpp
+// contains the separate, explicitly approved single-thread foreign-window adapter.
 namespace {
 constexpr UINT RestoreMessage = WM_APP + 0x531;
 constexpr UINT_PTR SubclassId = 0x56454C49;
@@ -134,15 +134,17 @@ extern "C" __declspec(dllexport) HRESULT __cdecl VeliFramePaintCaption(IUnknown*
     ComPtr<ID2D1SolidColorBrush> brush;
     hr = context->CreateSolidColorBrush(D2D1::ColorF(0, 0.0f), &brush);
     if (SUCCEEDED(hr)) {
+        const bool cooperative = *restore != L'\0';
+        const float centerY = cooperative ? 19 * scale : height / 2.0f;
         brush->SetColor(D2D1::ColorF(plate & 0xFFFFFF, static_cast<float>(plate >> 24) / 255.0f));
         context->FillRectangle(D2D1::RectF(0, 0, static_cast<float>(width), static_cast<float>(height)), brush.Get());
         constexpr UINT32 colors[] = { 0xFF5F57, 0xFEBC2E, 0x28C840 };
         for (int index = 0; index < 3; ++index) {
             brush->SetColor(D2D1::ColorF(colors[index]));
-            context->FillEllipse(D2D1::Ellipse(D2D1::Point2F((24.0f + 22.0f * index) * scale, 19 * scale), 6 * scale, 6 * scale), brush.Get());
+            context->FillEllipse(D2D1::Ellipse(D2D1::Point2F((24.0f + 22.0f * index) * scale, centerY), 6 * scale, 6 * scale), brush.Get());
             if (index == hover) {
                 brush->SetColor(D2D1::ColorF(index == 0 ? 0x71231E : index == 1 ? 0x805400 : 0x0E6220));
-                const float x = (24.0f + 22.0f * index) * scale, y = 19 * scale, r = 2.5f * scale;
+                const float x = (24.0f + 22.0f * index) * scale, y = centerY, r = 2.5f * scale;
                 if (index == 0) {
                     context->DrawLine(D2D1::Point2F(x-r,y-r), D2D1::Point2F(x+r,y+r), brush.Get(), scale);
                     context->DrawLine(D2D1::Point2F(x-r,y+r), D2D1::Point2F(x+r,y-r), brush.Get(), scale);
@@ -163,11 +165,13 @@ extern "C" __declspec(dllexport) HRESULT __cdecl VeliFramePaintCaption(IUnknown*
             if (SUCCEEDED(hr)) {
                 format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER); format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                 brush->SetColor(D2D1::ColorF(dark ? 0xF0F4FC : 0x1D2942));
-                context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), format.Get(), D2D1::RectF(100 * scale, 0, width - 155 * scale, static_cast<float>(height)), brush.Get());
+                context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), format.Get(), D2D1::RectF(100 * scale, 0, width - (cooperative ? 155 : 100) * scale, static_cast<float>(height)), brush.Get());
+                if (cooperative) {
                 brush->SetColor(D2D1::ColorF(dark ? 0xECF2FF : 0xFFFFFF, dark ? .10f : .38f));
                 context->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(width - 140 * scale, 6 * scale, width - 12 * scale, 32 * scale), 13 * scale, 13 * scale), brush.Get());
                 brush->SetColor(D2D1::ColorF(dark ? 0xF0F4FC : 0x1D2942));
                 context->DrawTextW(restore, static_cast<UINT32>(wcslen(restore)), format.Get(), D2D1::RectF(width - 140 * scale, 6 * scale, width - 12 * scale, 32 * scale), brush.Get());
+                }
             }
         }
     }

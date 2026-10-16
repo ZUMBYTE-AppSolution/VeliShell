@@ -29,6 +29,8 @@
 
 VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, das sich vertraut anfühlt und trotzdem Windows respektiert.
 
+- **Optionale Glas-Fensterrahmen:** Unter **Einstellungen → Windows & Start → Fenstergestaltung** einmal aktivieren; vorhandene und neu geöffnete kompatible klassische 64-Bit-Apps bekommen bündige Live-Glas-Titelleisten und Fensterbuttons links. Eine Ausnahmeliste, gemeinsames Rollback und ein unabhängiger Notfall-Helfer sind integriert. Das Modul ist experimentell und zunächst aus, benötigt Windows 11 ab Build 22621 und ersetzt weder Systemfenster, erhöhte Apps noch eigene Titelleisten oder App-Inhalte. Spiele und kritische Programme vorher ausschließen. [Aktivierung, VM-Test und Wiederherstellung](NATIVE-PROTOTYPE.md).
+
 - **Einheitliche App-Icons:** Jedes Symbol belegt exakt dieselbe eingestellte Fläche. Transparente Ränder oder ungewöhnliche Quelldateien verändern die Größe im Dock nicht.
 - **Gemeinsame Rundung für Apps:** App-Icon, geladene App-Symbole, Hover-Zustand und Drag-Ghost verwenden dieselbe kontinuierliche Superellipse. Ordner und Papierkorb behalten dagegen ihre Originalform.
 - **Drag & Drop wie erwartet:** Programme, Dateien und Ordner lassen sich vom Desktop ins Dock ziehen und dort verschieben. Ziehst du einen Eintrag aus dem Dock heraus, wird er nur aus dem Dock entfernt – VeliShell erstellt dabei keine Verknüpfung. Der Ghost sitzt direkt am künftigen Einfügeplatz.
@@ -97,7 +99,9 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 
 ## 🔄 Updates ohne Überraschungen
 
-> **Testkanal:** Der Branch `test` enthält den optionalen nativen Fensterprototyp.
+> **Testkanal:** Der Branch `test` dient zum Prüfen neuer Funktionen vor deren Übernahme.
+> Die automatische Glas-Fenstergestaltung ist ab 0.14.0 auch im regulären GitHub-Paket
+> enthalten, bleibt aber ausdrücklich optional und standardmäßig ausgeschaltet.
 > [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
 > Testpakete sind ausdrücklich als Vorabversion markiert und ersetzen weder das
 > stabile GitHub-Release noch die Microsoft-Store-Ausgabe.
@@ -160,7 +164,9 @@ Folgende Punkte stehen als Nächstes auf dem Tisch – ohne festes Veröffentlic
 
 ## 🛠️ Aus dem Quellcode bauen
 
-Benötigt werden Windows x64 und das .NET 10 SDK.
+Benötigt werden Windows x64, das .NET 10 SDK und die kostenlosen Visual C++ Build Tools
+(C++ x64, Windows-11-SDK inklusive C++/WinRT-Headern). Die fertigen Downloads enthalten
+die Laufzeit bereits; zum Benutzen ist keine Entwicklungsumgebung nötig.
 
 ```powershell
 dotnet build VeliShell.slnx -c Release

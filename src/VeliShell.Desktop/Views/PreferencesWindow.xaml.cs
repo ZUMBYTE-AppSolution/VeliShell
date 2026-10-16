@@ -216,6 +216,17 @@ public partial class PreferencesWindow : VeliShellWindow
     {
         MessageBox.Show(this, L(NativePrototypeSession.SignalRecovery() > 0 ? "Prototype.RecoverySent" : "Prototype.NoSession"), L("Prototype.Title"));
     }
+    private void ClassicFrames_Click(object sender, RoutedEventArgs e)
+    {
+        try { ClassicFrameSession.Launch(_app); }
+        catch (Exception error) { App.Log("Could not open classic app opt-in", error); MessageBox.Show(this, L("Classic.Failed"), L("Classic.Title")); }
+    }
+    private void NativeFrames_Click(object sender, RoutedEventArgs e)
+    {
+        if (_app.NativeFrames is not { } controller) return;
+        var window = new NativeFramesWindow(_app.Preferences, controller, _app.Themes, _app.UpdatePreferences) { Owner = this };
+        window.ShowDialog();
+    }
     private async void UpdateChannelChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || UpdateChannelChoice.SelectedItem is not ComboBoxItem { Tag: string value } ||

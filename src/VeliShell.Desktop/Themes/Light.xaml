@@ -69,6 +69,7 @@
     <GradientStop Color="#89DEE3EB" Offset="1" />
   </LinearGradientBrush>
   <Color x:Key="ShellAcrylicTint">#3CEDF2FA</Color>
+  <Color x:Key="NativeCaptionTint">#F0EDF2FA</Color>
   <LinearGradientBrush x:Key="DockAcrylicSurfaceGradient" StartPoint="0,0" EndPoint="0,1">
     <GradientStop Color="#5AFFFFFF" Offset="0" />
     <GradientStop Color="#48F5F6FA" Offset="0.46" />

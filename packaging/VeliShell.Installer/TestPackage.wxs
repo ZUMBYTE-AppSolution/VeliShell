@@ -3,6 +3,7 @@
  <Package Name="VeliShell Test" Manufacturer="Zumbyte.de" Version="$(ProductVersion)" ProductCode="$(ProductCode)"
           Language="1031" Scope="perMachine" UpgradeCode="A1FD7AC7-C2C1-47C1-A3D8-7C118DB2C5EC" Compressed="yes">
   <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+  <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
   <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Eine neuere Testversion von VeliShell ist bereits installiert." />
   <Property Id="ARPCONTACT" Value="Zumbyte.de Support" />
   <Property Id="ARPHELPLINK" Value="https://github.com/ZUMBYTE-AppSolution/VeliShell/issues" />
@@ -19,6 +20,7 @@
     <Shortcut Id="TestAppShortcut" Name="VeliShell Test" Target="[INSTALLFOLDER]VeliShell.exe" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
     <Shortcut Id="TestFrameShortcut" Name="Native Fenstergestaltung testen" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--native-frame-demo" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
     <Shortcut Id="TestRecoveryShortcut" Name="Notfall-Wiederherstellung" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--restore-native-prototype" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+    <Shortcut Id="TestClassicShortcut" Name="Klassische Apps freigeben" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--classic-frames" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
     <RemoveFolder Id="RemoveTestProgramMenu" On="uninstall" />
     <RegistryValue Root="HKCU" Key="Software\Zumbyte\VeliShell-Test" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
    </Component>

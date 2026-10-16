@@ -6,6 +6,28 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-16
+
+### Neu
+
+- Optionales Modul **Fenstergestaltung** unter Einstellungen → Windows & Start: einmal bewusst aktivieren, danach werden vorhandene und neu geöffnete kompatible klassische 64-Bit-Fenster automatisch erfasst. Standardmäßig bleibt das Modul aus.
+- Native, bündige Glas-Titelleisten mit linken Fensterbuttons. Windows Composition zeichnet den live weichgezeichneten Hintergrund; Direct2D/DirectWrite zeichnen Text und Buttons. Die Oberfläche bleibt innerhalb der ursprünglichen Fenstergrenzen. Menü und App-Inhalt behalten ihren Platz und ihr eigenes Design.
+- Matt-/Glas-, Transparenz- und Theme-Einstellungen werden übernommen. Eine Ausnahmeliste nach EXE-Name oder vollständigem Pfad nimmt einzelne Programme dauerhaft aus und setzt bereits gestaltete Fenster dieser Apps zurück.
+- Gemeinsames Rollback und unabhängiger Notfall-Helfer mit **Strg + Alt + Umschalt + F12**, WINDOW-RECOVERY.cmd und Startmenüeintrag. Ein lokaler Heartbeat setzt die Fenster auch nach einem Helferabsturz zurück. Nach Notfall oder unvorhergesehenem Ausfall ist eine ausdrückliche Reaktivierung nötig; eine hängende App muss für das Rücksetzen erst wieder reagieren.
+- Eigene, unverknüpfte klassische Beispiel-App zum Testen und getrennte Update-Kanäle Stable/Test. Die Testausgabe behält eine separate Installation und ein separates Profil.
+
+### Sicherheit und Grenzen
+
+- Das Zusatzmodul benötigt Windows 11 ab Build 22621 und x64. Systemfenster, erhöhte Apps, bekannte eigene Titelleisten und bekannte Spiel-Fensterklassen werden abgewiesen. Nicht jede Sonderanwendung ist erkennbar: Spiele und kritische Apps vor Aktivierung in die Ausnahmeliste eintragen. Kein universeller Windows-Skin und kein Ersatz des Inhalts fremder Programme.
+- Keine globalen Hooks, Änderungen an Windows-Dateien, Dienste oder Rechteerhöhung. Fremde Apps werden nicht automatisch beendet. Die DLL bleibt nach Rollback inaktiv bis zum App-Ende geladen; vor Updates müssen betroffene Apps deshalb selbst geschlossen werden. Der Installer nutzt kein automatisches Schließen fremder Apps über Restart Manager.
+- Ausschließlich GitHub-Veröffentlichung; keine Microsoft-Store-Einreichung für diese Version.
+
+Anleitung: [NATIVE-PROTOTYPE.md](NATIVE-PROTOTYPE.md).
+
+## [0.14.0-test.1] - 2026-10-16
+
+- Vollständige Testausgabe des optionalen automatischen Glasrahmen-Moduls aus 0.14.0, mit separatem Profil und eigener Test-MSI-Identität. Keine Store-Einreichung. Funktionen, Sicherheitsgrenzen und Notfall-Rückweg entsprechen den oben beschriebenen Änderungen.
+
 ## [0.13.12-test.1] - 2026-10-16
 
 ### Experimenteller Teststand – nicht für den Microsoft Store

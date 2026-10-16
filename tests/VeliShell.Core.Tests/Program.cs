@@ -22,6 +22,19 @@ try
     Test("Default appearance: system", () => Check(new Settings().Appearance == Appearance.System));
     Test("Default language follows system", () => Check(new Settings().Language == UiLanguage.System));
     Test("Startup is opt-in", () => Check(new Settings().Startup == StartupMode.Disabled));
+    Test("Native window styling is opt-in and requires explicit consent", () => {
+        Check(!new Settings().NativeFramesEnabled);
+        var s = new Settings { NativeFramesEnabled = true }; s.Normalize(); Check(!s.NativeFramesEnabled);
+        s.NativeFramesConsentVersion = 1; s.NativeFramesEnabled = true; s.Normalize(); Check(s.NativeFramesEnabled);
+    });
+    Test("Native styling exceptions are bounded exact EXE names or paths", () => {
+        var s = new Settings { NativeFrameExclusions = [" sample.exe ", "SAMPLE.EXE", "*.exe", "bad/name.exe", "not-an-app", @"C:\Apps\keep.exe"] }; s.Normalize();
+        Check(s.NativeFrameExclusions.SequenceEqual(new[]{"sample.exe", @"C:\Apps\keep.exe"}));
+    });
+    Test("Native styling consent and exclusions survive settings roundtrip", () => {
+        var store = new SettingsStore(Path.Combine(temp,"native-frames")); store.Save(new Settings { NativeFramesEnabled=true,NativeFramesConsentVersion=1,NativeFrameExclusions=["keep.exe"] });
+        var s=store.Load();Check(s.NativeFramesEnabled&&s.NativeFramesConsentVersion==1&&s.NativeFrameExclusions.Single()=="keep.exe");
+    });
     Test("Update checks default to notify", () => Check(new Settings().Updates == UpdateMode.Notify));
     Test("Stable is the persisted default update channel", () => Check(new Settings().UpdateSource == UpdateChannel.Stable));
     Test("Invalid update channel normalizes to stable", () =>

@@ -69,7 +69,9 @@ jobs:
             $applicationFiles = @(
               './out/portable/VeliShell.exe',
               './out/portable/VeliShell.dll',
-              './out/portable/VeliShell.Core.dll'
+              './out/portable/VeliShell.Core.dll',
+              './out/portable/VeliShell.NativeFrame.dll',
+              './out/portable/VeliShell.ClassicSample.exe'
             )
             ./tools/Sign-WindowsArtifacts.ps1 -Files $applicationFiles -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
             $invalidPortableSignatures = @(

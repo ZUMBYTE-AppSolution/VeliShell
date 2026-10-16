@@ -201,6 +201,12 @@ public partial class UpdateWindow : VeliShellWindow
     private void StartInstaller()
     {
         if (_package is null) return;
+        if (NativeFramesController.HasLoadedApps()) {
+            _app.UpdatePreferences(settings => settings.NativeFramesEnabled = false);
+            _app.NativeFrames?.Stop();
+            MessageBox.Show(this, L("NativeFrames.UpdateBlocked"), L("NativeFrames.Title"), MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         var acceptedUnsigned = _package.Verification.Authenticode == AuthenticodeStatus.Valid ||
                                UnsignedAcknowledgement.IsChecked == true;
         if (MessageBox.Show(this, LF("Update.InstallConfirm", _release.Version),

@@ -45,6 +45,7 @@ public partial class App : Application
     public SettingsStore Store { get; private set; } = null!;
     public Settings Preferences { get; private set; } = null!;
     public ThemeService Themes { get; private set; } = null!;
+    internal NativeFramesController? NativeFrames { get; private set; }
     public DockWindow Dock { get; private set; } = null!;
     internal TaskbarVisibilityService Taskbars { get; } = new();
     internal DesktopIconVisibilityService DesktopIcons { get; } = new();
@@ -126,6 +127,9 @@ public partial class App : Application
         if (Store.LoadWarning is not null) Log(Store.LoadWarning);
         Themes = new ThemeService();
         Themes.Apply(Preferences.Appearance, Preferences.GlassGloss, Preferences.GlassTransparency);
+        NativeFrames = new NativeFramesController();
+        Themes.Changed += () => NativeFrames?.Update(Preferences, Themes.IsDark);
+        if (Preferences.NativeFramesEnabled) _ = ResumeNativeFramesAsync();
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); SaveNow(); };
         Dock = new DockWindow(this);
@@ -243,11 +247,17 @@ public partial class App : Application
         if (LocalizationService.Current.Preference != Preferences.Language)
             LocalizationService.Current.Apply(Preferences.Language);
         Themes.Apply(Preferences.Appearance, Preferences.GlassGloss, Preferences.GlassTransparency);
+        NativeFrames?.Update(Preferences, Themes.IsDark);
         PreferencesChanged?.Invoke();
         SyncMenuBar();
         SyncDisplayWindows();
         _saveTimer?.Stop();
         _saveTimer?.Start();
+    }
+    private async Task ResumeNativeFramesAsync()
+    {
+        try { await NativeFrames!.EnableAsync(Preferences, Themes.IsDark, explicitConsent: false); }
+        catch (Exception error) { Log("Native windows did not resume", error); Preferences.NativeFramesEnabled = false; Store.Save(Preferences); }
     }
 
     private void StabilizeLegacyExecutablePins()
@@ -984,6 +994,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         if (_prototypeUtility) { _updates.Dispose(); ProgramIndex.Dispose(); base.OnExit(e); return; }
+        NativeFrames?.Dispose();
         if (BuildIdentity.IsTest) NativePrototypeSession.RequestClose();
         ProgramIndex.Dispose();
         _saveTimer?.Stop();

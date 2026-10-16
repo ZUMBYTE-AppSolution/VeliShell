@@ -22,10 +22,12 @@
   <ItemGroup><ProjectReference Include="../VeliShell.Core/VeliShell.Core.csproj" /></ItemGroup>
   <ItemGroup><InternalsVisibleTo Include="VeliShell.InteractionQa" /></ItemGroup>
   <ItemGroup>
-    <Content Include="obj/native/VeliShell.NativeFrame.dll" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="VeliShell.NativeFrame.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../../WINDOW-RECOVERY.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="WINDOW-RECOVERY.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="obj/native/VeliShell.NativeFrame.dll" Link="VeliShell.NativeFrame.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="obj/native/VeliShell.ClassicSample.exe" Link="VeliShell.ClassicSample.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../WINDOW-RECOVERY.cmd" Link="WINDOW-RECOVERY.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../NATIVE-TEST.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-TEST.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../../NATIVE-PROTOTYPE.md" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-PROTOTYPE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../CLASSIC-APPS.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="CLASSIC-APPS.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../NATIVE-PROTOTYPE.md" Link="NATIVE-PROTOTYPE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\VeliShellApp.png" />
     <Resource Include="Assets\VeliShellMark.png" />
     <Resource Include="Assets\SystemIcons\RecycleBinEmpty.png" />
@@ -37,7 +39,7 @@
     <Content Include="../../THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../THIRD-PARTY-LICENSES/**/*" Link="THIRD-PARTY-LICENSES/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="BuildNativeFramePrototype" BeforeTargets="BeforeBuild" Condition="'$(VeliShellBuildChannel)' == 'Test'" Inputs="../../native/VeliShell.NativeFrame/NativeFrame.cpp;../../tools/Build-NativePrototype.ps1" Outputs="$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll">
-    <Exec Command="pwsh.exe -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../tools/Build-NativePrototype.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll&quot;" />
+  <Target Name="BuildNativeFramePrototype" BeforeTargets="BeforeBuild" Inputs="../../native/VeliShell.NativeFrame/NativeFrame.cpp;../../native/VeliShell.NativeFrame/ClassicFrame.cpp;../../native/VeliShell.NativeFrame/ClassicGlass.h;../../tests/VeliShell.InteractionQa/ClassicFixture.cpp;../../tools/Build-NativePrototype.ps1" Outputs="$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.exe">
+    <Exec Command="pwsh.exe -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../tools/Build-NativePrototype.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll&quot; -FixturePath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.ClassicSample.exe&quot;" />
   </Target>
 </Project>

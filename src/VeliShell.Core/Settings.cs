@@ -40,7 +40,7 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
     public const int CurrentOnlineIconConsentVersion = 5;
     public const double MinimumIconSize = 24;
     public const double DefaultIconSize = 52;
@@ -58,6 +58,9 @@ public sealed class Settings
     public double IconSize { get; set; } = DefaultIconSize;
     public double GlassGloss { get; set; } = 50;
     public double GlassTransparency { get; set; } = 50;
+    public bool NativeFramesEnabled { get; set; }
+    public int NativeFramesConsentVersion { get; set; }
+    public List<string> NativeFrameExclusions { get; set; } = [];
     public bool Magnification { get; set; } = true;
     public bool ReducedMotion { get; set; }
     public bool ShowRunningApps { get; set; } = true;
@@ -97,6 +100,11 @@ public sealed class Settings
     {
         // Only our own preferences are normalized. No Windows setting is changed.
         SchemaVersion = CurrentSchemaVersion;
+        if (NativeFramesConsentVersion != 1) { NativeFramesConsentVersion = 0; NativeFramesEnabled = false; }
+        NativeFrameExclusions = (NativeFrameExclusions ?? []).Where(value => !string.IsNullOrWhiteSpace(value) && value.Length <= 1024)
+            .Select(value => value.Trim()).Where(value => value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                (Path.IsPathFullyQualified(value) || value.IndexOfAny(['/', '\\', ':', '*', '?']) < 0))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(128).ToList();
         if (!Enum.IsDefined(Appearance)) Appearance = Appearance.System;
         if (!Enum.IsDefined(Language)) Language = UiLanguage.System;
         if (!Enum.IsDefined(Startup)) Startup = StartupMode.Disabled;

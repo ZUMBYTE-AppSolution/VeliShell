@@ -32,11 +32,22 @@ werden nicht umgangen. Test besitzt eine separate MSI-Identität und ein getrenn
 Einstellungsprofil. Es überschreibt weder die stabile Installation noch deren
 Autostart- oder Explorer-Kontextmenüregistrierung. Store-Pakete bleiben Store-verwaltet.
 
-Die native Prototyp-DLL wird nur in das eigene kooperierende Testfenster geladen.
-Sie prüft Prozess, UI-Thread und Opt-in-Marker vor der Rahmenänderung. Es gibt keine
-Prozessinjektion und keinen Austausch von Systemdateien. Ein unabhängiger Helfer
-empfängt das Notfallkürzel. Bei einem vollständig blockierten Testfenster bleibt
-die Wiederherstellung ausdrücklich ausstehend, bis es wieder reagiert. Siehe
+Das freiwillige Modul Fenstergestaltung darf erst nach ausdrücklicher Zustimmung
+geeignete klassische 64-Bit-Fenster automatisch erfassen. Eine Ausnahmeliste ist
+vorher und währenddessen verfügbar. Ein threadgebundener DLL-Hook dient nur zum
+Bootstrap pro Ziel-UI-Thread und wird danach entfernt. PID, Startzeit, EXE-Hash,
+HWND, Thread und temporärer Zustimmungsmarker werden geprüft; keine globalen Hooks.
+System-/erhöhte Apps und bekannte eigene Titelleisten werden abgewiesen. Es gibt
+keinen Austausch von Systemdateien und keine automatische Rechteerhöhung.
+Ein unabhängiger Helfer empfängt vor der Aktivierung das Notfallkürzel. Ein lokaler
+Heartbeat löst bei dessen Ausfall das Rücksetzen auf dem Ziel-UI-Thread aus. Bei
+einem vollständig blockierten Fenster bleibt die Wiederherstellung ausdrücklich
+ausstehend, bis es wieder reagiert. Die DLL wird nicht gewaltsam entladen; nach
+Rücksetzen bleibt sie inaktiv bis zum Zielprozess-Ende. Updates blockieren deshalb,
+solange journalisierte Zielprozesse noch leben; der Installer schließt keine Apps
+automatisch. Ein lokaler Notfall-Latch verhindert unbewusstes Wiederaktivieren nach
+einem Ausfall. Keine allgemeine Verträglichkeitszusage für Spiele oder Sonderrahmen;
+solche Programme müssen vor Aktivierung ausgeschlossen werden. Siehe
 [Test- und Wiederherstellungshinweise](NATIVE-PROTOTYPE.md).
 
 Sicherheitskorrekturen werden grundsätzlich für die neueste veröffentlichte stabile

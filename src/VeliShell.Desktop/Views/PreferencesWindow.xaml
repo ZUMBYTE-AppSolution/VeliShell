@@ -263,11 +263,17 @@
      <StackPanel x:Name="WindowsPage" Visibility="Collapsed">
       <TextBlock Text="{services:Loc Windows.Title}" FontSize="25" FontWeight="SemiBold" Margin="0,3,0,8" />
       <TextBlock Text="{services:Loc Windows.Description}" Style="{StaticResource SecondaryText}" Margin="0,0,0,20" />
-      <Border x:Name="NativePrototypeCard" Style="{StaticResource Card}" Margin="0,0,0,18" Visibility="Collapsed"><StackPanel>
+       <Border Style="{StaticResource Card}" Margin="0,0,0,18"><StackPanel>
+        <TextBlock Text="{services:Loc NativeFrames.Title}" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock Text="{services:Loc NativeFrames.Description}" Style="{StaticResource SecondaryText}" Margin="0,0,0,12" />
+        <Button Content="{services:Loc NativeFrames.Manage}" Click="NativeFrames_Click" HorizontalAlignment="Left" />
+       </StackPanel></Border>
+       <Border x:Name="NativePrototypeCard" Style="{StaticResource Card}" Margin="0,0,0,18" Visibility="Collapsed"><StackPanel>
        <TextBlock Text="{services:Loc Prototype.Title}" FontWeight="SemiBold" Margin="0,0,0,8" />
        <TextBlock Text="{services:Loc Prototype.Description}" Style="{StaticResource SecondaryText}" Margin="0,0,0,12" />
        <WrapPanel>
         <Button Content="{services:Loc Prototype.Open}" Click="NativePrototype_Click" Margin="0,0,8,8" />
+         <Button Content="{services:Loc Classic.Title}" Click="ClassicFrames_Click" Margin="0,0,8,8" />
         <Button Content="{services:Loc Prototype.Restore}" Click="NativePrototypeRestore_Click" Margin="0,0,0,8" />
        </WrapPanel>
        <TextBlock Text="{services:Loc Prototype.Emergency}" Style="{StaticResource SecondaryText}" />

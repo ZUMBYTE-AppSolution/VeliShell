@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$OutputPath)
+param([Parameter(Mandatory)][string]$OutputPath, [string]$FixturePath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -11,7 +11,7 @@ $taskSdkRoot = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows 
 $taskSdk = Get-ChildItem -LiteralPath (Join-Path $taskSdkRoot 'Include') -Directory | Where-Object Name -Match '^10\.0\.' | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 if (-not $taskVc -or -not $taskSdk) { throw 'The x64 compiler or Windows SDK could not be found.' }
 # Configure this build subprocess only; no shell nesting or machine settings.
-$env:INCLUDE = (Join-Path $taskVc.FullName 'include') + ';' + ((@('ucrt','shared','um','winrt') | ForEach-Object { Join-Path $taskSdk.FullName $_ }) -join ';')
+$env:INCLUDE = (Join-Path $taskVc.FullName 'include') + ';' + ((@('ucrt','shared','um','winrt','cppwinrt') | ForEach-Object { Join-Path $taskSdk.FullName $_ }) -join ';')
 $env:LIB = (Join-Path $taskVc.FullName 'lib\x64') + ';' + (Join-Path $taskSdkRoot "Lib\$($taskSdk.Name)\ucrt\x64") + ';' + (Join-Path $taskSdkRoot "Lib\$($taskSdk.Name)\um\x64")
 $taskCompilerDirectory = Join-Path $taskVc.FullName 'bin\Hostx64\x64'
 $env:PATH = $taskCompilerDirectory + ';' + $env:PATH
@@ -19,5 +19,11 @@ $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 $taskOutputDirectory = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $taskOutputDirectory -Force | Out-Null
 $taskSource = Join-Path $taskRoot 'native\VeliShell.NativeFrame\NativeFrame.cpp'
-& (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /LD /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro $taskSource "/Fo$taskOutputDirectory\NativeFrame.obj" /link "/OUT:$OutputPath" "/IMPLIB:$taskOutputDirectory\NativeFrame.lib" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib comctl32.lib dwmapi.lib d3d11.lib d2d1.lib dwrite.lib
+& (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /LD /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro $taskSource (Join-Path $taskRoot 'native\VeliShell.NativeFrame\ClassicFrame.cpp') "/Fo$taskOutputDirectory\" /link "/OUT:$OutputPath" "/IMPLIB:$taskOutputDirectory\NativeFrame.lib" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib gdi32.lib uxtheme.lib advapi32.lib comctl32.lib dwmapi.lib d3d11.lib d2d1.lib dwrite.lib CoreMessaging.lib windowsapp.lib
 if ($LASTEXITCODE -ne 0) { throw 'Native prototype build failed.' }
+if ($FixturePath) {
+    $FixturePath = [IO.Path]::GetFullPath($FixturePath)
+    New-Item -ItemType Directory -Path (Split-Path -Parent $FixturePath) -Force | Out-Null
+    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /O2 /MT /W4 /WX /EHsc /guard:cf (Join-Path $taskRoot 'tests\VeliShell.InteractionQa\ClassicFixture.cpp') "/Fo$taskOutputDirectory\ClassicFixture.obj" /link "/OUT:$FixturePath" /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib gdi32.lib
+    if ($LASTEXITCODE -ne 0) { throw 'Independent classic QA fixture build failed.' }
+}

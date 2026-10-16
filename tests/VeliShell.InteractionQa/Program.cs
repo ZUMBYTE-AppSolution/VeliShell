@@ -34,6 +34,8 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--verify-automatic-frames", StringComparer.OrdinalIgnoreCase)) return VerifyAutomaticFrames();
+        if (args.Contains("--verify-classic-frame", StringComparer.OrdinalIgnoreCase)) return VerifyClassicFrame();
         if (args.Contains("--verify-native-frame", StringComparer.OrdinalIgnoreCase)) return VerifyNativeFrame();
         if (args.Contains("--render-start-launcher", StringComparer.OrdinalIgnoreCase))
             return RenderStartLauncher();

@@ -7,6 +7,25 @@ internal static class NativePrototypeMethods
     internal const int RestoreMessage = 0x8000 + 0x531;
     internal const string OptIn = "VeliShell.NativePrototype.OptIn";
     internal const string Active = "VeliShell.NativePrototype.Active";
+    internal const string ClassicActive = "VeliShell.ClassicFrame.Active";
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicEligible(nint window);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern nint VeliClassicBegin(nint window, string session, uint expectedPid, ulong expectedStart, int dark, int gloss, int transparency, uint tint);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicPoll(nint session, int stop);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern void VeliClassicConfigure(nint session, int dark, int gloss, int transparency, uint tint);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicError(nint session);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicEnd(nint session);
     [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     internal static extern int VeliFrameApiVersion();
