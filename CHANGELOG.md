@@ -6,6 +6,13 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.9] - 2026-10-16
+
+### Behoben
+
+- Dock, Kontextmenüs und schwebende Panels zeigen die native Glasfläche jetzt bis an die Rundungen. Der rechteckige Innenblock und der freie Streifen am Rahmen entfallen.
+- Das Einstellungsfenster bleibt auch bei maximaler Glas-Transparenz gut lesbar; der Regler beeinflusst weiterhin Dock, Menüleiste und schwebende Glasflächen.
+
 ## [0.13.8] - 2026-10-15
 
 ### Behoben

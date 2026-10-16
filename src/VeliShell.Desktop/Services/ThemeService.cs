@@ -73,13 +73,12 @@ public sealed class ThemeService : IDisposable
     private static void ApplyGlassMaterial(ResourceDictionary dictionary, double gloss, double transparency)
     {
         // 50/50 keeps the authored appearance. At the transparent end the
-        // panels still retain enough tint for text contrast.
+        // floating glass retains enough tint for its labels. Settings and
+        // other full content windows keep their independent, readable base.
         var opacityScale = 1 + (50 - transparency) * 0.012;
         foreach (var key in new[] { "DockSurfaceGradient", "DockAcrylicSurfaceGradient",
                      "MenuBarSurface", "MenuBarAcrylicSurface", "GlassPanelSurface", "GlassPanelAcrylicSurface",
-                     "GlassMenuSurface", "GlassMenuAcrylicSurface",
-                     "WindowBackdropGradient", "SidebarGradient", "CardSurfaceGradient",
-                     "ControlSurfaceGradient" })
+                     "GlassMenuSurface", "GlassMenuAcrylicSurface" })
         {
             if (dictionary[key] is not LinearGradientBrush original) continue;
             var brush = original.CloneCurrentValue();

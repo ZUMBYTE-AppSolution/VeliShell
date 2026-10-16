@@ -374,6 +374,12 @@ internal static class Program
                 Require(settings.AllowsTransparency && settings.Background is SolidColorBrush { Color.A: 0 },
                     "Settings must use antialiased per-pixel corners, not a hard Win32 window region.");
                 RenderShellPanel(settings, Path.Combine(outputDirectory, $"settings-{suffix}.png"), dark);
+                themes.Apply(dark ? Appearance.Dark : Appearance.Light, 100, 100);
+                var clearSettings = new VeliShell.Desktop.Views.PreferencesWindow(application);
+                RenderShellPanel(clearSettings,
+                    Path.Combine(outputDirectory, $"settings-max-glass-{suffix}.png"), dark);
+                themes.Apply(dark ? Appearance.Dark : Appearance.Light,
+                    preferences.GlassGloss, preferences.GlassTransparency);
 
                 var folderDialogType = RequireType("VeliShell.Desktop.Views.VirtualFolderNameWindow");
                 var folderDialog = (Window)(Activator.CreateInstance(folderDialogType,
@@ -1382,41 +1388,57 @@ internal static class Program
         {
             UseShellExecute = false, CreateNoWindow = true
         }) ?? throw new InvalidOperationException("Could not launch the test wallpaper.");
-        var plate = new Border
-        {
-            Width = 620, Height = 120, CornerRadius = new CornerRadius(11),
-            BorderThickness = new Thickness(1),
-            BorderBrush = (Brush)application.FindResource("DockStroke"),
-            Background = (Brush)application.FindResource("DockAcrylicSurfaceGradient")
-        };
-        var overlay = new Window
-        {
-            Width = 680, Height = 180, Left = 140, Top = 170,
-            WindowStyle = WindowStyle.None, AllowsTransparency = true,
-            ShowInTaskbar = false, ShowActivated = false, Topmost = true,
-            Background = Brushes.Transparent, Content = plate
-        };
         try
         {
             Thread.Sleep(700);
-            overlay.Show();
-            using var backdrop = new ShellBackdropHost(overlay, plate, 11);
-            var active = backdrop.ApplyMaterial("DockAcrylicSurfaceGradient", "DockSurfaceGradient");
-            SettleUi();
-            var path = Path.Combine(AppContext.BaseDirectory, "native-glass-preview.png");
-            using var bitmap = new System.Drawing.Bitmap(760, 320);
-            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
-                graphics.CopyFromScreen(100, 100, 0, 0, new System.Drawing.Size(760, 320));
-            bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            var left = bitmap.GetPixel(130, 160);
-            var right = bitmap.GetPixel(630, 160);
-            var colorBleed = Math.Abs(left.R - right.R) > 20 || Math.Abs(left.B - right.B) > 20;
-            Console.WriteLine($"Native glass active: {active}; color bleed: {colorBleed}; preview: {path}");
-            return active && colorBleed ? 0 : 1;
+            foreach (var (radius, material, fallback, name) in new[]
+                     {
+                         (11, "DockAcrylicSurfaceGradient", "DockSurfaceGradient", "dock"),
+                         (14, "GlassMenuAcrylicSurface", "GlassMenuSurface", "menu"),
+                         (24, "GlassPanelAcrylicSurface", "GlassPanelSurface", "panel")
+                     })
+            {
+                var plate = new Border
+                {
+                    Width = 620, Height = 120, CornerRadius = new CornerRadius(radius),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = (Brush)application.FindResource("DockStroke")
+                };
+                var overlay = new Window
+                {
+                    Width = 680, Height = 180, Left = 140, Top = 170,
+                    WindowStyle = WindowStyle.None, AllowsTransparency = true,
+                    ShowInTaskbar = false, ShowActivated = false, Topmost = true,
+                    Background = Brushes.Transparent, Content = plate
+                };
+                try
+                {
+                    overlay.Show();
+                    using var backdrop = new ShellBackdropHost(overlay, plate, radius);
+                    var active = backdrop.ApplyMaterial(material, fallback);
+                    SettleUi();
+                    var path = Path.Combine(AppContext.BaseDirectory, $"native-glass-{name}.png");
+                    using var bitmap = new System.Drawing.Bitmap(760, 320);
+                    using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                        graphics.CopyFromScreen(100, 100, 0, 0, new System.Drawing.Size(760, 320));
+                    bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                    var left = bitmap.GetPixel(130, 160);
+                    var right = bitmap.GetPixel(630, 160);
+                    var colorBleed = Math.Abs(left.R - right.R) > 20 || Math.Abs(left.B - right.B) > 20;
+                    var clearCorner = bitmap.GetPixel(72, 102);
+                    var plainWallpaper = bitmap.GetPixel(72, 90);
+                    var rounded = Math.Abs(clearCorner.R - plainWallpaper.R) < 12 &&
+                                  Math.Abs(clearCorner.G - plainWallpaper.G) < 12 &&
+                                  Math.Abs(clearCorner.B - plainWallpaper.B) < 12;
+                    Console.WriteLine($"Native {name} glass active: {active}; color bleed: {colorBleed}; rounded: {rounded}; preview: {path}");
+                    if (!active || !colorBleed || !rounded) return 1;
+                }
+                finally { overlay.Close(); }
+            }
+            return 0;
         }
         finally
         {
-            overlay.Close();
             if (!wallpaper.HasExited) wallpaper.Kill();
             application.Shutdown();
         }
@@ -1714,14 +1736,22 @@ internal static class Program
     private static void TestGlassMaterialAndRoundedClip()
     {
         var backdropType = RequireType("VeliShell.Desktop.Services.ShellBackdropHost");
-        var insetMethod = RequireMethod(backdropType, "SafeBackdropInset");
+        var rowInsetMethod = RequireMethod(backdropType, "RoundedRowInset");
         foreach (var radius in new[] { 11d, 21d })
         foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
         {
-            var physicalRadius = radius * scale;
-            var inset = (int)insetMethod.Invoke(null, [radius, scale])!;
-            Require(2 * Math.Pow(physicalRadius - inset, 2) < physicalRadius * physicalRadius,
-                $"A square native acrylic corner escapes the {radius}-DIP rounded panel at {scale}x DPI.");
+            var physicalRadius = (int)Math.Round(radius * scale);
+            var previousInset = physicalRadius;
+            for (var row = 0; row < physicalRadius; row++)
+            {
+                var inset = (int)rowInsetMethod.Invoke(null, [physicalRadius, physicalRadius, row])!;
+                var nx = (physicalRadius - inset - 0.5) / physicalRadius;
+                var ny = (physicalRadius - row - 0.5) / physicalRadius;
+                Require(nx * nx + ny * ny <= 1.00001,
+                    $"A native acrylic row escapes the {radius}-DIP rounded panel at {scale}x DPI.");
+                Require(inset <= previousInset, "Rounded acrylic bands leave an inset rectangular gap.");
+                previousInset = inset;
+            }
         }
         var clipped = new Grid { Width = 100, Height = 50 };
         VeliShell.Desktop.Controls.RoundedClip.SetRadius(clipped, 10);
@@ -1742,10 +1772,15 @@ internal static class Program
         var clearPanel = (LinearGradientBrush)Application.Current.FindResource("GlassPanelSurface");
         var clearMenu = (LinearGradientBrush)Application.Current.FindResource("GlassMenuSurface");
         var glossyMilk = (RadialGradientBrush)Application.Current.FindResource("DockMilkOverlay");
+        var settingsSurface = (LinearGradientBrush)Application.Current.FindResource("WindowBackdropGradient");
+        var settingsSidebar = (LinearGradientBrush)Application.Current.FindResource("SidebarGradient");
         Require(clearPanel.GradientStops[0].Color.A < baseAlpha &&
                 clearMenu.GradientStops[0].Color.A < baseMenuAlpha &&
                 glossyMilk.GradientStops[0].Color.A > baseSheen,
             "The glass controls did not alter transparency and sheen independently.");
+        Require(settingsSurface.GradientStops.All(stop => stop.Color.A >= 208) &&
+                settingsSidebar.GradientStops.All(stop => stop.Color.A >= 208),
+            "Maximum glass transparency made settings text unreadable over the desktop.");
         theme.Apply(Appearance.Light, 50, 50);
     }
 
@@ -1776,9 +1811,9 @@ internal static class Program
                 .GetValue(stateArgs[1]);
             Require(host is not null,
                 "The dock context menu did not create a bounded acrylic host.");
-            var handle = (nint)host!.GetType().GetField("_surfaceHandle", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .GetValue(host)!;
-            Console.WriteLine(handle != 0
+            var tiles = host!.GetType().GetField("_tiles", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(host) as System.Collections.ICollection;
+            Console.WriteLine(tiles is { Count: > 0 }
                 ? "PASS: Context-menu acrylic is active behind the rounded plate."
                 : "INFO: Context-menu acrylic is unavailable on this Windows session; the translucent material remains active.");
             submenuItem.IsSubmenuOpen = true;
