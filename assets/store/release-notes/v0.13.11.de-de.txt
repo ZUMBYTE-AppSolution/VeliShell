@@ -1,0 +1,8 @@
+Neu in VeliShell 0.13.11:
+
+- Die Iconsuche durchsucht zusätzlich Wikipedia und Wikimedia Commons – ohne weiteren API-Schlüssel. Logos erscheinen gemeinsam mit den Treffern aus dem App Store und macOSicons.
+- Vorschauen zeigen Quelle, Urheber und bei Commons die Dateilizenz. Du entscheidest, welches Symbol übernommen wird; bestehende Icons bleiben unverändert. Für die zusätzliche Quelle wird die Suchfreigabe einmal erneuert.
+- Breite Schriftzüge und ungeeignete Screenshots werden aussortiert. Ist eine Quelle vorübergehend nicht erreichbar, bleiben die Treffer der anderen Quellen verfügbar.
+- Dock, Kontextmenüs und schwebende Panels nutzen eine durchgehend gerundete Glasfläche mit echter Hintergrundweichzeichnung. Die rechteckigen Innenbalken und abweichenden Randstreifen entfallen.
+- Das Einstellungsfenster bleibt bei hoher Transparenz lesbar. Audio- und Mitteilungsbereiche verwenden die passenden Textfarben, auch nach einem Theme-Wechsel.
+- Die angezeigte Versionsnummer wird aus dem laufenden Programm gelesen.
