@@ -40,6 +40,16 @@ try
         var store = new SettingsStore(Path.Combine(temp,"modern-frames")); store.Save(new Settings { NativeModernMaterialsEnabled=true,NativeModernMaterialsConsentVersion=1 });
         var s = store.Load(); Check(s.NativeModernMaterialsEnabled && s.NativeModernMaterialsConsentVersion==1 && !s.NativeFramesEnabled);
     });
+    Test("Modern app frames require new consent, not appearance consent", () => {
+        var s=new Settings { NativeModernFramesEnabled=true,NativeModernMaterialsEnabled=true,NativeModernMaterialsConsentVersion=1 };
+        s.Normalize(); Check(!s.NativeModernFramesEnabled && s.NativeModernMaterialsEnabled);
+        s.NativeModernFramesConsentVersion=1; s.NativeModernFramesEnabled=true; s.Normalize(); Check(s.NativeModernFramesEnabled);
+    });
+    Test("Modern app frame consent survives settings roundtrip", () => {
+        var store=new SettingsStore(Path.Combine(temp,"modern-app-frames"));
+        store.Save(new Settings { NativeModernFramesEnabled=true,NativeModernFramesConsentVersion=1 });
+        var s=store.Load(); Check(s.NativeModernFramesEnabled && s.NativeModernFramesConsentVersion==1 && !s.NativeFramesEnabled);
+    });
     Test("Native styling consent and exclusions survive settings roundtrip", () => {
         var store = new SettingsStore(Path.Combine(temp,"native-frames")); store.Save(new Settings { NativeFramesEnabled=true,NativeFramesConsentVersion=1,NativeFrameExclusions=["keep.exe"] });
         var s=store.Load();Check(s.NativeFramesEnabled&&s.NativeFramesConsentVersion==1&&s.NativeFrameExclusions.Single()=="keep.exe");

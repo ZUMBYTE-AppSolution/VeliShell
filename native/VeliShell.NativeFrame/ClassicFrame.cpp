@@ -7,6 +7,7 @@
 #include <uxtheme.h>
 #include <sddl.h>
 #include <strsafe.h>
+#include <appmodel.h>
 #include <string>
 #include <new>
 #include <cmath>
@@ -22,7 +23,7 @@ namespace {
 constexpr wchar_t Active[] = L"VeliShell.ClassicFrame.Active";
 constexpr wchar_t Consent[] = L"VeliShell.ClassicFrame.Consent";
 constexpr UINT_PTR Subclass = 0x56454C43;
-constexpr DWORD Magic = 0x56464332;
+constexpr DWORD Magic = 0x56464333;
 constexpr int Pending = 0, Attached = 1, Restored = 2, Gone = 3, Failed = -1;
 constexpr int Attaching = 4;
 struct Shared {
@@ -36,9 +37,10 @@ struct Shared {
     LONG_PTR style, exStyle;
     int policy, backdrop, corner, immersive;
     unsigned attributes;
+    int adapter;
 };
 struct Broker { HANDLE mapping{}; Shared* data{}; HHOOK hook{}; ATOM atom{}; };
-struct Frame { HANDLE mapping; Shared* data; int hover = -1, pressed = -1; HWND caption{}; ClassicGlass* glass{}; HRGN region{}; bool syncing=false,retired=false,restoring=false,wasIconic=false,syncQueued=false; int references=1; UINT_PTR timer{}; RECT hostHole{}; int hostWidth=0,hostHeight=0,captionHeight=0; ULONGLONG invalidSince=0; };
+struct Frame { HANDLE mapping; Shared* data; int hover = -1, pressed = -1; HWND caption{}; ClassicGlass* glass{}; HRGN region{}; bool syncing=false,retired=false,restoring=false,wasIconic=false,syncQueued=false,extraHeader=false; int references=1; UINT_PTR timer{}; RECT hostHole{}; int hostWidth=0,hostHeight=0,captionHeight=0; ULONGLONG invalidSince=0; };
 static thread_local std::map<UINT_PTR,HWND> recoveryTimers;
 ULONGLONG Heartbeat(Shared* data) { return static_cast<ULONGLONG>(InterlockedCompareExchange64(&data->heartbeat,0,0)); }
 void Release(Frame*);
@@ -61,7 +63,7 @@ bool ReadPolicy(HWND window,int& policy) {
     if(FAILED(DwmGetWindowAttribute(window,DWMWA_NCRENDERING_ENABLED,&enabled,sizeof(enabled)))) return false;
     policy=enabled?DWMNCRP_ENABLED:DWMNCRP_DISABLED; return true;
 }
-UINT Bootstrap() { return RegisterWindowMessageW(L"VeliShell.ClassicFrame.Bootstrap.v2"); }
+UINT Bootstrap() { return RegisterWindowMessageW(L"VeliShell.ClassicFrame.Bootstrap.v3"); }
 ULONGLONG ProcessStarted(HANDLE process) {
     FILETIME start{}, end{}, kernel{}, user{};
     if (!GetProcessTimes(process, &start, &end, &kernel, &user)) return 0;
@@ -87,11 +89,40 @@ bool SameToken(HANDLE process) {
 }
 // Stable diagnostic codes, shared with the supervisor. 100 is an eligible x86
 // window inspected from x64; only its same-bitness bridge may attach it.
-int Probe(HWND window,bool crossBitness,bool material=false) {
+// Exact Microsoft app/path/class pairs only. This is not a blanket exception
+// for arbitrary executables named explorer.exe or applications in WindowsApps.
+int ModernKind(HWND window) {
+    wchar_t cls[256]{}; GetClassNameW(window,cls,256);
+    if(wcscmp(cls,L"CabinetWClass") && wcscmp(cls,L"MSPaintApp") && wcscmp(cls,L"Notepad"))return 0;
+    DWORD pid{}; GetWindowThreadProcessId(window,&pid);
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid); if(!process)return 0;
+    wchar_t path[32768]{},system[32768]{}; DWORD size=32768; int kind=0;
+    if(QueryFullProcessImageNameW(process,0,path,&size)) {
+        GetWindowsDirectoryW(system,32768);
+        std::wstring explorer=std::wstring(system)+L"\\explorer.exe";
+        if(_wcsicmp(path,explorer.c_str())==0 && wcscmp(cls,L"CabinetWClass")==0)kind=1;
+        else {
+            // Kernel-reported package identity/path, not an environment variable
+            // or a filename prefix. Works with Store apps on another volume too.
+            wchar_t family[256]{},fullName[512]{},root[32768]{};
+            UINT32 familySize=256,fullSize=512,rootSize=32768;
+            if(GetPackageFamilyName(process,&familySize,family)==ERROR_SUCCESS &&
+                GetPackageFullName(process,&fullSize,fullName)==ERROR_SUCCESS &&
+                GetPackagePathByFullName(fullName,&rootSize,root)==ERROR_SUCCESS) {
+                std::wstring paint=std::wstring(root)+L"\\PaintApp\\mspaint.exe",notepad=std::wstring(root)+L"\\Notepad\\Notepad.exe";
+                if(wcscmp(family,L"Microsoft.Paint_8wekyb3d8bbwe")==0 && _wcsicmp(path,paint.c_str())==0 && wcscmp(cls,L"MSPaintApp")==0)kind=2;
+                if(wcscmp(family,L"Microsoft.WindowsNotepad_8wekyb3d8bbwe")==0 && _wcsicmp(path,notepad.c_str())==0 && wcscmp(cls,L"Notepad")==0)kind=3;
+            }
+        }
+    }
+    CloseHandle(process); return kind;
+}
+int Probe(HWND window,bool crossBitness,bool material=false,bool modern=false) {
     HIGHCONTRASTW contrast{sizeof(contrast)};
     if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) return 1;
     if (!IsWindow(window) || !IsWindowVisible(window) || IsIconic(window) || GetAncestor(window, GA_ROOT) != window || GetWindow(window, GW_OWNER)) return 2;
     DWORD pid{}; if (!GetWindowThreadProcessId(window, &pid) || pid == GetCurrentProcessId()) return 2;
+    if(modern && ModernKind(window)==0)return 11;
     const LONG_PTR style = GetWindowLongPtrW(window, GWL_STYLE), ex = GetWindowLongPtrW(window, GWL_EXSTYLE);
     if ((!material && (style & (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME)) != (WS_CAPTION | WS_SYSMENU | WS_THICKFRAME)) ||
         (ex & (WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_LAYOUTRTL)) || (style & WS_CHILD)) return 3;
@@ -99,7 +130,7 @@ int Probe(HWND window,bool crossBitness,bool material=false) {
     int regionType=GetWindowRgn(window,region); DeleteObject(region); if(!material && regionType!=ERROR) return 4;
     wchar_t cls[256]{}; GetClassNameW(window, cls, 256);
     for(auto denied : {L"Progman",L"WorkerW",L"Shell_",L"UnityWndClass",L"UnrealWindow",L"SDL_app",L"GLFW"}) if(wcsstr(cls,denied)) return 5;
-    if(!material) for (auto denied : {L"Chrome", L"Mozilla", L"ApplicationFrame", L"WinUIDesktop", L"CabinetWClass", L"Windows.UI", L"Qt"})
+    if(!material && !modern) for (auto denied : {L"Chrome", L"Mozilla", L"ApplicationFrame", L"WinUIDesktop", L"CabinetWClass", L"Windows.UI", L"Qt"})
         if (wcsstr(cls, denied)) return 6;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
     if (!process) return 7;
@@ -118,7 +149,7 @@ int Probe(HWND window,bool crossBitness,bool material=false) {
     if(!material && !crossBitness && !x86) { CloseHandle(process); return 8; }
 #endif
     if (_wcsnicmp(path, system, wcslen(system)) == 0 || wcsstr(path,L"\\WindowsApps\\")) {
-        bool permitted=material && (wcsstr(path,L"\\WindowsApps\\")!=nullptr);
+        bool permitted=modern || material && (wcsstr(path,L"\\WindowsApps\\")!=nullptr);
         auto file=wcsrchr(path,L'\\'); file=file?file+1:path;
         if(material && (wcscmp(cls,L"CabinetWClass")==0 && _wcsicmp(file,L"explorer.exe")==0 ||
             _wcsicmp(file,L"SystemSettings.exe")==0 || _wcsicmp(file,L"notepad.exe")==0 || _wcsicmp(file,L"mspaint.exe")==0 || _wcsicmp(file,L"ApplicationFrameHost.exe")==0)) permitted=true;
@@ -126,7 +157,7 @@ int Probe(HWND window,bool crossBitness,bool material=false) {
     }
     int cloaked{}; DwmGetWindowAttribute(window, 14, &cloaked, sizeof(cloaked));
     CloseHandle(process); if(cloaked)return 2;
-    if(!material) {
+    if(!material && !modern) {
         // WPF is allowed when it genuinely has a standard non-client caption.
         // Never clip app-drawn tabs/search fields merely because HTCAPTION exists.
         RECT bounds{}; POINT client{}; GetWindowRect(window,&bounds); ClientToScreen(window,&client);
@@ -318,7 +349,8 @@ LRESULT CALLBACK CaptionProcedure(HWND host,UINT message,WPARAM wp,LPARAM lp) {
 bool Restore(HWND w) {
     auto f=reinterpret_cast<Frame*>(GetPropW(w,Active)); if(!f) return true;
     FrameHold hold(f); if(f->retired)return true; if(f->restoring)return false; f->restoring=true;
-    // This adapter never changes style, placement, app client rectangle, menu or WndProc.
+    // Removing the subclass also restores the original NCCALCSIZE calculation
+    // for the explicitly approved modern adapters. Window placement is unchanged.
     bool restored=true;
     if(f->data->attributes&1) restored=SUCCEEDED(DwmSetWindowAttribute(w,2,&f->data->policy,sizeof(int))) && restored;
     if(f->data->attributes&2) restored=SUCCEEDED(DwmSetWindowAttribute(w,33,&f->data->corner,sizeof(int))) && restored;
@@ -331,6 +363,7 @@ bool Restore(HWND w) {
     RemovePropW(w,Active); RemovePropW(w,Consent);
     RemovePropW(w,L"VeliShell.ClassicFrame.Caption"); RemovePropW(w,L"VeliShell.ClassicFrame.Glass");
     RemovePropW(w,L"VeliShell.ClassicFrame.CaptionHeight");
+    RemovePropW(w,L"VeliShell.ClassicFrame.Adapter");
     SetWindowPos(w,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
     RedrawWindow(w,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_ALLCHILDREN);
     InterlockedExchange(&f->data->state,Restored); Release(f); return true;
@@ -344,9 +377,23 @@ LRESULT CALLBACK Procedure(HWND w, UINT message, WPARAM wp, LPARAM lp, UINT_PTR,
         if(f->timer) { KillTimer(nullptr,f->timer); recoveryTimers.erase(f->timer); }
         RemovePropW(w,Active); RemovePropW(w,Consent); RemovePropW(w,L"VeliShell.ClassicFrame.Caption"); RemovePropW(w,L"VeliShell.ClassicFrame.Glass"); RemoveWindowSubclass(w,Procedure,Subclass);
         RemovePropW(w,L"VeliShell.ClassicFrame.CaptionHeight");
+        RemovePropW(w,L"VeliShell.ClassicFrame.Adapter");
         InterlockedExchange(&f->data->state,Gone); Release(f); return DefSubclassProc(w,message,wp,lp);
     }
     if(f->restoring || f->retired)return DefSubclassProc(w,message,wp,lp);
+    if(message==WM_NCCALCSIZE && f->extraHeader) {
+        const int base=wp?reinterpret_cast<NCCALCSIZE_PARAMS*>(lp)->rgrc[0].top:reinterpret_cast<RECT*>(lp)->top;
+        LRESULT result=DefSubclassProc(w,message,wp,lp);
+        if(GetPropW(w,Active)!=f || f->retired)return result;
+        auto rect=wp?&reinterpret_cast<NCCALCSIZE_PARAMS*>(lp)->rgrc[0]:reinterpret_cast<RECT*>(lp);
+        // Keep the complete app-owned tab/search row. Reserve our caption by
+        // resizing the logical client, not by cropping interactive app content.
+        int border=GetSystemMetricsForDpi(SM_CYSIZEFRAME,GetDpiForWindow(w))+GetSystemMetricsForDpi(SM_CXPADDEDBORDER,GetDpiForWindow(w));
+        int caption=border+GetSystemMetricsForDpi(SM_CYCAPTION,GetDpiForWindow(w));
+        // Use the proposed window rectangle captured before the app changes it.
+        rect->top=std::max<LONG>(rect->top,base+caption);
+        return 0;
+    }
     if(message==Bootstrap()) {
         f->syncQueued=false;
         if(f->data->stop || GetTickCount64()-Heartbeat(f->data)>3000) Restore(w);
@@ -393,6 +440,10 @@ void Attach(HANDLE mapping, Shared* data) {
     auto f=new(std::nothrow) Frame{mapping,data};
     if(!f) { InterlockedExchange(&data->state,Failed); UnmapViewOfFile(data); CloseHandle(mapping); return; }
     HWND w=data->window;
+    if(data->adapter) {
+        RECT bounds{}; POINT client{}; GetWindowRect(w,&bounds); ClientToScreen(w,&client);
+        f->extraHeader=client.y-bounds.top<Caption(w).bottom-2;
+    }
     data->style=GetWindowLongPtrW(w,GWL_STYLE); data->exStyle=GetWindowLongPtrW(w,GWL_EXSTYLE);
     data->policy=0; data->backdrop=1;
     data->attributes=0;
@@ -411,6 +462,8 @@ void Attach(HANDLE mapping, Shared* data) {
     if(FAILED(DwmSetWindowAttribute(w,2,&policy,sizeof(policy)))) { Restore(w); return; }
     if(data->attributes&2) DwmSetWindowAttribute(w,33,&corner,sizeof(corner));
     if(data->attributes&4) DwmSetWindowAttribute(w,20,&data->dark,sizeof(int));
+    if(f->extraHeader)SetWindowPos(w,nullptr,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);
+    SetPropW(w,L"VeliShell.ClassicFrame.Adapter",reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(data->adapter)));
     HMODULE module{}; GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&Procedure),&module);
     WNDCLASSEXW cls{sizeof(cls)}; cls.hInstance=module; cls.lpfnWndProc=CaptionProcedure; cls.lpszClassName=L"VeliShellNativeCaption"; cls.hCursor=LoadCursorW(nullptr,IDC_ARROW); cls.style=CS_DBLCLKS;
     if(!RegisterClassExW(&cls) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) { data->error=11; Restore(w); return; }
@@ -440,6 +493,7 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK VeliClassicHook(int code, WPAR
                 HANDLE guardian=valid?OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,data->guardian):nullptr;
                 valid=valid && guardian && ProcessStarted(guardian)==data->guardianStart && SameToken(guardian) && WaitForSingleObject(guardian,0)==WAIT_TIMEOUT;
                 if(guardian) CloseHandle(guardian);
+                valid=valid && (!data->adapter || ModernKind(message->hwnd)==data->adapter);
                 if(valid && InterlockedCompareExchange(&data->state,Attaching,Pending)==Pending) Attach(mapping,data);
                 else { if(data) { data->error=20; UnmapViewOfFile(data); } if(mapping) CloseHandle(mapping); }
             }
@@ -450,13 +504,21 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK VeliClassicHook(int code, WPAR
 extern "C" __declspec(dllexport) int __cdecl VeliClassicEligible(HWND window) { return Eligible(window)?1:0; }
 extern "C" __declspec(dllexport) int __cdecl VeliClassicReason(HWND window,int crossBitness) { return Probe(window,crossBitness!=0); }
 extern "C" __declspec(dllexport) int __cdecl VeliMaterialEligible(HWND window) { return Probe(window,true,true)==0?1:0; }
-extern "C" __declspec(dllexport) void* __cdecl VeliClassicBegin(HWND window, const wchar_t* session, DWORD expectedPid, ULONGLONG expectedStart, int dark, int gloss, int transparency,DWORD tint) {
-    if(!Eligible(window) || GetPropW(window,Active) || !session || wcslen(session)!=32) return nullptr;
+extern "C" __declspec(dllexport) int __cdecl VeliModernKind(HWND window) { return ModernKind(window); }
+extern "C" __declspec(dllexport) int __cdecl VeliModernReason(HWND window) { return Probe(window,true,false,true); }
+static thread_local int beginError=0;
+extern "C" __declspec(dllexport) int __cdecl VeliClassicBeginError() { return beginError; }
+void* Begin(HWND window, const wchar_t* session, DWORD expectedPid, ULONGLONG expectedStart, int dark, int gloss, int transparency,DWORD tint,bool modern) {
+    beginError=0;
+    auto fail=[](int code)->void* { beginError=code; return nullptr; };
+    if((modern?Probe(window,false,false,true)!=0:!Eligible(window)))return fail(101);
+    if(GetPropW(window,Active))return fail(102);
+    if(!session || wcslen(session)!=32)return fail(103);
     RECT bounds{}; GetWindowRect(window,&bounds); DWORD_PTR hit{};
     const int x=(bounds.left+bounds.right)/2,y=bounds.top+Dip(window,16);
-    if(!SendMessageTimeoutW(window,WM_NCHITTEST,0,MAKELPARAM(x,y),SMTO_ABORTIFHUNG|SMTO_BLOCK,75,&hit) || hit!=HTCAPTION) return nullptr;
-    for(size_t i=0;i<32;++i) if(!iswxdigit(session[i])) return nullptr;
-    auto b=new(std::nothrow) Broker{}; if(!b) return nullptr;
+    if(!modern && (!SendMessageTimeoutW(window,WM_NCHITTEST,0,MAKELPARAM(x,y),SMTO_ABORTIFHUNG|SMTO_BLOCK,75,&hit) || hit!=HTCAPTION)) return fail(104);
+    for(size_t i=0;i<32;++i) if(!iswxdigit(session[i])) return fail(103);
+    auto b=new(std::nothrow) Broker{}; if(!b) return fail(105);
     wchar_t name[128]{}; StringCchPrintfW(name,128,L"Local\\VeliShell.Classic.%s",session);
     // Mapping is accessible only to the current logon user, not Everyone or other sessions.
     HANDLE token{}; BYTE info[1024]{}; DWORD length{}; LPWSTR sid{}; PSECURITY_DESCRIPTOR descriptor{};
@@ -468,21 +530,24 @@ extern "C" __declspec(dllexport) void* __cdecl VeliClassicBegin(HWND window, con
     if(secure) b->mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,&security,PAGE_READWRITE,0,sizeof(Shared),name);
     DWORD error=GetLastError(); if(descriptor) LocalFree(descriptor);
     if(b->mapping && error!=ERROR_ALREADY_EXISTS) b->data=static_cast<Shared*>(MapViewOfFile(b->mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Shared)));
-    if(!b->data) { if(b->mapping) CloseHandle(b->mapping); delete b; return nullptr; }
+    if(!b->data) { if(b->mapping) CloseHandle(b->mapping); delete b; return fail(106); }
     auto d=b->data; ZeroMemory(d,sizeof(Shared)); d->magic=Magic; d->guardian=GetCurrentProcessId(); d->guardianStart=ProcessStarted(GetCurrentProcess());
     d->thread=GetWindowThreadProcessId(window,&d->target); d->window=window;
     HANDLE target=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,d->target); d->targetStart=target?ProcessStarted(target):0; if(target) CloseHandle(target);
     InterlockedExchange64(&d->heartbeat,static_cast<LONG64>(GetTickCount64())); d->dark=dark?1:0; d->gloss=max(0,min(100,gloss)); d->transparency=max(0,min(100,transparency));
     d->tint=tint;
-    if(d->target!=expectedPid || d->targetStart!=expectedStart) { UnmapViewOfFile(d); CloseHandle(b->mapping); delete b; return nullptr; }
+    d->adapter=modern?ModernKind(window):0;
+    if(d->target!=expectedPid || d->targetStart!=expectedStart) { UnmapViewOfFile(d); CloseHandle(b->mapping); delete b; return fail(107); }
     b->atom=GlobalAddAtomW(name); HMODULE module{};
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,reinterpret_cast<LPCWSTR>(&VeliClassicHook),&module);
     if(d->thread && d->targetStart && b->atom && SetPropW(window,Consent,reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(b->atom)))) b->hook=SetWindowsHookExW(WH_CALLWNDPROC,VeliClassicHook,module,d->thread);
-    if(!b->hook) { if(GetPropW(window,Consent)==reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(b->atom))) RemovePropW(window,Consent); if(b->atom) GlobalDeleteAtom(b->atom); UnmapViewOfFile(d); CloseHandle(b->mapping); delete b; return nullptr; }
+    if(!b->hook) { DWORD detail=GetLastError(); if(GetPropW(window,Consent)==reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(b->atom))) RemovePropW(window,Consent); if(b->atom) GlobalDeleteAtom(b->atom); UnmapViewOfFile(d); CloseHandle(b->mapping); delete b; return fail(detail?static_cast<int>(HRESULT_FROM_WIN32(detail)):108); }
     // A sent message executes WH_CALLWNDPROC on precisely this thread (never a global hook).
     DWORD_PTR result{}; SendMessageTimeoutW(window,Bootstrap(),b->atom,0,SMTO_ABORTIFHUNG|SMTO_BLOCK,1000,&result);
     return b;
 }
+extern "C" __declspec(dllexport) void* __cdecl VeliClassicBegin(HWND w,const wchar_t* id,DWORD pid,ULONGLONG start,int dark,int gloss,int transparency,DWORD tint) { return Begin(w,id,pid,start,dark,gloss,transparency,tint,false); }
+extern "C" __declspec(dllexport) void* __cdecl VeliModernBegin(HWND w,const wchar_t* id,DWORD pid,ULONGLONG start,int dark,int gloss,int transparency,DWORD tint) { return Begin(w,id,pid,start,dark,gloss,transparency,tint,true); }
 extern "C" __declspec(dllexport) int __cdecl VeliClassicPoll(void* session, int stop) {
     auto b=static_cast<Broker*>(session); if(!b || !b->data) return Failed;
     InterlockedExchange64(&b->data->heartbeat,static_cast<LONG64>(GetTickCount64()));

@@ -40,7 +40,7 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
     public const int CurrentOnlineIconConsentVersion = 5;
     public const double MinimumIconSize = 24;
     public const double DefaultIconSize = 52;
@@ -62,6 +62,8 @@ public sealed class Settings
     public int NativeFramesConsentVersion { get; set; }
     public bool NativeModernMaterialsEnabled { get; set; }
     public int NativeModernMaterialsConsentVersion { get; set; }
+    public bool NativeModernFramesEnabled { get; set; }
+    public int NativeModernFramesConsentVersion { get; set; }
     public List<string> NativeFrameExclusions { get; set; } = [];
     public bool Magnification { get; set; } = true;
     public bool ReducedMotion { get; set; }
@@ -104,6 +106,7 @@ public sealed class Settings
         SchemaVersion = CurrentSchemaVersion;
         if (NativeFramesConsentVersion != 1) { NativeFramesConsentVersion = 0; NativeFramesEnabled = false; }
         if (NativeModernMaterialsConsentVersion != 1) { NativeModernMaterialsConsentVersion = 0; NativeModernMaterialsEnabled = false; }
+        if (NativeModernFramesConsentVersion != 1) { NativeModernFramesConsentVersion = 0; NativeModernFramesEnabled = false; }
         NativeFrameExclusions = (NativeFrameExclusions ?? []).Where(value => !string.IsNullOrWhiteSpace(value) && value.Length <= 1024)
             .Select(value => value.Trim()).Where(value => value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
                 (Path.IsPathFullyQualified(value) || value.IndexOfAny(['/', '\\', ':', '*', '?']) < 0))

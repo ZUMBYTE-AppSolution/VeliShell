@@ -6,6 +6,20 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1-test.2] - 2026-10-16
+
+Lokaler Prüfstand, noch nicht veröffentlicht oder an echten Apps abgenommen.
+
+- Erste optionale Rahmenadapter für Explorer, Paint und Editor mit eigener Zustimmung;
+  vorhandene Tab-/Suchzeilen sollen innerhalb der Fenstergrenzen erhalten bleiben.
+  Echte-App-Sicht- und Rücksetzprüfung stehen noch aus, keine Kompatibilitätsfreigabe.
+- Statusanzeige nach Fenster-/Prozessidentität bereinigt, fehlgeschlagene Aktivierungen
+  mit Fehlercode statt missverständlichem „Nicht aktiviert“; kein Material-Erfolg vor Bestätigung.
+- Lesbare Einstellungen mit deckender Basis sowie eigene, umgebungsabhängig gefärbte
+  Prüflisten statt weißer Windows-Standardlisten im Darkmode.
+- Isolierte, benutzerbediente VM-Prüfansicht mit Auswahl eines echten Fensters,
+  lokalem Bericht, Rücksetzsignal und gezieltem Ausfall des eigenen Wächters.
+
 ## [0.14.1-test.1] - 2026-10-16
 
 ### Erweiterte Fenstergestaltung im Teststand

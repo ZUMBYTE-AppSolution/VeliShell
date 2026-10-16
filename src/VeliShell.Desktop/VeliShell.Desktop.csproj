@@ -29,6 +29,8 @@
     <Content Include="obj/native/VeliShell.ClassicSample.x86.exe" Link="VeliShell.ClassicSample.x86.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../WINDOW-RECOVERY.cmd" Link="WINDOW-RECOVERY.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../NATIVE-TEST.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-TEST.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../VM-APP-CHECK.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="VM-APP-CHECK.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../VM-APP-CHECK.md" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="VM-APP-CHECK.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../CLASSIC-APPS.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="CLASSIC-APPS.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../NATIVE-PROTOTYPE.md" Link="NATIVE-PROTOTYPE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\VeliShellApp.png" />

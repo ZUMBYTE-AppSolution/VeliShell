@@ -7,8 +7,8 @@
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
  Title="{services:Loc Product.SettingsTitle}" Width="870" Height="660" MinWidth="760" MinHeight="540"
  WindowStartupLocation="CenterScreen">
- <Border Background="{DynamicResource WindowBackdropGradient}" CornerRadius="16" BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1">
-  <Grid controls:RoundedClip.Radius="15">
+ <Border Background="{DynamicResource WindowSurface}" CornerRadius="16" BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1">
+  <Grid controls:RoundedClip.Radius="15" Background="{DynamicResource WindowBackdropGradient}">
    <Grid.ColumnDefinitions><ColumnDefinition Width="218" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
    <Grid.RowDefinitions><RowDefinition Height="50" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
    <Border Grid.ColumnSpan="2" Grid.RowSpan="3" Background="{DynamicResource DockMilkOverlay}" IsHitTestVisible="False" />

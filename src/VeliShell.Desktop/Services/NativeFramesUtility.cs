@@ -7,6 +7,8 @@ namespace VeliShell.Desktop.Services;
 internal static class NativeFramesUtility
 {
     internal const string WpfFixture = "--native-wpf-fixture";
+    internal const string AppPreview = "--native-app-preview";
+    internal const string VmCheck = "--native-app-vm-check";
     internal static void Run(string[] args, App app)
     {
         if (args[0] == NativeFramesController.Guard) { NativeFramesGuard.Run(args, app); return; }
@@ -19,8 +21,27 @@ internal static class NativeFramesUtility
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml") });
         var settings = new Settings { FirstRunCompleted = true, Appearance = args.ElementAtOrDefault(1) == "dark" ? Appearance.Dark : Appearance.Light, GlassGloss = 80, GlassTransparency = 75 };
         using var theme = new ThemeService(); theme.Apply(settings.Appearance, settings.GlassGloss, settings.GlassTransparency);
-        using var controller = new NativeFramesController(preview: true);
-        var window = new NativeFramesWindow(settings, controller, theme, update => { update(settings); settings.Normalize(); controller.Update(settings, theme.IsDark); }, preview: true);
+        if(args[0]==VmCheck) {
+            if(!BuildIdentity.IsTest || !NativeFramesVmCheckWindow.IsVirtualMachine()) {
+                MessageBox.Show(LocalizationService.Current.Get("VmCheck.VmOnly"),"VeliShell");app.Shutdown(2);return;
+            }
+            var check=new NativeFramesVmCheckWindow(theme);app.MainWindow=check;check.Closed+=(_,_)=>app.Shutdown();check.Show();
+            var dispatcher=new System.Windows.Threading.DispatcherFrame();app.Exit+=(_,_)=>dispatcher.Continue=false;System.Windows.Threading.Dispatcher.PushFrame(dispatcher);return;
+        }
+        NativeFrameTarget[]? targets=null;
+        if(args[0]==AppPreview) {
+            if(!BuildIdentity.IsTest || args.Length is <3 or >10) { app.Shutdown(2);return; }
+            var selected=new List<NativeFrameTarget>();
+            foreach(var value in args.Skip(2)) {
+                if(!long.TryParse(value,out var handle)) { app.Shutdown(2);return; }
+                var candidate=ClassicFrameSession.Inspect((nint)handle,modern:true,crossBitness:true);
+                if(candidate is null || candidate.Adapter==0) { app.Shutdown(2);return; }
+                selected.Add(new(handle,candidate.Pid,candidate.Started));
+            }
+            targets=selected.ToArray();
+        }
+        using var controller = new NativeFramesController(preview: true,targets:targets);
+        var window = new NativeFramesWindow(settings, controller, theme, update => { update(settings); settings.Normalize(); controller.Update(settings, theme.IsDark); }, preview: true,realAppPreview:targets is not null);
         app.MainWindow = window; window.Closed += (_, _) => app.Shutdown(); window.Show();
         var loop = new System.Windows.Threading.DispatcherFrame(); app.Exit += (_, _) => loop.Continue = false; System.Windows.Threading.Dispatcher.PushFrame(loop);
     }

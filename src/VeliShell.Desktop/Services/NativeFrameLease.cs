@@ -20,11 +20,17 @@ internal sealed class NativeFrameLease : IDisposable
     internal bool Faulted => !_stopped && _bridge is { HasExited: true } && _wire is not null && _wire.ReadInt32(16) is not (2 or 3);
     private NativeFrameLease(ClassicFrameSession.Candidate app) => _app = app;
     internal static NativeFrameLease? Begin(ClassicFrameSession.Candidate app, Guid id, NativeFramesConfig config)
+        => Begin(app, id, config, out _);
+    internal static NativeFrameLease? Begin(ClassicFrameSession.Candidate app, Guid id, NativeFramesConfig config, out int error)
     {
+        error = 0;
         var lease = new NativeFrameLease(app);
         try {
             if (!app.Is32Bit && !app.Material) {
-                lease._native = NativePrototypeMethods.VeliClassicBegin(app.Window, id.ToString("N"), (uint)app.Pid, (ulong)app.Started, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint);
+                lease._native = app.Adapter != 0
+                    ? NativePrototypeMethods.VeliModernBegin(app.Window, id.ToString("N"), (uint)app.Pid, (ulong)app.Started, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint)
+                    : NativePrototypeMethods.VeliClassicBegin(app.Window, id.ToString("N"), (uint)app.Pid, (ulong)app.Started, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint);
+                if (lease._native == 0) error = NativePrototypeMethods.VeliClassicBeginError();
                 return lease._native == 0 ? null : lease;
             }
             // Default kernel-object DACL is inherited from the current user token;
@@ -55,6 +61,8 @@ internal sealed class NativeFrameLease : IDisposable
         if (_wire is null) return -1;
         _wire.Write(8, Environment.TickCount64); if (_stopped) _wire.Write(20, 1);
         if (_bridge?.HasExited == true) {
+            int terminal=_wire.ReadInt32(16);
+            if(terminal is 2 or 3) return terminal;
             if (Material) return RecoverMaterial() ? -1 : 4;
             // A dead bridge does not imply the target UI thread finished restoring.
             return NativePrototypeMethods.GetProp(_app.Window, NativePrototypeMethods.ClassicActive) == 0 ? -1 : 4;

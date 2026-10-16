@@ -16,27 +16,35 @@ internal sealed class NativeFramesWindow : VeliShellWindow
     private readonly Action<Action<Settings>> _save;
     private readonly CheckBox _enabled = new();
     private readonly CheckBox _materials = new();
-    private readonly ListBox _exceptions = new() { Height = 105 };
-    private readonly ListBox _windows = new() { Height = 110 };
+    private readonly CheckBox _modern = new();
+    private readonly ListBox _exceptions = new() { Height = 76 };
+    private readonly ListBox _windows = new() { Height = 235 };
     private readonly TextBox _entry = new() { MinWidth = 330, Margin = new Thickness(0, 0, 8, 8) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 12) };
     private bool _busy, _syncing;
     private static string L(string key) => LocalizationService.Current.Get(key);
-    internal NativeFramesWindow(Settings settings, NativeFramesController controller, ThemeService theme, Action<Action<Settings>> save, bool preview = false)
+    internal NativeFramesWindow(Settings settings, NativeFramesController controller, ThemeService theme, Action<Action<Settings>> save, bool preview = false, bool realAppPreview = false)
     {
         _settings = settings; _controller = controller; _theme = theme; _save = save;
-        Title = L("NativeFrames.Title"); Width = 830; Height = 760; MinWidth = 660; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Title = L("NativeFrames.Title"); Width = 880; Height = 900; MinWidth = 700; MinHeight = 580; WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        MaxHeight = SystemParameters.WorkArea.Height;
+        _exceptions.SetResourceReference(StyleProperty,"NativeFramesList"); _windows.SetResourceReference(StyleProperty,"NativeFramesList");
         var layout = new Grid(); layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(50) }); layout.RowDefinitions.Add(new RowDefinition());
+        layout.SetResourceReference(Panel.BackgroundProperty,"WindowBackdropGradient");
         var header = new Grid();
         var lights = new TrafficLights { Margin = new Thickness(14, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
         WindowChrome.SetIsHitTestVisibleInChrome(lights, true); header.Children.Add(lights);
         header.Children.Add(new TextBlock { Text = Title, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold }); layout.Children.Add(header);
         var body = new StackPanel { Margin = new Thickness(28, 12, 28, 24) };
         body.Children.Add(new TextBlock { Text = L("NativeFrames.Heading"), FontSize = 25, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) });
-        body.Children.Add(Description(preview ? "NativeFrames.Preview" : "NativeFrames.Description"));
+        body.Children.Add(Description(realAppPreview ? "NativeFrames.RealPreview" : preview ? "NativeFrames.Preview" : "NativeFrames.Description"));
         _enabled.Content = L("NativeFrames.Enable"); _enabled.SetResourceReference(StyleProperty, "ToggleSwitch"); _enabled.Margin = new Thickness(0, 16, 0, 0); _enabled.Checked += Toggle; _enabled.Unchecked += Toggle; body.Children.Add(_enabled); body.Children.Add(_status);
         System.Windows.Automation.AutomationProperties.SetAutomationId(_enabled, "NativeFramesEnable");
         System.Windows.Automation.AutomationProperties.SetAutomationId(_entry, "NativeFramesException");
+        _modern.Content = L("NativeFrames.Modern"); _modern.SetResourceReference(StyleProperty,"ToggleSwitch"); _modern.Margin = new Thickness(0,0,0,10);
+        System.Windows.Automation.AutomationProperties.SetAutomationId(_modern,"NativeFramesModern");
+        _modern.Checked += ChangeModern; _modern.Unchecked += ChangeModern;
+        body.Children.Add(_modern); body.Children.Add(Description("NativeFrames.ModernHint"));
         _materials.Content = L("NativeFrames.Materials"); _materials.SetResourceReference(StyleProperty, "ToggleSwitch"); _materials.Margin = new Thickness(0, 0, 0, 10);
         System.Windows.Automation.AutomationProperties.SetAutomationId(_materials, "NativeFramesMaterials");
         _materials.Checked += ChangeMaterials; _materials.Unchecked += ChangeMaterials; body.Children.Add(_materials); body.Children.Add(Description("NativeFrames.MaterialsHint"));
@@ -52,7 +60,10 @@ internal sealed class NativeFramesWindow : VeliShellWindow
         exclude.Click += (_, _) => { if (_windows.SelectedItem is NativeFrameStatus selected) { _save(s => s.NativeFrameExclusions.Add(System.IO.Path.GetFileName(selected.Path))); _controller.Update(_settings, _theme.IsDark); Refresh(); } }; body.Children.Add(exclude);
         body.Children.Add(Description("NativeFrames.Safety"));
         var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; Grid.SetRow(scroll, 1); layout.Children.Add(scroll);
-        var plate = new Border { Child = layout, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) }; plate.SetResourceReference(Border.BackgroundProperty, "WindowBackdropGradient"); plate.SetResourceReference(Border.BorderBrushProperty, "GlassPanelStroke"); RoundedClip.SetRadius(layout, 13); Content = plate;
+        header.SetResourceReference(Panel.BackgroundProperty,"CardSurfaceGradient");
+        // Opaque readable base: text in another window must never bleed through
+        // a settings/diagnostic surface, even at maximum shell transparency.
+        var plate = new Border { Child = layout, CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) }; plate.SetResourceReference(Border.BackgroundProperty, "WindowSurface"); plate.SetResourceReference(Border.BorderBrushProperty, "GlassPanelStroke"); RoundedClip.SetRadius(layout, 13); Content = plate;
         _controller.Changed += Refresh; Closed += (_, _) => _controller.Changed -= Refresh; Loaded += (_, _) => Refresh();
     }
     private static TextBlock Description(string key)
@@ -68,11 +79,26 @@ internal sealed class NativeFramesWindow : VeliShellWindow
             _enabled.IsEnabled = !_busy && NativeFramesController.Supported && !_controller.Restoring;
             _materials.IsChecked = _settings.NativeModernMaterialsEnabled;
             _materials.IsEnabled = !_busy && NativeFramesController.Supported;
+            _modern.IsChecked = _settings.NativeModernFramesEnabled;
+            _modern.IsEnabled = !_busy && NativeFramesController.Supported && !_controller.Restoring;
             _status.Text = L(!NativeFramesController.Supported ? "NativeFrames.Unsupported" : _busy ? "NativeFrames.Starting" : _controller.Status.Stopping ? "NativeFrames.Restoring" : _controller.Active ? "NativeFrames.Active" : "NativeFrames.Off");
             if (_controller.Status.Error is { } error) _status.Text += "\n" + error;
             var selected = _exceptions.SelectedItem as string; _exceptions.ItemsSource = _settings.NativeFrameExclusions.ToArray(); _exceptions.SelectedItem = selected;
-            var selectedWindow = _windows.SelectedItem as NativeFrameStatus; _windows.ItemsSource = _controller.Status.Windows; if (selectedWindow is not null) _windows.SelectedItem = _controller.Status.Windows.FirstOrDefault(row => row.Path == selectedWindow.Path && row.Title == selectedWindow.Title);
+            var selectedWindow = _windows.SelectedItem as NativeFrameStatus;
+            if (!(_windows.ItemsSource is NativeFrameStatus[] previous && previous.SequenceEqual(_controller.Status.Windows))) _windows.ItemsSource = _controller.Status.Windows;
+            if (selectedWindow is not null) _windows.SelectedItem = _controller.Status.Windows.FirstOrDefault(row => row.Window == selectedWindow.Window && row.Pid == selectedWindow.Pid && row.Started == selectedWindow.Started);
         } finally { _syncing = false; }
+    }
+    private async void ChangeModern(object sender,RoutedEventArgs args)
+    {
+        if (_syncing || _busy) return;
+        bool enable = _modern.IsChecked == true; _busy = true; _modern.IsEnabled = false;
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        try {
+            if (enable && MessageBox.Show(this,L("NativeFrames.ModernConsent"),Title,MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes) return;
+            _save(s=> { s.NativeModernFramesEnabled=enable; if(enable)s.NativeModernFramesConsentVersion=1; });
+            _controller.Update(_settings,_theme.IsDark);
+        } finally { _busy=false;Refresh(); }
     }
     private async void ChangeMaterials(object sender, RoutedEventArgs args)
     {

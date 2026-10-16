@@ -624,4 +624,35 @@
    </Trigger>
   </Style.Triggers>
  </Style>
+ <Style x:Key="NativeFramesListItem" TargetType="ListBoxItem">
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="Padding" Value="12,9" />
+  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+   <Border x:Name="ItemBody" CornerRadius="7" Background="Transparent" Padding="{TemplateBinding Padding}" Margin="2,1">
+    <ContentPresenter RecognizesAccessKey="False" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource HoverSurface}" /></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource AccentSoft}" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="NativeFramesList" TargetType="ListBox">
+  <Setter Property="Background" Value="{DynamicResource ControlSurface}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassListStroke}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="ItemContainerStyle" Value="{StaticResource NativeFramesListItem}" />
+  <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+  <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+  <Setter Property="ItemTemplate"><Setter.Value><DataTemplate>
+   <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimary}" />
+  </DataTemplate></Setter.Value></Setter>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBox">
+   <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="3">
+    <ScrollViewer Focusable="False"><ItemsPresenter /></ScrollViewer>
+   </Border>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
 </ResourceDictionary>

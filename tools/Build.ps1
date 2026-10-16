@@ -61,6 +61,7 @@ try {
 
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Desktop.Updater.Tests/VeliShell.Desktop.Updater.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'desktop-updater-tests.log')
+    Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-native-frames-headless') -Log (Join-Path $Out 'native-frames-headless-qa.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release') -Log (Join-Path $Out 'interaction-qa.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--render-start-launcher') -Log (Join-Path $Out 'start-launcher-qa.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--render-folder') -Log (Join-Path $Out 'folder-qa.log')

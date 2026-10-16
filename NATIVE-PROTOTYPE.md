@@ -4,10 +4,16 @@ Ab VeliShell 0.14.0 enthält das normale GitHub-Paket einen freiwilligen nativen
 Adapter für kompatible klassische 64-Bit-Apps. Das Modul ist **standardmäßig aus**.
 Es ersetzt keine Windows-Systemdateien, keine Shell und nicht das Innere fremder Apps.
 
-Der Arbeitsstand **0.14.1-test.1 auf `test`** ergänzt klassische 32-Bit-Apps, WPF
+Der Arbeitsstand **0.14.1-test.2 auf `test`** ergänzt klassische 32-Bit-Apps, WPF
 mit Standardrahmen und einen gemeinsamen Glasrahmen rund um das Fenster. Die folgende
 Anleitung beschreibt diesen Teststand. Die veröffentlichte 0.14.0 gestaltet weiterhin
 nur klassische x64-Titelbereiche; ein lokaler Teststand ist noch kein Kanal-Update.
+
+**Prüfstatus dieses lokalen Stands:** Build, Kerntests und unsichtbare
+DE-/EN-Hell-/Dunkel-Layouttests sind geprüft. Die neuen Explorer-, Paint- und
+Editor-Rahmenadapter sind noch nicht an echten Apps abgenommen. Eine bestandene
+Erkennung oder ein gerendertes VeliShell-Einstellungsfenster ist kein Nachweis
+für deren tatsächliche Titelleisten, Tab-Bedienung oder Wiederherstellung.
 
 ## Aktivieren
 
@@ -51,9 +57,10 @@ App-Inhalts müssen zu einem echten Standardrahmen passen. Für 32-Bit-Ziele sta
 ein kleiner nativer x86-Helfer; der Hauptwächter bleibt x64. Beide Architekturen
 verwenden passende DLLs und dieselben Zustimmungs-, Identitäts- und Rücksetzprüfungen.
 
-Vom vollständigen Rahmenersatz ausgeschlossen bleiben erhöhte Apps, Systemfenster,
-Explorer, Browser, WPF-/WinUI-Sonderrahmen, geschützte Hosts, bekannte Spiel-Fensterklassen
+Vom allgemeinen Rahmenersatz ausgeschlossen bleiben erhöhte Apps, Systemfenster,
+Browser, WPF-/WinUI-Sonderrahmen, geschützte Hosts, bekannte Spiel-Fensterklassen
 sowie Fenster mit eigener Region oder ungeeigneten Fensterstilen.
+Die drei zusätzlichen Microsoft-App-Adapter benötigen die gesonderte Zustimmung unten.
 Das Modul ist experimentell; die Erkennung ersetzt keinen
 Kompatibilitätstest mit deiner konkreten App. Die Aufnahme ist begrenzt und gestaffelt,
 damit viele gleichzeitig geöffnete Fenster nicht auf einmal eingebunden werden.
@@ -79,6 +86,66 @@ bleiben vorhanden. **Alt + Leertaste** bietet das tastaturbedienbare Fenstermen�
 Ein zusätzlicher UI-Automation-Anbieter für die linken nativen Buttons ist noch offen.
 
 ## Explorer, WinUI und eigene Titelleisten
+
+### Zusätzliche Rahmenadapter: Explorer, Paint, Editor
+
+**Glasrahmen für Explorer, Paint und Editor** ist eine neue, getrennte Freigabe.
+Eine frühere Zustimmung zur reinen Farbanpassung schaltet sie nicht ein.
+Die Adapter werden nur für die genaue Microsoft-Paketidentität, den zugehörigen
+EXE-Pfad und die passende Fensterklasse zugelassen; Explorer muss die originale
+`explorer.exe` im Windows-Verzeichnis sein. Es wird gezielt die native DLL in den
+ausgewählten Fenster-Thread geladen, keine globale Einbindung und keine Systemdateiänderung.
+
+Bei Paint wird die vorhandene separate Titelzone ersetzt. Bei Explorer und Editor
+bleibt die eigene Tab-/Suchzeile erhalten: Ein neuer Nicht-Client-Titelbereich wird
+**innerhalb derselben Fenstergrenzen** reserviert und die App erhält eine entsprechend
+kleinere logische Clientfläche. Der App-Inhalt wird nicht lediglich oben abgeschnitten.
+Der vollständige Rollback entfernt die Unterklasse und lässt die ursprüngliche
+Clientberechnung der App wieder arbeiten. Die genaue Wirkung auf konkrete App-Versionen
+muss in der VM geprüft werden; es gibt noch keine visuelle Abnahme dieser Adapter.
+
+Die Kompatibilitätsliste unterscheidet Aktiv, Vorbereiten, Aktivierung fehlgeschlagen,
+Übersprungen und Rücksetzen. Ein aktiver Eintrag ersetzt frühere Fehlversuche desselben
+Fensters. Geschlossene Prozessidentitäten werden entfernt; gleichnamige echte Fenster
+werden durch PID/HWND unterschieden. Fehlercode und Adaptername bleiben sichtbar.
+Ein Adapter aus einem anderen noch geladenen Paket führt zur Aufforderung, die App
+selbst neu zu starten; Explorer kann Ab-/Anmelden erfordern. VeliShell beendet ihn nicht.
+
+### Isolierte Prüfung echter Apps, ohne den Haupt-PC zu übernehmen
+
+1. In der **Windows-VM mit Snapshot** die normale Fenstergestaltung deaktivieren,
+   Rücksetzung abwarten und gegebenenfalls ab-/anmelden, falls ältere native DLLs
+   im Explorer geladen sind. Die VM-Erkennung ist eine Bedienhilfe, keine Sicherheitsgrenze.
+2. Das vollständige lokale Test-ZIP in einen neuen Ordner entpacken. Auf dem Haupt-PC
+   muss nichts installiert oder beendet werden.
+3. In der VM Explorer, Paint und Editor mit ungefährlichen Testinhalten öffnen.
+4. **`VM-APP-CHECK.cmd`** starten. Die Prüfansicht ist im Test-Build auf erkannte
+   virtuelle Maschinen begrenzt. Genau ein echtes Fenster auswählen und die konkrete
+   DLL-Einbindung bestätigen. Sie startet/öffnet/schließt keine fremden Apps, registriert
+   kein globales Notfallkürzel und speichert keine normale Automatikzustimmung.
+5. In der Ziel-App prüfen: bündige Rundungen/Glas, linke Buttons, Tabs/Suche/Menüs,
+   Minimieren/Maximieren/Wiederherstellen und Schließen einer leeren Testinstanz.
+   Hell/Dunkel mit dem Knopf wechseln. Sichtprüfungs-Häkchen sind ausdrücklich
+   Nutzerbeobachtungen, kein automatisches Prüfergebnis.
+6. Nach jeweils neuer Aktivierung **Normal zurücksetzen**, **Unabhängiges Rücksetzsignal**
+   und optional **Wächterausfall prüfen** testen. Letzterer beendet ausschließlich den
+   verifizierten eigenen VeliShell-Helfer, nie die Ziel-App. Der native Heartbeat muss
+   dann den Rückweg auslösen. Zum Geometrievergleich dieselbe Größe, DPI und
+   Maximierungsstufe wie vor der Aktivierung herstellen. Ein geschlossenes/hängendes
+   Ziel oder nicht vergleichbare Geometrie wird nicht als Erfolg gezählt.
+7. **Prüfbericht speichern** wählen. JSON-Berichte liegen lokal unter
+   `%LOCALAPPDATA%\VeliShell-Test\native-vm-checks`. Sie enthalten Versionen,
+   Status-/Fehlercodes, Geometrievergleiche und ausdrücklich manuelle Beobachtungen,
+   aber keine Screenshots, Dokumenttitel, vollständigen Zielpfade oder Zugangsdaten.
+   Es gibt keine automatische Übertragung. Der echte globale Notfall-Hotkey bleibt
+   eine separate manuelle Prüfung des normalen Moduls.
+
+Ein unbekannter Rücksetzstatus bleibt offen. Bei hängender App wartet der unabhängige
+Wächter bzw. die native Rücksetzung weiter. Für einen reproduzierbaren Notfall-Test
+den VM-Snapshot bereithalten. Auch nach erfolgreichem Rücksetzen bleibt die native
+DLL inaktiv im Zielprozess, bis dieser selbst endet.
+
+### Begrenzte Farbanpassung anderer eigener Titelleisten
 
 **Explorer & eigene Titelleisten: native Farbanpassung** ist eine getrennte,
 standardmäßig ausgeschaltete Freigabe. Sie benötigt zusätzlich die Hauptautomatik

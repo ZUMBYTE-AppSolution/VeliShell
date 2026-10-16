@@ -112,6 +112,15 @@ freiwillige native Farbanpassung berücksichtigt außerdem geeignete Explorer- u
 App-Fenster mit eigener Titelleiste, ohne Tabs oder Suchfelder zu verdecken. Diese
 begrenzte Anpassung verschiebt keine app-eigenen Buttons und ersetzt nicht deren
 Oberfläche. Die Kompatibilitätsanzeige erklärt, warum ein Fenster übersprungen wird.
+Der lokale Stand **0.14.1-test.2** enthält zusätzlich erste, separat freizugebende
+Adapter für Explorer, Paint und Editor sowie eine bereinigte Kompatibilitätsanzeige.
+Bei eigenen Tab-/Suchzeilen wird die neue Titelleiste innerhalb der Fenstergrenzen
+reserviert, statt Bedienelemente zu überdecken. **Diese Adapter sind noch nicht
+an echten Apps abgenommen.** `VM-APP-CHECK.cmd` öffnet im Testpaket eine isolierte,
+benutzerbediente VM-Prüfung mit einem exakt ausgewählten echten Fenster,
+lokalem Bericht und Rücksetz-/Wächterausfall-Prüfung. Sie startet keine Apps,
+übernimmt keine Maus/Tastatur und verändert keine gespeicherten Einstellungen.
+
 Diese Ergänzungen sind erst nach einer gesonderten Testveröffentlichung über den
 Update-Kanal erhältlich; der Branch allein ändert keine installierte Version.
 

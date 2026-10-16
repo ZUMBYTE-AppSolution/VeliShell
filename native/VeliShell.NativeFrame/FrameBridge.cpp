@@ -11,6 +11,7 @@ extern "C" __declspec(dllimport) void* __cdecl VeliClassicBegin(HWND,const wchar
 extern "C" __declspec(dllimport) int __cdecl VeliClassicPoll(void*,int);
 extern "C" __declspec(dllimport) int __cdecl VeliClassicEnd(void*);
 extern "C" __declspec(dllimport) int __cdecl VeliClassicError(void*);
+extern "C" __declspec(dllimport) int __cdecl VeliClassicBeginError();
 extern "C" __declspec(dllimport) void __cdecl VeliClassicConfigure(void*,int,int,int,DWORD);
 extern "C" __declspec(dllimport) int __cdecl VeliMaterialEligible(HWND);
 
@@ -69,6 +70,7 @@ bool Material(Control* c,HWND window) {
         if(SUCCEEDED(DwmSetWindowAttribute(window,Attributes[i],&values[i],sizeof(DWORD))))applied=true;
         else c->attributes[i].applied=current;
     }
+    if(!applied)c->error=33;
     return applied;
 }
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int) {
@@ -98,7 +100,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int) {
             if(material && !Material(c,window))stopping=true;
         }
     }
-    if(!lease && !material) { c->error=static_cast<LONG>(GetLastError()); InterlockedExchange(&c->state,-1); }
+    if(!lease && !material) { c->error=!valid?30:c->mode==0?VeliClassicBeginError():31; InterlockedExchange(&c->state,-1); }
     else {
         auto lastDark=c->dark,lastGloss=c->gloss; DWORD lastTint=c->tint;
         ULONGLONG start=GetTickCount64();

@@ -17,6 +17,18 @@ internal static class NativePrototypeMethods
     [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     internal static extern int VeliMaterialEligible(nint window);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliModernKind(nint window);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliModernReason(nint window);
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern int VeliClassicBeginError();
+    [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
+    internal static extern nint VeliModernBegin(nint window, string session, uint expectedPid, ulong expectedStart, int dark, int gloss, int transparency, uint tint);
     [DllImport("VeliShell.NativeFrame.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     internal static extern nint VeliClassicBegin(nint window, string session, uint expectedPid, ulong expectedStart, int dark, int gloss, int transparency, uint tint);
@@ -54,4 +66,5 @@ internal static class NativePrototypeMethods
     [DllImport("user32.dll")] internal static extern bool PostMessage(nint window, uint message, nuint wp, nint lp);
     [DllImport("user32.dll")] internal static extern bool GetClientRect(nint window, out NativeMethods.Rect rect);
     [DllImport("user32.dll")] internal static extern bool ClientToScreen(nint window, ref NativeMethods.Point point);
+    [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint window);
 }

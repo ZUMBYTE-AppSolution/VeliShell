@@ -12,7 +12,7 @@ namespace VeliShell.Desktop.Services;
 internal static class NativeFramesGuard
 {
     private sealed record Binding(ClassicFrameSession.Candidate App, Guid Id, NativeFrameLease Lease, Stopwatch Age)
-    { internal bool Stopping, Loaded, ExclusionRestore, MaterialOptOut; }
+    { internal bool Stopping, Loaded, ExclusionRestore, MaterialOptOut, TimedOut; internal int State; }
     internal static void Run(string[] args, App app)
     {
         app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -22,6 +22,8 @@ internal static class NativeFramesGuard
         var configPath = NativeFramesController.FileFor(id, "json");
         var config = NativeFramesController.Read<NativeFramesConfig>(configPath);
         if (config is null || !config.Enabled) { app.Shutdown(2); return; }
+        var targets = config.Targets ?? [];
+        if (targets.Length > 8 || targets.Length > 0 && (!config.Preview || !BuildIdentity.IsTest)) { app.Shutdown(2); return; }
         using var single = new Mutex(true, @"Local\VeliShell.NativeWindows.Guard" + (config.Preview ? ".Preview" : ""), out var created);
         if (!created) { app.Shutdown(3); return; }
         Directory.CreateDirectory(NativeFramesController.Folder);
@@ -40,7 +42,7 @@ internal static class NativeFramesGuard
         Directory.CreateDirectory(NativeFramesController.Folder); File.WriteAllText(session, pid.ToString());
         var bindings = new Dictionary<nint, Binding>();
         var attempted = new HashSet<(nint Window, int Pid, long Started)>();
-        var failures = new List<NativeFrameStatus>();
+        var failures = new Dictionary<nint, NativeFrameStatus>();
         var skipped = new Dictionary<nint, NativeFrameStatus>();
         bool stopping = false, ticking = false; string? lastError = null;
         var scan = Stopwatch.StartNew();
@@ -50,13 +52,21 @@ internal static class NativeFramesGuard
         var ownHash = config.Preview ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Environment.ProcessPath!))) : "";
         bool Excluded(string path) => config.Exclusions.Take(128).Any(entry => string.Equals(entry, path, StringComparison.OrdinalIgnoreCase) || string.Equals(entry, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase));
         bool PreviewAdmits(ClassicFrameSession.Candidate candidate) => !config.Preview ||
+            (targets.Length > 0 ? candidate.Adapter > 0 && targets.Contains(new(candidate.Window.ToInt64(),candidate.Pid,candidate.Started)) :
             string.Equals(Path.GetDirectoryName(candidate.Path), AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) &&
             (Path.GetFileName(candidate.Path).StartsWith("VeliShell.ClassicSample", StringComparison.OrdinalIgnoreCase) && fixtureHashes.Contains(candidate.Hash) ||
-                string.Equals(candidate.Path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && candidate.Hash == ownHash && NativePrototypeMethods.GetProp(candidate.Window,"VeliShell.WpfSample") == 1);
+                string.Equals(candidate.Path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase) && candidate.Hash == ownHash && NativePrototypeMethods.GetProp(candidate.Window,"VeliShell.WpfSample") == 1));
+        NativeFrameStatus Row(ClassicFrameSession.Candidate candidate, string state, string? reason = null, int error = 0) {
+            var title=new System.Text.StringBuilder(512); NativeMethods.GetWindowText(candidate.Window,title,title.Capacity);
+            return new(title.Length>0?title.ToString():candidate.Title,candidate.Path,state,reason,candidate.Window.ToInt64(),candidate.Pid,candidate.Started,candidate.Adapter,error);
+        }
         void SaveStatus()
         {
-            var rows = bindings.Values.Select(b => new NativeFrameStatus(b.App.Title, b.App.Path, b.Stopping ? "Restoring" : b.App.Material ? "Material" : NativePrototypeMethods.GetProp(b.App.Window, "VeliShell.ClassicFrame.Glass") == 1 ? "Active" : "Pending"));
-            NativeFramesController.Write(NativeFramesController.FileFor(id, "status"), new NativeFramesStatus(!stopping, stopping, rows.Concat(failures.TakeLast(12)).Concat(skipped.Values.Take(32)).Take(100).ToArray(), lastError));
+            // One current row per HWND/identity; old failures never override a
+            // live binding. Closed/reused handles disappear rather than linger.
+            var rows = bindings.Values.Select(b => Row(b.App,b.Stopping ? "Restoring" : b.State != 1 ? "Pending" : b.App.Material ? "Material" : NativePrototypeMethods.GetProp(b.App.Window,"VeliShell.ClassicFrame.Glass")==1 ? "Active" : "Pending"));
+            var current=NativeFrameStatusSnapshot.Merge(rows,failures.Values,skipped.Values.Take(32),SameWindow);
+            NativeFramesController.Write(NativeFramesController.FileFor(id,"status"),new NativeFramesStatus(!stopping,stopping,current,lastError));
         }
         void Stop(bool emergency = true)
         {
@@ -70,7 +80,7 @@ internal static class NativeFramesGuard
             try
             {
                 var next = NativeFramesController.Read<NativeFramesConfig>(configPath);
-                if (next is null || next.Preview != config.Preview || next.Exclusions is null || next.Exclusions.Length > 128) Stop();
+                if (next is null || next.Preview != config.Preview || next.Exclusions is null || next.Exclusions.Length > 128 || !(next.Targets ?? []).SequenceEqual(targets)) Stop();
                 else config = next;
                 if (!config.Enabled) Stop(emergency: false);
                 else if (owner.HasExited || recovery.WaitOne(0)) Stop();
@@ -79,53 +89,69 @@ internal static class NativeFramesGuard
                 {
                     var binding = pair.Value;
                     binding.ExclusionRestore |= Excluded(binding.App.Path);
-                    binding.MaterialOptOut |= binding.App.Material && !config.ModernMaterials;
-                    binding.Stopping |= stopping || Excluded(binding.App.Path) || binding.App.Material && !config.ModernMaterials ||
+                    binding.MaterialOptOut |= binding.App.Material && (!config.ModernMaterials || config.ModernFrames && NativePrototypeMethods.VeliModernReason(binding.App.Window) is 0 or 100) || binding.App.Adapter != 0 && !config.ModernFrames;
+                    binding.Stopping |= stopping || Excluded(binding.App.Path) || binding.MaterialOptOut ||
                         !binding.App.Material && binding.Age.Elapsed > TimeSpan.FromSeconds(5) && NativePrototypeMethods.GetProp(binding.App.Window, NativePrototypeMethods.ClassicActive) == 0;
                     binding.Lease.Configure(config);
                     var state = binding.Lease.Poll(binding.Stopping);
+                    binding.State = state;
                     if (binding.Lease.Faulted) { lastError = "Compatibility helper exited; recovery requested."; Stop(); }
-                    if (state is 0 or 4 && binding.Age.Elapsed > TimeSpan.FromSeconds(5)) binding.Stopping = true;
+                    if (state is 0 or 4 && binding.Age.Elapsed > TimeSpan.FromSeconds(5) && !binding.Stopping) { binding.TimedOut=true; binding.Stopping=true; }
                     if (state == 1 && !binding.Loaded && !binding.App.Material) {
                         binding.Loaded = true;
                         NativeFramesController.Write(NativeFramesController.FileFor(binding.Id, "loaded"), new NativeFrameLoaded(binding.App.Pid, binding.App.Started, binding.App.Path));
                     }
                     if (state is 2 or 3 or -1 || !NativeMethods.IsWindow(binding.App.Window)) {
                         if (state == 2 && !binding.Stopping && binding.Lease.Error != 0) lastError = "Native adapter restored itself: " + binding.Lease.Error;
-                        if (state == -1) { failures.Add(new(binding.App.Title, binding.App.Path, "Failed")); if (binding.Lease.Error != 0) lastError = "Native adapter: " + binding.Lease.Error; }
+                        if (state == -1 || state == 2 && !stopping && !binding.ExclusionRestore && !binding.MaterialOptOut)
+                            failures[pair.Key]=Row(binding.App,"Failed",binding.TimedOut?"Timeout":"Activation",binding.Lease.Error);
                         if (binding.Lease.End()) { bindings.Remove(pair.Key); if (state == 3 || binding.ExclusionRestore || binding.MaterialOptOut) attempted.Remove((pair.Key, binding.App.Pid, binding.App.Started)); File.Delete(NativeFramesController.FileFor(binding.Id, "admission")); }
-                    } else if (state == 0 && binding.Stopping && binding.Lease.End()) bindings.Remove(pair.Key);
+                    } else if (state == 0 && binding.Stopping && binding.Lease.End()) {
+                        if(binding.TimedOut)failures[pair.Key]=Row(binding.App,"Failed","Timeout",binding.Lease.Error);
+                        bindings.Remove(pair.Key); File.Delete(NativeFramesController.FileFor(binding.Id,"admission"));
+                    }
                 }
                 if (stopping) { SaveStatus(); if (bindings.Count == 0) app.Shutdown(); return; }
                 if (scan.Elapsed < TimeSpan.FromMilliseconds(500)) return;
                 scan.Restart(); SaveStatus();
-                if (failures.Count > 64) failures.RemoveRange(0, failures.Count - 64);
+                foreach (var key in failures.Keys.Where(key=>!SameWindow(failures[key])).ToArray()) failures.Remove(key);
                 if (bindings.Count >= 64) { lastError = "WindowLimit"; return; }
                 var handles = new List<nint>(); NativeMethods.EnumWindows((window, _) => { handles.Add(window); return true; }, 0);
                 skipped.Clear();
                 foreach (var window in handles.Take(512))
                 {
+                    if (targets.Length > 0 && !targets.Any(t=>t.Window==window.ToInt64())) continue;
                     if (bindings.ContainsKey(window) || NativePrototypeMethods.GetProp(window, NativePrototypeMethods.ClassicActive) != 0) continue;
                     var reason = NativePrototypeMethods.VeliClassicReason(window, 1);
-                    bool material = reason is not (0 or 100) && config.ModernMaterials && NativePrototypeMethods.VeliMaterialEligible(window) == 1;
-                    var candidate = ClassicFrameSession.Inspect(window, includeHash: false, crossBitness: true, material: material);
-                    if (candidate is null) { if (!config.Preview) RememberSkipped(window, reason, skipped); continue; }
+                    int modernReason = config.ModernFrames ? NativePrototypeMethods.VeliModernReason(window) : 11;
+                    bool modern = config.ModernFrames && modernReason is 0 or 100;
+                    bool material = !modern && reason is not (0 or 100) && config.ModernMaterials && NativePrototypeMethods.VeliMaterialEligible(window) == 1;
+                    var candidate = ClassicFrameSession.Inspect(window, includeHash: false, crossBitness: true, material: material, modern: modern);
+                    if (candidate is null) {
+                        if (!config.Preview || targets.Length>0) RememberSkipped(window,config.ModernFrames && NativePrototypeMethods.VeliModernKind(window)>0?modernReason:reason,skipped);
+                        continue;
+                    }
                     if (string.Equals(Path.GetFileName(candidate.Path),"VeliShell.exe",StringComparison.OrdinalIgnoreCase) &&
                         (NativePrototypeMethods.GetProp(window,"VeliShell.WpfSample")!=1 || !string.Equals(candidate.Path,Environment.ProcessPath,StringComparison.OrdinalIgnoreCase))) continue;
                     if (!config.Preview && Path.GetFileName(candidate.Path).StartsWith("VeliShell.ClassicSample",StringComparison.OrdinalIgnoreCase) &&
                         !string.Equals(Path.GetDirectoryName(candidate.Path),AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase)) continue;
-                    if (Excluded(candidate.Path)) { skipped[window] = new(candidate.Title, candidate.Path, "Skipped", "Excluded"); continue; }
+                    if (Excluded(candidate.Path)) { skipped[window] = Row(candidate,"Skipped","Excluded"); continue; }
                     if (attempted.Contains((window, candidate.Pid, candidate.Started))) continue;
-                    candidate = ClassicFrameSession.Inspect(window, crossBitness: true, material: material);
+                    candidate = ClassicFrameSession.Inspect(window, crossBitness: true, material: material, modern: modern);
                     if (candidate is null || !PreviewAdmits(candidate) || Excluded(candidate.Path)) continue;
+                    try {
+                        if(!candidate.Material && ClassicFrameSession.HasOtherAdapterVersion(candidate)) { skipped[window]=Row(candidate,"Skipped","RestartApp");continue; }
+                    } catch(Exception error) when(error is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException) {
+                        skipped[window]=Row(candidate,"Skipped","Permission");continue;
+                    }
                     var sessionId = Guid.NewGuid();
                     // Identity record precedes target changes. No HWND/process pointer is loaded from a file.
                     NativeFramesController.Write(NativeFramesController.FileFor(sessionId, "admission"), new { candidate.Pid, candidate.Started, candidate.Path, candidate.Hash, Hwnd = window.ToInt64() });
                     if (!material) NativeFramesController.Write(NativeFramesController.FileFor(sessionId, "loaded"), new NativeFrameLoaded(candidate.Pid, candidate.Started, candidate.Path));
                     attempted.Add((window, candidate.Pid, candidate.Started));
-                    var lease = NativeFrameLease.Begin(candidate, sessionId, config);
-                    if (lease is null) { File.Delete(NativeFramesController.FileFor(sessionId, "loaded")); failures.Add(new(candidate.Title, candidate.Path, "Failed")); }
-                    else bindings.Add(window, new(candidate, sessionId, lease, Stopwatch.StartNew()) { Loaded = !material });
+                    var lease = NativeFrameLease.Begin(candidate, sessionId, config, out var beginError);
+                    if (lease is null) { File.Delete(NativeFramesController.FileFor(sessionId, "loaded")); File.Delete(NativeFramesController.FileFor(sessionId,"admission")); failures[window] = Row(candidate,"Failed","Activation",beginError); }
+                    else { failures.Remove(window); bindings.Add(window, new(candidate, sessionId, lease, Stopwatch.StartNew()) { Loaded = !material }); }
                     break; // At most one bounded, thread-specific admission per scan.
                 }
                 if (attempted.Count > 512) {
@@ -146,6 +172,14 @@ internal static class NativeFramesGuard
             File.Delete(session);
         }
     }
+    private static bool SameWindow(NativeFrameStatus row)
+    {
+        if (!NativeMethods.IsWindow((nint)row.Window)) return false;
+        NativeMethods.GetWindowThreadProcessId((nint)row.Window,out var pid);
+        if (pid != row.Pid) return false;
+        try { using var process=Process.GetProcessById(row.Pid); return process.StartTime.ToUniversalTime().ToFileTimeUtc()==row.Started; }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
+    }
     private static void RememberSkipped(nint window, int reason, Dictionary<nint, NativeFrameStatus> skipped)
     {
         if (reason == 2 || skipped.Count >= 32) return;
@@ -156,7 +190,7 @@ internal static class NativeFramesGuard
             var path = process.MainModule?.FileName;
             if (path is null || string.Equals(path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)) return;
             var key = reason switch { 1 => "HighContrast", 3 => "Style", 4 => "Region", 5 => "Protected", 6 or 10 => "Custom", 7 => "Permission", 8 => "Architecture", 9 => "System", _ => "Unknown" };
-            skipped[window] = new(text.ToString(), path, "Skipped", key);
+            skipped[window] = new(text.ToString(), path, "Skipped", key,window.ToInt64(),(int)pid,process.StartTime.ToUniversalTime().ToFileTimeUtc());
         } catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
     }
 }
