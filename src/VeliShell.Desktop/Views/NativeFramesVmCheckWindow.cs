@@ -29,7 +29,7 @@ internal sealed class NativeFramesVmCheckWindow : VeliShellWindow
     private string _run="";
     private readonly string _report;
     private static string L(string key)=>LocalizationService.Current.Get("VmCheck."+key);
-    private sealed record Geometry(int Width,int Height,int ClientWidth,int ClientHeight,int InsetX,int InsetY,int Dpi,bool Maximized,int[] Dwm);
+    private sealed record Geometry(int Width,int Height,int ClientWidth,int ClientHeight,int InsetX,int InsetY,int Dpi,bool Maximized,int RegionKind,int[] Dwm);
     internal static bool IsVirtualMachine()
     {
         try {
@@ -41,6 +41,7 @@ internal sealed class NativeFramesVmCheckWindow : VeliShellWindow
     internal NativeFramesVmCheckWindow(ThemeService theme)
     {
         _theme=theme; Title=L("Title"); Width=860; Height=810; MinWidth=700; MinHeight=590;
+        MaxHeight=Math.Max(MinHeight,SystemParameters.WorkArea.Height);
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
         _report=Path.Combine(App.DataDirectory,"native-vm-checks",DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]+".json");
         var layout=new Grid(); layout.RowDefinitions.Add(new RowDefinition { Height=new GridLength(50) });layout.RowDefinitions.Add(new RowDefinition());
@@ -148,8 +149,9 @@ internal sealed class NativeFramesVmCheckWindow : VeliShellWindow
             bool sameSize=after is not null && after.Width==_before.Width && after.Height==_before.Height && after.Dpi==_before.Dpi && after.Maximized==_before.Maximized;
             bool? geometryMatches=sameSize?after!.ClientWidth==_before.ClientWidth && after.ClientHeight==_before.ClientHeight && after.InsetX==_before.InsetX && after.InsetY==_before.InsetY:null;
             bool? dwmMatches=after is not null?after.Dwm.SequenceEqual(_before.Dwm):null;
-            bool passed=_wasActive && nativeRestored && geometryMatches==true && dwmMatches==true && !controller.Active && !controller.Restoring;
-            Record(kind+"-result",new { RollbackComparisonPassed=passed,ActivationWasConfirmed=_wasActive,TargetStillExists=exists,NativeRestored=nativeRestored,GeometryMatches=geometryMatches,DwmMatches=dwmMatches,Geometry=after,
+            bool? regionMatches=after is not null?after.RegionKind==_before.RegionKind:null;
+            bool passed=_wasActive && nativeRestored && geometryMatches==true && dwmMatches==true && regionMatches==true && !controller.Active && !controller.Restoring;
+            Record(kind+"-result",new { RollbackComparisonPassed=passed,ActivationWasConfirmed=_wasActive,TargetStillExists=exists,NativeRestored=nativeRestored,GeometryMatches=geometryMatches,DwmMatches=dwmMatches,RegionMatches=regionMatches,Geometry=after,
                 UserObservations=new { GlassAndLeftButtons=_visual.IsChecked==true,TabsAndMenusUsable=_tabs.IsChecked==true,WindowButtonsUsable=_buttons.IsChecked==true } });
             _status.Text=L(passed?"Restored":"PendingOrMismatch");
         } catch(Exception error) { Record(kind+"-error",new { Type=error.GetType().Name,error.HResult });_status.Text=L("Failed")+" · "+error.GetType().Name; }
@@ -167,7 +169,9 @@ internal sealed class NativeFramesVmCheckWindow : VeliShellWindow
         NativeMethods.GetWindowRect(window,out var bounds);NativePrototypeMethods.GetClientRect(window,out var client);
         var origin=new NativeMethods.Point();NativePrototypeMethods.ClientToScreen(window,ref origin);
         int[] attributes=[1,20,33];var values=attributes.Select(attribute=>NativeMethods.DwmGetWindowAttribute(window,attribute,out var value,4)>=0?value:int.MinValue).ToArray();
-        return new(bounds.Right-bounds.Left,bounds.Bottom-bounds.Top,client.Right,client.Bottom,origin.X-bounds.Left,origin.Y-bounds.Top,(int)NativePrototypeMethods.GetDpiForWindow(window),NativeMethods.IsZoomed(window),values);
+        nint region=NativePrototypeMethods.CreateRectRgn(0,0,0,0);if(region==0)throw new InvalidOperationException("RegionSnapshotFailed");
+        int regionKind;try { regionKind=NativePrototypeMethods.GetWindowRgn(window,region); }finally { NativeMethods.DeleteObject(region); }
+        return new(bounds.Right-bounds.Left,bounds.Bottom-bounds.Top,client.Right,client.Bottom,origin.X-bounds.Left,origin.Y-bounds.Top,(int)NativePrototypeMethods.GetDpiForWindow(window),NativeMethods.IsZoomed(window),regionKind,values);
     }
     private void Record(string stage,object detail) { if(_events.Count<128)_events.Add(new { AtUtc=DateTime.UtcNow,Run=_run,Stage=stage,Detail=detail });SaveReport(); }
     private void SaveReport()

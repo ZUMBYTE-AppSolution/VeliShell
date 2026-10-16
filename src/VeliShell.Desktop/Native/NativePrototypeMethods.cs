@@ -67,4 +67,6 @@ internal static class NativePrototypeMethods
     [DllImport("user32.dll")] internal static extern bool GetClientRect(nint window, out NativeMethods.Rect rect);
     [DllImport("user32.dll")] internal static extern bool ClientToScreen(nint window, ref NativeMethods.Point point);
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint window);
+    [DllImport("gdi32.dll")] internal static extern nint CreateRectRgn(int left,int top,int right,int bottom);
+    [DllImport("user32.dll")] internal static extern int GetWindowRgn(nint window,nint region);
 }
