@@ -26,7 +26,9 @@ internal sealed record AppStoreIconSearchHit(
     Uri? ArtworkUrl,
     Uri StoreUrl,
     string Provider = "appstore",
-    Uri? CreditUrl = null);
+    Uri? CreditUrl = null,
+    string? LicenseName = null,
+    Uri? LicenseUrl = null);
 
 internal sealed record AppStoreIconDownloadResult(
     IconReference? Icon,

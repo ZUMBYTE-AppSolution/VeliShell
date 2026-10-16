@@ -54,6 +54,32 @@ zur Verfügung.
 - Apple-Bedingungen für Promo-Inhalte: <https://www.apple.com/legal/internet-services/itunes/>
 - Apple Design Resources License: <https://developer.apple.com/support/downloads/terms/apple-design-resources/Apple-Design-Resources-License-20230621-English.pdf>
 
+## Wikipedia und Wikimedia Commons
+
+Die freiwillige Online-Symbolsuche durchsucht zusätzlich die englische Wikipedia,
+bei deutscher App-Sprache auch die deutsche Wikipedia, sowie zugehörige Logos in
+Wikimedia Commons. Suchbegriffe werden an `en.wikipedia.org`, `de.wikipedia.org`
+und `commons.wikimedia.org` übertragen; PNG-Vorschauen kommen von
+`upload.wikimedia.org` oder `thumb.wikimedia.org`. Dafür wird kein API-Schlüssel
+benötigt. Eine frühere Online-Freigabe muss für diesen zusätzlichen Empfänger
+einmal erneuert werden. Ohne Suche entstehen keine Wikipedia-Netzwerkanfragen.
+
+VeliShell bietet nur Logo-Dateien mit unterstützten, in den Commons-Metadaten
+ausgewiesenen freien Lizenzen oder Gemeinfreiheit an. Fair-Use-Dateien sowie
+nichtkommerzielle und nicht bearbeitbare CC-Varianten werden nicht angeboten.
+Die Auswahl zeigt Urheber, Lizenz, Quelldatei und Wikipedia-Artikel; eine
+vorhandene Lizenz-URL ist direkt erreichbar. Diese Metadaten sind keine Garantie
+für die Rechtefreiheit. Lizenzpflichten und mögliche Markenrechte sind bei der
+Verwendung weiterhin zu beachten.
+
+Nur ein ausdrücklich ausgewähltes Bild wird zusammen mit Quellen-, Urheber- und
+Lizenzangaben lokal gespeichert, begrenzt auf 30 Tage, 64 Einträge und 64 MiB.
+Ein Katalog oder Wikimedia-Bilder werden nicht mit VeliShell ausgeliefert.
+
+- API: <https://www.mediawiki.org/wiki/API:Imageinfo>
+- Metadaten: <https://www.mediawiki.org/wiki/Extension:CommonsMetadata>
+- Wiederverwendung: <https://commons.wikimedia.org/wiki/Commons:Reusing_content_outside_Wikimedia>
+
 ## macOSicons.com und optionales Masking
 
 Mit einem eigenen, im Windows-Anmeldeinformationsmanager gespeicherten API-Schlüssel
@@ -63,7 +89,7 @@ Urheberangaben bleiben bei den Treffern und übernommenen Symbolen sichtbar.
 Ausgewählte Katalogbilder werden höchstens 30 Tage lokal vorgehalten. Schon mit einer
 älteren VeliShell-Version heruntergeladene Bilder bleiben über den alten Cache lesbar.
 
-Wenn beide Suchen keinen Treffer liefern, kann der Nutzer das vorhandene Windows-
+Wenn keine der Suchen einen Treffer liefert, kann der Nutzer das vorhandene Windows-
 App-Symbol nach einer **gesonderten Bestätigung** an die Editor-Masking-API senden.
 Ohne diese Bestätigung findet kein Bild-Upload statt. Für Ordner und Papierkorb wird
 kein App-Masking angeboten. Nutzer müssen die Rechte am Ausgangsbild beachten.

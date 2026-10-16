@@ -543,10 +543,24 @@ public partial class PreferencesWindow : VeliShellWindow
                         return Array.Empty<AppStoreIconSearchHit>();
                     }
                 }).ToArray();
-            var hits = (await Task.WhenAll(searches.Concat(macSearches)))
+            var wikipediaSearches = queries.Take(4).Select(async query =>
+            {
+                try { return await WikipediaIconService.SearchAsync(query); }
+                catch (Exception exception) when (exception is HttpRequestException or IOException or
+                    OperationCanceledException or System.Text.Json.JsonException or ArgumentException)
+                {
+                    App.Log("Wikipedia icon search is unavailable", exception);
+                    searchErrors.Enqueue(exception);
+                    return Array.Empty<AppStoreIconSearchHit>();
+                }
+            });
+            var hits = (await Task.WhenAll(searches.Concat(macSearches).Concat(wikipediaSearches)))
                 .SelectMany(result => result)
                 .DistinctBy(hit => hit.Provider + ":" + hit.PreviewUrl.AbsoluteUri,
-                    StringComparer.Ordinal).Take(40).ToArray();
+                    StringComparer.Ordinal)
+                .GroupBy(hit => hit.Provider)
+                .SelectMany(group => group.Take(group.Key == WikipediaIconService.Provider ? 8 : 16))
+                .Take(40).ToArray();
             if (hits.Length == 0)
             {
                 if (!searchErrors.IsEmpty)
@@ -581,14 +595,12 @@ public partial class PreferencesWindow : VeliShellWindow
                 }
             }
             var picker = new IconPickerWindow(
-                displayName, string.Join(" · ", queries), hits, allowSkip) { Owner = this };
+                displayName, string.Join(" · ", queries), hits, allowSkip, partialResults: !searchErrors.IsEmpty) { Owner = this };
             if (picker.ShowDialog() != true || picker.SelectedHit is null)
                 return picker.Skipped ? IconChoiceResult.Skipped : IconChoiceResult.Canceled;
 
             OnlineIconStatus.Text = L("Apps.DownloadingSelection");
-            var download = picker.SelectedHit.Provider == MacOsIconsApiService.Provider
-                ? await MacOsIconsApiService.DownloadAsync(picker.SelectedHit)
-                : await AppStoreIconService.DownloadAsync(picker.SelectedHit);
+            var download = await OnlineIconService.DownloadAsync(picker.SelectedHit);
             if (download.Icon is null)
             {
                 OnlineIconStatus.Text = download.Error ?? L("ItunesSearch.UnsafeImage");

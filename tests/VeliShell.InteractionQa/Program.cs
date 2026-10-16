@@ -65,6 +65,9 @@ internal static class Program
         });
         if (args.Contains("--render-shell-panels", StringComparer.OrdinalIgnoreCase))
             return RenderShellPanels(application);
+        // Explicit network probe, never part of the deterministic default suite.
+        if (args.Contains("--verify-wikipedia-icons", StringComparer.OrdinalIgnoreCase))
+            return VerifyWikipediaIcons(application);
 
         var anchor = new Border
         {
@@ -2920,6 +2923,84 @@ internal static class Program
                 "Leaving the menu bar collapsed the tray before the delayed animation.");
         }
         finally { timer.Stop(); }
+    }
+
+    private static int VerifyWikipediaIcons(Application application)
+    {
+        try
+        {
+            LocalizationService.Current.Apply(UiLanguage.German);
+            var provider = RequireType("VeliShell.Desktop.Services.WikipediaIconService");
+            var hits = new List<object>();
+            foreach (var query in new[] { "Spotify", "Microsoft Edge", "VLC media player" })
+            {
+                var search = (Task)RequireMethod(provider, "SearchAsync").Invoke(null, [query, CancellationToken.None])!;
+                var results = ((IEnumerable)Complete(search)).Cast<object>().ToArray();
+                Require(results.Length > 0, $"No usable Wikipedia logo found for {query}.");
+                foreach (var result in results)
+                    Console.WriteLine("  " + result.GetType().GetProperty("CreditUrl")!.GetValue(result));
+                var preview = (BitmapSource?)Complete((Task)RequireMethod(provider, "LoadPreviewAsync")
+                    .Invoke(null, [results[0], CancellationToken.None])!);
+                Require(preview is { IsFrozen: true, PixelWidth: > 0 }, $"Wikipedia preview failed for {query}.");
+                hits.Add(results[0]);
+                Console.WriteLine($"PASS: {query}: {results.Length} licensed logo(s), preview {preview!.PixelWidth}x{preview.PixelHeight}.");
+            }
+
+            var download = Complete((Task)RequireMethod(provider, "DownloadAsync")
+                .Invoke(null, [hits[0], CancellationToken.None])!);
+            var reference = download.GetType().GetProperty("Icon")!.GetValue(download) as IconReference;
+            Require(reference is not null, "Selected Wikipedia logo could not be saved.");
+            // Discard memory entry to exercise persisted PNG, hash and attribution validation.
+            var images = provider.GetField("Images", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+            images.GetType().GetMethod("Clear")!.Invoke(images, null);
+            var online = RequireType("VeliShell.Desktop.Services.OnlineIconService");
+            Require(RequireMethod(online, "TryLoad").Invoke(null, [reference]) is BitmapSource &&
+                RequireMethod(online, "TryGetAttribution").Invoke(null, [reference]) is not null,
+                "Saved Wikipedia icon/attribution did not survive disk reload.");
+            Require(RequireMethod(online, "TryLoad").Invoke(null,
+                [reference! with { ContentSha256 = new string('0', 64) }]) is null,
+                "Tampered Wikipedia icon hash was accepted.");
+            Console.WriteLine("PASS: Selected logo saved and reloaded with source/license; tampered hash rejected. User settings unchanged.");
+
+            var output = Path.Combine(AppContext.BaseDirectory, "wikipedia-icon-renders");
+            Directory.CreateDirectory(output);
+            var hitType = hits[0].GetType();
+            var resultArray = Array.CreateInstance(hitType, hits.Count);
+            for (var i = 0; i < hits.Count; i++) resultArray.SetValue(hits[i], i);
+            var pickerType = RequireType("VeliShell.Desktop.Views.IconPickerWindow");
+            foreach (var dark in new[] { false, true })
+            {
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri($"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                var picker = (Window)Activator.CreateInstance(pickerType, BindingFlags.Instance | BindingFlags.NonPublic,
+                    null, ["Spotify", "Spotify · Microsoft Edge · VLC media player", resultArray, true, false], null)!;
+                foreach (var entry in (IEnumerable)RequireField(pickerType, "_previews").GetValue(picker)!)
+                {
+                    var hit = entry.GetType().GetField("Item1")!.GetValue(entry)!;
+                    var image = (Image)entry.GetType().GetField("Item2")!.GetValue(entry)!;
+                    image.Source = (BitmapSource?)Complete((Task)RequireMethod(provider, "LoadPreviewAsync")
+                        .Invoke(null, [hit, CancellationToken.None])!);
+                }
+                var resultsPanel = (StackPanel)RequireField(pickerType, "ResultsPanel").GetValue(picker)!;
+                resultsPanel.Children.OfType<RadioButton>().First().IsChecked = true;
+                Require(ReferenceEquals(RequireProperty(pickerType, "SelectedHit").GetValue(picker), hits[0]) &&
+                    ((Button)RequireField(pickerType, "ApplyButton").GetValue(picker)!).IsEnabled,
+                    "Selecting a Wikipedia result did not enable Apply.");
+                RenderShellPanel(picker, Path.Combine(output, $"wikipedia-{(dark ? "dark" : "light")}.png"), dark, validateText: true);
+            }
+            Console.WriteLine($"PASS: Wikipedia picker Light/Dark rendered to {output}");
+            return 0;
+        }
+        catch (Exception exception) { Console.Error.WriteLine(exception); return 1; }
+        finally { application.Shutdown(); }
+
+        static object Complete(Task task)
+        {
+            task.GetAwaiter().GetResult();
+            return task.GetType().GetProperty("Result")!.GetValue(task)!;
+        }
     }
 
     private static int RenderShellPanels(Application application)

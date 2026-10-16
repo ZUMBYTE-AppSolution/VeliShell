@@ -6,6 +6,17 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.11] - 2026-10-16
+
+### Neu
+
+- Die Online-Symbolauswahl durchsucht zusätzlich Wikipedia und Wikimedia Commons ohne API-Schlüssel. Passende Logos erscheinen neben App-Store- und macOSicons-Treffern mit Vorschau, Urheber, Dateilizenz und Quellenlinks. Die bisherige Suchfreigabe wird für die neue Quelle einmal erneuert; bestehende Symbole bleiben erhalten.
+
+### Verbessert
+
+- Breite Schriftzüge und ungeeignete Screenshots werden bei der Wikipedia-Iconsuche aussortiert. Nur ausdrücklich ausgewählte Bilder werden gespeichert.
+- Ist eine Icon-Quelle vorübergehend nicht erreichbar, zeigt die Auswahl weiterhin die verfügbaren Treffer der anderen Quellen.
+
 ## [0.13.10] - 2026-10-16
 
 ### Behoben

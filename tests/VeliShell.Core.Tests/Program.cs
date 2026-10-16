@@ -287,6 +287,109 @@ try
     Test("Recycle Bin empty state", () => Check(RecycleBinState.From(true, 0) == RecycleBinFillState.Empty));
     Test("Recycle Bin full state", () => Check(RecycleBinState.From(true, 1) == RecycleBinFillState.Full));
     Test("Recycle Bin ignores invalid negative count", () => Check(RecycleBinState.From(true, -1) == RecycleBinFillState.Empty));
+    Test("Wikipedia requests are bounded, encoded and keyless", () =>
+    {
+        var uri = WikipediaIconApi.CreateArticleSearchUri("VLC & Music", "de");
+        Check(uri.Host == "de.wikipedia.org" && uri.Scheme == "https" &&
+            uri.Query.Contains("gsrsearch=VLC%20%26%20Music") && uri.Query.Contains("gsrlimit=4") &&
+            uri.Query.Contains("prop=images") && !uri.Query.Contains("key"));
+        try { WikipediaIconApi.CreateArticleSearchUri("VLC", "de.evil.test"); Check(false); }
+        catch (ArgumentException) { }
+        try { WikipediaIconApi.ValidateQuery("VLC\nMusic"); Check(false); }
+        catch (ArgumentException) { }
+        var files = WikipediaIconApi.CreateFileInfoUri(["File:VLC Icon.svg", "File:VLC Icon.svg"]);
+        Check(files.Host == "commons.wikimedia.org" && files.Query.Contains("extmetadata") &&
+            files.Query.Contains("iiurlwidth=512") && files.Query.Split("File%3A").Length == 2);
+        try { WikipediaIconApi.CreateFileInfoUri(["File:VLC.svg|File:Other.svg"]); Check(false); }
+        catch (ArgumentException) { }
+        var commons = WikipediaIconApi.CreateLogoSearchUri("Spotify");
+        Check(commons.Host == "commons.wikimedia.org" && commons.Query.Contains("gsrnamespace=6") &&
+            commons.Query.Contains("gsrlimit=8") && commons.Query.Contains("extmetadata"));
+    });
+    Test("Wikipedia finds app logos, not article screenshots or generic symbols", () =>
+    {
+        var json = Encoding.UTF8.GetBytes("""
+            {"query":{"pages":[
+              {"ns":0,"title":"VideoLAN","images":[{"title":"File:VLC_Icon.svg"}]},
+              {"ns":0,"title":"VLC media player","images":[
+                {"title":"Datei:VLC Icon.svg"},{"title":"File:VLC screenshot.png"},
+                {"title":"File:Commons-logo.svg"},{"title":"File:Unrelated Icon.png"},
+                {"title":"File:VLC for iOS Icon.png"}]},
+              {"ns":6,"title":"VLC files","images":[{"title":"File:VLC alternate Icon.svg"}]}
+            ]}}
+            """);
+        var hits = WikipediaIconApi.ParseArticleImages(json, "VLC media player", "de");
+        Check(hits.Count == 2 && hits[0].AppName == "VLC media player" &&
+            hits[0].FileTitle == "File:VLC Icon.svg" &&
+            WikipediaIconApi.IsArticleUri(hits[0].ArticleUrl));
+    });
+    Test("Commons preserves source, free license and plain-text creator", () =>
+    {
+        var json = Encoding.UTF8.GetBytes("""
+            {"query":{"pages":[{"title":"File:VLC Icon.svg","imageinfo":[{
+              "width":512,"height":512,
+              "url":"https://upload.wikimedia.org/wikipedia/commons/a/ab/VLC.svg",
+              "thumburl":"https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/VLC.svg/512px-VLC.svg.png",
+              "descriptionurl":"https://commons.wikimedia.org/wiki/File:VLC_Icon.svg",
+              "extmetadata":{
+                "Artist":{"value":"<a href='https://example.org'>Richard</a> &amp; Team\n"},
+                "LicenseShortName":{"value":"CC BY-SA 4.0"},
+                "LicenseUrl":{"value":"http://creativecommons.org/licenses/by-sa/4.0/"}
+              }}]}]}}
+            """);
+        var hits = WikipediaIconApi.ParseFileInfo(json);
+        Check(hits.Count == 1 && hits[0].Creator == "Richard & Team" &&
+            hits[0].LicenseUrl!.Scheme == "https" && hits[0].LicenseName == "CC BY-SA 4.0" &&
+            hits[0].ImageUrl.AbsoluteUri.EndsWith(".png") && WikipediaIconApi.IsSourceUri(hits[0].SourceUrl));
+        Check(WikipediaIconApi.ParseFileInfo(Encoding.UTF8.GetBytes(
+            Encoding.UTF8.GetString(json).Replace("CC BY-SA 4.0", "Fair use"))).Count == 0);
+        Check(WikipediaIconApi.ParseFileInfo(Encoding.UTF8.GetBytes(
+            Encoding.UTF8.GetString(json).Replace("\"width\":512", "\"width\":1600"))).Count == 0);
+    });
+    Test("Commons rejects unsafe image hosts, vector downloads and restricted licenses", () =>
+    {
+        Check(!WikipediaIconApi.IsImageUri(new Uri("https://upload.wikimedia.org.evil.test/wikipedia/commons/icon.png")) &&
+            !WikipediaIconApi.IsImageUri(new Uri("https://upload.wikimedia.org/wikipedia/commons/icon.svg")) &&
+            !WikipediaIconApi.IsImageUri(new Uri("http://upload.wikimedia.org/wikipedia/commons/icon.png")) &&
+            !WikipediaIconApi.IsSourceUri(new Uri("https://commons.wikimedia.org/wiki/Special:Redirect/file/icon.png")));
+        Check(WikipediaIconApi.IsSupportedFreeLicense("Public domain", null) &&
+            WikipediaIconApi.IsSupportedFreeLicense("GPL", new Uri("https://www.gnu.org/licenses/gpl.html")) &&
+            !WikipediaIconApi.IsSupportedFreeLicense("CC BY-NC 4.0", new Uri("https://creativecommons.org/licenses/by-nc/4.0/")) &&
+            !WikipediaIconApi.IsSupportedFreeLicense("CC BY-ND 4.0", new Uri("https://creativecommons.org/licenses/by-nd/4.0/")) &&
+            !WikipediaIconApi.IsSupportedFreeLicense("MIT", new Uri("https://unknown.test/license")) &&
+            !WikipediaIconApi.IsSupportedFreeLicense("MIT", new Uri("relative", UriKind.Relative)) &&
+            !WikipediaIconApi.IsSupportedFreeLicense("Unknown", null));
+    });
+    Test("Wikipedia API failures and unexpected JSON roots are rejected", () =>
+    {
+        foreach (var json in new[] { "[]", "{\"error\":{\"code\":\"maxlag\"}}" })
+        {
+            try { WikipediaIconApi.ParseFileInfo(Encoding.UTF8.GetBytes(json)); Check(false); }
+            catch (InvalidDataException) { }
+        }
+    });
+    Test("Wikipedia icon references survive normalization without enabling online access", () =>
+    {
+        var icon = new IconReference(WikipediaIconApi.ProviderId, new string('a', 64),
+            WikipediaIconApi.CatalogVersion, new string('b', 64));
+        var settings = new Settings { DockIconOverrides = new() { ["velishell"] = icon } };
+        settings.Normalize();
+        Check(settings.DockIconOverrides["velishell"] == icon && settings.OnlineIcons == OnlineIconMode.Disabled);
+        settings.DockIconOverrides["velishell"] = icon with { CatalogVersion = "untrusted" };
+        settings.Normalize();
+        Check(!settings.DockIconOverrides.ContainsKey("velishell"));
+    });
+    Test("New Wikipedia recipient requires renewed online consent but preserves existing icons", () =>
+    {
+        var settings = new Settings
+        {
+            OnlineIcons = OnlineIconMode.OnDemand, OnlineIconConsentVersion = 4,
+            DockIconOverrides = new() { ["velishell"] = new(ItunesSearchApi.ProviderId, "123", ItunesSearchApi.CatalogVersion, new string('a', 64)) }
+        };
+        settings.Normalize();
+        Check(settings.OnlineIcons == OnlineIconMode.Disabled && settings.OnlineIconConsentVersion == 4 &&
+            settings.DockIconOverrides.Count == 1);
+    });
     Test("iTunes Search parser keeps App Store software metadata", () =>
     {
         var json = Encoding.UTF8.GetBytes("""

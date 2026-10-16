@@ -40,7 +40,7 @@ public sealed record Pin(
 public sealed class Settings
 {
     public const int CurrentSchemaVersion = 11;
-    public const int CurrentOnlineIconConsentVersion = 4;
+    public const int CurrentOnlineIconConsentVersion = 5;
     public const double MinimumIconSize = 24;
     public const double DefaultIconSize = 52;
     public const double MaximumIconSize = 96;
@@ -231,13 +231,14 @@ public sealed class Settings
 
     private static IconReference? NormalizeIcon(IconReference? icon)
     {
-        // Current App Store and macOSicons selections and legacy cache entries
+        // Current App Store, Wikipedia/Commons and macOSicons selections and legacy cache entries
         // remain readable. The legacy cache itself has no network path.
         if (icon is null) return null;
         var isAppStore = string.Equals(icon.Provider, ItunesSearchApi.ProviderId, StringComparison.Ordinal);
         var isLegacyMacOsIcons = string.Equals(icon.Provider, "macosicons", StringComparison.Ordinal);
         var isLocal = string.Equals(icon.Provider, "velishell-custom", StringComparison.Ordinal);
-        if (!isAppStore && !isLegacyMacOsIcons && !isLocal) return null;
+        var isWikipedia = string.Equals(icon.Provider, WikipediaIconApi.ProviderId, StringComparison.Ordinal);
+        if (!isAppStore && !isLegacyMacOsIcons && !isLocal && !isWikipedia) return null;
         var id = icon.IconId?.Trim() ?? "";
         if (id.Length is < 1 or > 64 || id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c == '-'))) return null;
         var version = icon.CatalogVersion?.Trim() ?? "";
@@ -246,7 +247,9 @@ public sealed class Settings
         if (hash.Length != 64 || hash.Any(c => !Uri.IsHexDigit(c))) return null;
         if (isLocal && (id.Length != 64 || !string.Equals(id, hash, StringComparison.OrdinalIgnoreCase) || version != "1"))
             return null;
-        var provider = isLocal ? "velishell-custom" : isAppStore ? ItunesSearchApi.ProviderId : "macosicons";
+        if (isWikipedia && (id.Length != 64 || version != WikipediaIconApi.CatalogVersion)) return null;
+        var provider = isLocal ? "velishell-custom" : isWikipedia ? WikipediaIconApi.ProviderId :
+            isAppStore ? ItunesSearchApi.ProviderId : "macosicons";
         return new IconReference(provider, id.ToLowerInvariant(), version, hash);
     }
 

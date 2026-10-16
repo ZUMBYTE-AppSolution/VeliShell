@@ -14,7 +14,8 @@ public partial class IconPickerWindow : VeliShellWindow
     private readonly IReadOnlyList<AppStoreIconSearchHit> _hits;
     private readonly List<(AppStoreIconSearchHit Hit, Image Preview)> _previews = [];
 
-    internal IconPickerWindow(string appName, string query, IReadOnlyList<AppStoreIconSearchHit> hits, bool allowSkip = false)
+    internal IconPickerWindow(string appName, string query, IReadOnlyList<AppStoreIconSearchHit> hits,
+        bool allowSkip = false, bool partialResults = false)
     {
         _hits = hits;
         InitializeComponent();
@@ -22,6 +23,7 @@ public partial class IconPickerWindow : VeliShellWindow
             LocalizationService.Current.Get("IconPicker.Heading"), appName);
         SearchHint.Text = string.Format(LocalizationService.Current.ActiveCulture,
             LocalizationService.Current.Get("IconPicker.SearchHint"), query, hits.Count);
+        if (partialResults) SearchHint.Text += "\n" + LocalizationService.Current.Get("IconPicker.PartialResults");
         SkipButton.Visibility = allowSkip ? Visibility.Visible : Visibility.Collapsed;
         BuildResults();
         Loaded += async (_, _) => await LoadPreviewsAsync();
@@ -72,6 +74,7 @@ public partial class IconPickerWindow : VeliShellWindow
             var details = new TextBlock
             {
                 Text = FormatDetails(hit),
+                TextWrapping = TextWrapping.Wrap,
                 FontSize = 11,
                 Margin = new Thickness(0, 4, 0, 0)
             };
@@ -97,7 +100,29 @@ public partial class IconPickerWindow : VeliShellWindow
             labels.Children.Add(title);
             labels.Children.Add(credit);
             labels.Children.Add(details);
-            labels.Children.Add(storeLink);
+            var links = new StackPanel { Orientation = Orientation.Horizontal };
+            links.Children.Add(storeLink);
+            if (hit.LicenseUrl is { } licenseUrl)
+            {
+                var license = new Button
+                {
+                    Content = LocalizationService.Current.Get("IconPicker.OpenLicense"),
+                    Margin = new Thickness(6, 7, 0, 0), Padding = new Thickness(8, 3, 8, 3), MinHeight = 26
+                };
+                license.Click += (_, args) => { args.Handled = true; LaunchService.Open(licenseUrl.AbsoluteUri); };
+                links.Children.Add(license);
+            }
+            if (hit.Provider == WikipediaIconService.Provider)
+            {
+                var article = new Button
+                {
+                    Content = LocalizationService.Current.Get("WikipediaSearch.OpenArticle"),
+                    Margin = new Thickness(6, 7, 0, 0), Padding = new Thickness(8, 3, 8, 3), MinHeight = 26
+                };
+                article.Click += (_, args) => { args.Handled = true; LaunchService.Open(hit.StoreUrl.AbsoluteUri); };
+                links.Children.Add(article);
+            }
+            labels.Children.Add(links);
             var content = new Grid();
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             content.ColumnDefinitions.Add(new ColumnDefinition());
@@ -137,9 +162,7 @@ public partial class IconPickerWindow : VeliShellWindow
                 await gate.WaitAsync(_lifetime.Token);
                 try
                 {
-                    var image = entry.Hit.Provider == MacOsIconsApiService.Provider
-                        ? await MacOsIconsApiService.LoadPreviewAsync(entry.Hit, _lifetime.Token)
-                        : await AppStoreIconService.LoadPreviewAsync(entry.Hit, _lifetime.Token);
+                    var image = await OnlineIconService.LoadPreviewAsync(entry.Hit, _lifetime.Token);
                     if (image is null || _lifetime.IsCancellationRequested) return;
                     await Dispatcher.InvokeAsync(() => entry.Preview.Source = image);
                 }
@@ -152,13 +175,18 @@ public partial class IconPickerWindow : VeliShellWindow
 
     private static string FormatDetails(AppStoreIconSearchHit hit)
     {
-        var values = new[] { hit.Category, hit.BundleId }
+        var values = new[] { hit.Category, hit.BundleId, hit.LicenseName }
             .Where(value => !string.IsNullOrWhiteSpace(value));
         return string.Join(" · ", values);
     }
 
     private static string FormatAttribution(AppStoreIconSearchHit hit) =>
-        (hit.Provider == MacOsIconsApiService.Provider ? "macOSicons.com" : "App Store") +
+        (hit.Provider switch
+        {
+            MacOsIconsApiService.Provider => "macOSicons.com",
+            WikipediaIconService.Provider => "Wikipedia / Wikimedia Commons",
+            _ => "App Store"
+        }) +
         " · " + hit.DeveloperName;
 
     private void Apply_Click(object sender, RoutedEventArgs e)
@@ -173,7 +201,4 @@ public partial class IconPickerWindow : VeliShellWindow
         Skipped = true;
         DialogResult = false;
     }
-    private void OpenProvider_Click(object sender, RoutedEventArgs e) =>
-        LaunchService.Open(
-            "https://performance-partners.apple.com/resources/documentation/itunes-store-web-service-search-api/");
 }
