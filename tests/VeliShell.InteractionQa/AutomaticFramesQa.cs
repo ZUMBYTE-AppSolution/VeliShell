@@ -73,11 +73,17 @@ internal static partial class Program
                     await ClickCaption(one,1); await Until(()=>NativeMethods.IsIconic(one),"Glass host minimize button"); NativeMethods.ShowWindowAsync(one,9); await Task.Delay(400);
                     await ClickCaption(one,2); await Until(()=>NativeMethods.IsZoomed(one),"Glass host maximize button"); await ClickCaption(one,2); await Until(()=>!NativeMethods.IsZoomed(one),"Glass host restore button");
                     var recovery=FindAutomaticGuardian(manager.Id); Require(recovery!=0,"Independent automatic recovery helper missing.");
+                    NativeMethods.GetWindowThreadProcessId(recovery,out var oldGuardPid);
+                    using var oldGuard=Process.GetProcessById((int)oldGuardPid);
+                    Require(oldGuard.MainModule?.FileName==manager.MainModule?.FileName,"Wrong original guardian identity");
                     NativePrototypeMethods.PostMessage(one,0x111,202,0); await Task.Delay(300);
                     NativePrototypeMethods.PostMessage(recovery,0x312,0x5650,0);
                     await Until(()=>!Glass(two)&&!Glass(three),"Recovery must restore responsive windows while one app is hung");
                     Require(Glass(one),"Hung app must remain pending until its UI resumes.");
-                    await Until(()=>!Glass(one),"Recovery after hung app resumes"); await Task.Delay(1400);
+                    await Until(()=>!Glass(one),"Recovery after hung app resumes");
+                    // A cleared target marker precedes the guardian's final status flush/exit.
+                    // Explicit activation must wait for that complete rollback, not a fixed delay.
+                    await oldGuard.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15)); await Task.Delay(1500);
                     Require(!Glass(one)&&!Glass(two)&&!Glass(three),"Emergency recovery automatically reapplied styling.");
                     NativeMethods.SetWindowPos(one,(nint)(-2),120,160,800,480,0x10);
                     await EnableAutomaticUi(ui); await Until(()=>Glass(one)&&Glass(two)&&Glass(three),"Explicit reactivation after emergency");
