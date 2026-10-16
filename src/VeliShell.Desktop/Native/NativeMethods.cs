@@ -70,19 +70,6 @@ internal static class NativeMethods
         public int Size;
         public nint Data;
     }
-    [StructLayout(LayoutKind.Sequential)] internal struct AccentPolicy
-    {
-        public int State;
-        public int Flags;
-        public uint GradientColor;
-        public int AnimationId;
-    }
-    [StructLayout(LayoutKind.Sequential)] internal struct WindowCompositionAttributeData
-    {
-        public int Attribute;
-        public nint Data;
-        public int Size;
-    }
     [StructLayout(LayoutKind.Sequential)] internal struct KeyboardInput
     {
         public ushort VirtualKey;
@@ -333,9 +320,6 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool ValidateRect(nint window, nint rect);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool DestroyWindow(nint window);
-    [DllImport("user32.dll", EntryPoint = "SetWindowCompositionAttribute", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool SetWindowCompositionAttribute(nint hwnd, ref WindowCompositionAttributeData data);
     [DllImport("gdi32.dll", SetLastError = true)] internal static extern nint CreateRoundRectRgn(
         int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
     [DllImport("user32.dll", SetLastError = true)] internal static extern int SetWindowRgn(

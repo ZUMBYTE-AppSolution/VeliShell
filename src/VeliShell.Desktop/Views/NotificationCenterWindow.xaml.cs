@@ -170,21 +170,22 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         Grid.SetColumn(appLabel, 1);
         header.Children.Add(appLabel);
 
+        var countLabel = new TextBlock
+        {
+            Text = notifications.Count.ToString(LocalizationService.Current.ActiveCulture),
+            FontSize = 10
+        };
+        countLabel.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
         var count = new Border
         {
-            Background = (Brush)FindResource("GlassControlSurface"),
-            BorderBrush = (Brush)FindResource("GlassCardStroke"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(9),
             Padding = new Thickness(7, 2, 7, 2),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = notifications.Count.ToString(LocalizationService.Current.ActiveCulture),
-                FontSize = 10,
-                Foreground = (Brush)FindResource("TextSecondary")
-            }
+            Child = countLabel
         };
+        count.SetResourceReference(Border.BackgroundProperty, "GlassControlSurface");
+        count.SetResourceReference(Border.BorderBrushProperty, "GlassCardStroke");
         Grid.SetColumn(count, 2);
         header.Children.Add(count);
         foreach (var notification in notifications)
@@ -228,31 +229,34 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
                 Stretch = Stretch.UniformToFill
             };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            return new Border
+            var imagePlate = new Border
             {
                 Width = 24,
                 Height = 24,
                 CornerRadius = new CornerRadius(7),
-                Background = (Brush)FindResource("GlassIconSurface"),
                 ClipToBounds = true,
                 Child = image
             };
+            imagePlate.SetResourceReference(Border.BackgroundProperty, "GlassIconSurface");
+            return imagePlate;
         }
 
-        return new Border
+        var symbol = new VeliSymbol
+        {
+            Symbol = VeliSymbolKind.Notification,
+            Width = 13,
+            Height = 13
+        };
+        symbol.SetResourceReference(ForegroundProperty, "TextPrimary");
+        var symbolPlate = new Border
         {
             Width = 24,
             Height = 24,
             CornerRadius = new CornerRadius(7),
-            Background = (Brush)FindResource("GlassControlSurface"),
-            Child = new VeliSymbol
-            {
-                Symbol = VeliSymbolKind.Notification,
-                Width = 13,
-                Height = 13,
-                Foreground = (Brush)FindResource("TextPrimary")
-            }
+            Child = symbol
         };
+        symbolPlate.SetResourceReference(Border.BackgroundProperty, "GlassControlSurface");
+        return symbolPlate;
     }
 
     private UIElement CreateNotificationCard(VeliShellNotification notification)
@@ -261,9 +265,9 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         {
             Symbol = VeliSymbolKind.Close,
             Width = 10,
-            Height = 10,
-            Foreground = (Brush)FindResource("TextPrimary")
+            Height = 10
         };
+        dismissSymbol.SetResourceReference(ForegroundProperty, "TextPrimary");
         var dismiss = new Button
         {
             Content = dismissSymbol,
@@ -292,15 +296,16 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         if (notification.IsUnread)
         {
-            heading.Children.Add(new Border
+            var unread = new Border
             {
                 Width = 7,
                 Height = 7,
                 CornerRadius = new CornerRadius(3.5),
-                Background = (Brush)FindResource("GlassActiveSurface"),
                 Margin = new Thickness(0, 5, 8, 0),
                 VerticalAlignment = VerticalAlignment.Top
-            });
+            };
+            unread.SetResourceReference(Border.BackgroundProperty, "GlassActiveSurface");
+            heading.Children.Add(unread);
         }
         Grid.SetColumn(title, 1);
         heading.Children.Add(title);
@@ -311,23 +316,25 @@ public partial class NotificationCenterWindow : Window, ITransientPanel
         content.Children.Add(heading);
         if (!string.IsNullOrWhiteSpace(notification.Message))
         {
-            content.Children.Add(new TextBlock
+            var message = new TextBlock
             {
                 Text = notification.Message,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = (Brush)FindResource("TextSecondary"),
                 MaxHeight = 78,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(notification.IsUnread ? 15 : 0, 5, 2, 0)
-            });
+            };
+            message.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+            content.Children.Add(message);
         }
-        content.Children.Add(new TextBlock
+        var timestamp = new TextBlock
         {
             Text = FormatTimestamp(notification.CreatedAt),
             FontSize = 10.5,
-            Foreground = (Brush)FindResource("TextSecondary"),
             Margin = new Thickness(notification.IsUnread ? 15 : 0, 7, 0, 0)
-        });
+        };
+        timestamp.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+        content.Children.Add(timestamp);
 
         return new Border
         {

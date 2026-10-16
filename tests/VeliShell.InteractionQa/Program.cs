@@ -139,6 +139,7 @@ internal static class Program
             TestTransientAudioPanelClose(owner, anchor);
             TestAudioPackagedSessionGrouping();
             TestGlassMaterialAndRoundedClip();
+            TestLocalizedProductVersion();
             TestGlassContextMenu(owner, anchor);
             var chatGptShortcutChecked = TestInstalledChatGptShortcut();
             var policyType = RequireType("VeliShell.Desktop.Services.AudioDefaultDeviceService");
@@ -1379,15 +1380,25 @@ internal static class Program
 
     private static int RenderNativeGlass()
     {
-        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var application = new SafePreviewApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         application.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
             Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Dark.xaml")
+        });
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/VeliShell;component/Themes/Controls.xaml")
         });
         using var wallpaper = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, "--glass-wallpaper")
         {
             UseShellExecute = false, CreateNoWindow = true
         }) ?? throw new InvalidOperationException("Could not launch the test wallpaper.");
+        using var materialTheme = new ThemeService();
+        typeof(VeliShell.Desktop.App).GetProperty("Themes")!.SetValue(application, materialTheme);
+        typeof(VeliShell.Desktop.App).GetProperty("Preferences")!.SetValue(application,
+            new Settings { FirstRunCompleted = true, Appearance = Appearance.Dark, ShowRunningApps = false,
+                ShowWindowsStartDockItem = true });
+        materialTheme.Apply(Appearance.Dark, 50, 50);
         try
         {
             Thread.Sleep(700);
@@ -1430,11 +1441,66 @@ internal static class Program
                     var rounded = Math.Abs(clearCorner.R - plainWallpaper.R) < 12 &&
                                   Math.Abs(clearCorner.G - plainWallpaper.G) < 12 &&
                                   Math.Abs(clearCorner.B - plainWallpaper.B) < 12;
-                    Console.WriteLine($"Native {name} glass active: {active}; color bleed: {colorBleed}; rounded: {rounded}; preview: {path}");
-                    if (!active || !colorBleed || !rounded) return 1;
+                    var sharp = StripeVariation(bitmap, 60);
+                    var uniformBlur = new[] { 110, 160, 210 }
+                        .All(row => StripeVariation(bitmap, row) < sharp * 0.45);
+                    Console.WriteLine($"Native {name} glass active: {active}; color bleed: {colorBleed}; rounded: {rounded}; full-surface blur: {uniformBlur}; preview: {path}");
+                    if (!active || !colorBleed || !rounded || !uniformBlur) return 1;
+                    if (name == "dock")
+                    {
+                        var levels = new List<double>();
+                        foreach (var (gloss, transparency, variant) in new[] { (0d, 0d, "matte"), (100d, 100d, "glossy") })
+                        {
+                            materialTheme.Apply(Appearance.Dark, gloss, transparency);
+                            Require(backdrop.ApplyMaterial(material, fallback), "Composition renderer stopped during a material change.");
+                            SettleUi();
+                            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                                graphics.CopyFromScreen(100, 100, 0, 0, new System.Drawing.Size(760, 320));
+                            bitmap.Save(Path.Combine(AppContext.BaseDirectory, $"native-glass-{variant}.png"),
+                                System.Drawing.Imaging.ImageFormat.Png);
+                            var total = 0d;
+                            for (var y = 140; y < 180; y++)
+                            for (var x = 300; x < 460; x++)
+                            {
+                                var pixel = bitmap.GetPixel(x, y);
+                                total += pixel.R + pixel.G + pixel.B;
+                            }
+                            levels.Add(total / (40 * 160 * 3));
+                        }
+                        Require(levels[1] > levels[0] + 8,
+                            "The glass controls changed only the border, not the interior material.");
+                        materialTheme.Apply(Appearance.Dark, 50, 50);
+                    }
                 }
                 finally { overlay.Close(); }
             }
+            var dock = new VeliShell.Desktop.Views.DockWindow(application, NativeMethods.PrimaryMonitor().Device);
+            typeof(VeliShell.Desktop.App).GetProperty("Dock")!.SetValue(application, dock);
+            RequireMethod(dock.GetType(), "Rebuild").Invoke(dock, null);
+            var scene = (FrameworkElement)dock.Content;
+            var dockPlate = (Border)RequireField(dock.GetType(), "DockPlate").GetValue(dock)!;
+            dock.Content = null;
+            var liveDock = new Window
+            {
+                Left = 100 + (760 - dock.Width) / 2, Top = 160, Width = dock.Width, Height = dock.Height,
+                WindowStyle = WindowStyle.None, AllowsTransparency = true,
+                ShowInTaskbar = false, ShowActivated = false, Topmost = true,
+                Background = Brushes.Transparent, Content = scene
+            };
+            try
+            {
+                liveDock.Show();
+                using var backdrop = new ShellBackdropHost(liveDock, dockPlate, 11);
+                Require(backdrop.ApplyMaterial("DockAcrylicSurfaceGradient", "DockSurfaceGradient"),
+                    "The production dock did not start its composition renderer.");
+                SettleUi();
+                using var bitmap = new System.Drawing.Bitmap(760, 320);
+                using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                    graphics.CopyFromScreen(100, 100, 0, 0, new System.Drawing.Size(760, 320));
+                bitmap.Save(Path.Combine(AppContext.BaseDirectory, "native-production-dock.png"),
+                    System.Drawing.Imaging.ImageFormat.Png);
+            }
+            finally { liveDock.Close(); dock.Close(); }
             return 0;
         }
         finally
@@ -1469,11 +1535,20 @@ internal static class Program
                         Background = new DrawingBrush
                         {
                             TileMode = TileMode.Tile,
-                            Viewport = new Rect(0, 0, 16, 16),
+                            Viewport = new Rect(0, 0, 24, 24),
                             ViewportUnits = BrushMappingMode.Absolute,
-                            Drawing = new GeometryDrawing(
-                                new SolidColorBrush(Color.FromArgb(110, 255, 255, 255)), null,
-                                new RectangleGeometry(new Rect(0, 0, 2, 16)))
+                            Viewbox = new Rect(0, 0, 24, 24),
+                            ViewboxUnits = BrushMappingMode.Absolute,
+                            Drawing = new DrawingGroup
+                            {
+                                Children =
+                                {
+                                    new GeometryDrawing(Brushes.Transparent, null,
+                                        new RectangleGeometry(new Rect(0, 0, 24, 24))),
+                                    new GeometryDrawing(new SolidColorBrush(Color.FromArgb(170, 0, 0, 0)), null,
+                                        new RectangleGeometry(new Rect(0, 0, 12, 24)))
+                                }
+                            }
                         }
                     }
                 }
@@ -1482,7 +1557,13 @@ internal static class Program
         try
         {
             wallpaper.Show();
-            for (var index = 0; index < 100; index++)
+            var stripes = (DrawingBrush)((Border)((Grid)wallpaper.Content).Children[0]).Background;
+            var movement = new TranslateTransform();
+            stripes.Transform = movement;
+            movement.BeginAnimation(TranslateTransform.XProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, 24, TimeSpan.FromSeconds(1))
+                { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+            for (var index = 0; index < 300; index++)
             {
                 DrainDispatcher();
                 Thread.Sleep(50);
@@ -1494,6 +1575,19 @@ internal static class Program
             wallpaper.Close();
             application.Shutdown();
         }
+    }
+
+    private static double StripeVariation(System.Drawing.Bitmap bitmap, int row)
+    {
+        var variation = 0d;
+        for (var x = 131; x < 630; x++)
+        {
+            var previous = bitmap.GetPixel(x - 1, row);
+            var current = bitmap.GetPixel(x, row);
+            variation += Math.Abs(current.R - previous.R) + Math.Abs(current.G - previous.G) +
+                         Math.Abs(current.B - previous.B);
+        }
+        return variation;
     }
 
     private static NativeRect WindowBounds(nint handle)
@@ -1735,24 +1829,6 @@ internal static class Program
 
     private static void TestGlassMaterialAndRoundedClip()
     {
-        var backdropType = RequireType("VeliShell.Desktop.Services.ShellBackdropHost");
-        var rowInsetMethod = RequireMethod(backdropType, "RoundedRowInset");
-        foreach (var radius in new[] { 11d, 21d })
-        foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
-        {
-            var physicalRadius = (int)Math.Round(radius * scale);
-            var previousInset = physicalRadius;
-            for (var row = 0; row < physicalRadius; row++)
-            {
-                var inset = (int)rowInsetMethod.Invoke(null, [physicalRadius, physicalRadius, row])!;
-                var nx = (physicalRadius - inset - 0.5) / physicalRadius;
-                var ny = (physicalRadius - row - 0.5) / physicalRadius;
-                Require(nx * nx + ny * ny <= 1.00001,
-                    $"A native acrylic row escapes the {radius}-DIP rounded panel at {scale}x DPI.");
-                Require(inset <= previousInset, "Rounded acrylic bands leave an inset rectangular gap.");
-                previousInset = inset;
-            }
-        }
         var clipped = new Grid { Width = 100, Height = 50 };
         VeliShell.Desktop.Controls.RoundedClip.SetRadius(clipped, 10);
         clipped.Measure(new Size(100, 50));
@@ -1784,6 +1860,26 @@ internal static class Program
         theme.Apply(Appearance.Light, 50, 50);
     }
 
+    private static void TestLocalizedProductVersion()
+    {
+        var localization = LocalizationService.Current;
+        var previous = localization.Preference;
+        var fileVersion = DesktopAssembly.GetCustomAttribute<AssemblyFileVersionAttribute>()!.Version;
+        var expected = Version.Parse(fileVersion).ToString(3);
+        try
+        {
+            foreach (var language in new[] { UiLanguage.German, UiLanguage.English })
+            {
+                localization.Apply(language);
+                foreach (var key in new[] { "Product.VersionPreview", "Info.Version", "Diagnostics.Template" })
+                    Require(localization.Get(key).Contains(expected, StringComparison.Ordinal) &&
+                            !localization.Get(key).Contains("{version}", StringComparison.Ordinal),
+                        $"{key} does not show the running application version in {language}.");
+            }
+        }
+        finally { localization.Apply(previous); }
+    }
+
     private static void TestGlassContextMenu(Window owner, FrameworkElement anchor)
     {
         var submenuItem = new MenuItem { Header = "Open with" };
@@ -1811,9 +1907,9 @@ internal static class Program
                 .GetValue(stateArgs[1]);
             Require(host is not null,
                 "The dock context menu did not create a bounded acrylic host.");
-            var tiles = host!.GetType().GetField("_tiles", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .GetValue(host) as System.Collections.ICollection;
-            Console.WriteLine(tiles is { Count: > 0 }
+            var handle = (nint)host!.GetType().GetField("_surfaceHandle", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(host)!;
+            Console.WriteLine(handle != 0
                 ? "PASS: Context-menu acrylic is active behind the rounded plate."
                 : "INFO: Context-menu acrylic is unavailable on this Windows session; the translucent material remains active.");
             submenuItem.IsSubmenuOpen = true;
@@ -2843,7 +2939,7 @@ internal static class Program
                 application.Resources.MergedDictionaries[0] = new ResourceDictionary
                 {
                     Source = new Uri(
-                        $"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                        $"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Light" : "Dark")}.xaml")
                 };
                 var suffix = dark ? "dark" : "light";
 
@@ -2851,19 +2947,16 @@ internal static class Program
                 var control = (Window)(Activator.CreateInstance(controlType, nonPublic: true)
                               ?? throw new InvalidOperationException("Could not create Control Center."));
                 RequireMethod(controlType, "RefreshStatus").Invoke(control, null);
-                RenderShellPanel(control, Path.Combine(outputDirectory, $"control-center-{suffix}.png"), dark);
 
                 var audioType = RequireType("VeliShell.Desktop.Views.AudioDevicesWindow");
                 var audio = (Window)(Activator.CreateInstance(audioType, nonPublic: true)
                             ?? throw new InvalidOperationException("Could not create audio panel."));
                 RequireMethod(audioType, "RefreshDevices").Invoke(audio, null);
-                RenderShellPanel(audio, Path.Combine(outputDirectory, $"audio-devices-{suffix}.png"), dark);
 
                 var mixerType = RequireType("VeliShell.Desktop.Views.AudioMixerWindow");
                 var mixer = (Window)(Activator.CreateInstance(mixerType, nonPublic: true)
                             ?? throw new InvalidOperationException("Could not create volume mixer."));
                 RequireMethod(mixerType, "RefreshEndpoints").Invoke(mixer, null);
-                RenderShellPanel(mixer, Path.Combine(outputDirectory, $"audio-mixer-{suffix}.png"), dark);
 
                 var notificationServiceType = RequireType("VeliShell.Desktop.Services.NotificationCenterService");
                 var notificationService = notificationServiceType
@@ -2880,10 +2973,20 @@ internal static class Program
                 ((TextBlock)RequireField(notificationType, "DateLabel").GetValue(notification)!).Text =
                     "Sonntag, 4. Oktober";
                 RequireMethod(notificationType, "RefreshItems").Invoke(notification, null);
+                // Keep these same instances alive across the theme change;
+                // static FindResource foregrounds must not pass this check.
+                application.Resources.MergedDictionaries[0] = new ResourceDictionary
+                {
+                    Source = new Uri(
+                        $"pack://application:,,,/VeliShell;component/Themes/{(dark ? "Dark" : "Light")}.xaml")
+                };
+                RenderShellPanel(control, Path.Combine(outputDirectory, $"control-center-{suffix}.png"), dark, validateText: true);
+                RenderShellPanel(audio, Path.Combine(outputDirectory, $"audio-devices-{suffix}.png"), dark, validateText: true);
+                RenderShellPanel(mixer, Path.Combine(outputDirectory, $"audio-mixer-{suffix}.png"), dark, validateText: true);
                 RenderShellPanel(
                     notification,
                     Path.Combine(outputDirectory, $"notification-center-{suffix}.png"),
-                    dark);
+                    dark, validateText: true);
 
                 var chrome = new Window
                 {
@@ -3063,7 +3166,7 @@ internal static class Program
         return (int)Math.Ceiling(Math.Max(minimumHeight, content.DesiredSize.Height));
     }
 
-    private static void RenderShellPanel(Window window, string path, bool dark)
+    private static void RenderShellPanel(Window window, string path, bool dark, bool validateText = false)
     {
         const int outerPadding = 30;
         var panelWidth = (int)Math.Ceiling(window.Width);
@@ -3108,6 +3211,7 @@ internal static class Program
         surface.Arrange(new Rect(0, 0, surface.Width, surface.Height));
         surface.UpdateLayout();
         DrainDispatcher();
+        if (validateText) AssertThemedPanelText(surface);
 
         var bitmap = new RenderTargetBitmap(
             (int)surface.Width,
@@ -3126,6 +3230,26 @@ internal static class Program
         object applicationResource(string key) =>
             Application.Current.TryFindResource(key)
             ?? throw new InvalidOperationException($"Missing render resource '{key}'.");
+    }
+
+    private static void AssertThemedPanelText(DependencyObject element)
+    {
+        var colors = new[] { "TextPrimary", "TextSecondary", "Accent", "AccentText", "AccentStroke" }
+            .Select(key => ((SolidColorBrush)Application.Current.FindResource(key)).Color).ToHashSet();
+        Visit(element);
+        void Visit(DependencyObject node)
+        {
+            if (node is UIElement { Visibility: not Visibility.Visible }) return;
+            var text = node is TextBlock block ? block.Text : node is AccessText access ? access.Text : null;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                var brush = node is TextBlock label ? label.Foreground : ((AccessText)node).Foreground;
+                Require(brush is SolidColorBrush solid && colors.Contains(solid.Color),
+                    $"Panel text '{text}' retained a system or previous-theme foreground ({brush}).");
+            }
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(node); index++)
+                Visit(VisualTreeHelper.GetChild(node, index));
+        }
     }
 
     private static void TestMenuBarReservationPolicy()

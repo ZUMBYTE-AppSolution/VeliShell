@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.10] - 2026-10-16
+
+### Behoben
+
+- Aufklappbare Audio- und Mitteilungsbereiche verwenden die passende Textfarbe des aktiven Designs. Bereits geöffnete Panels übernehmen auch einen laufenden Theme-Wechsel.
+- Die Versionsangaben in Seitenleiste, Info und Diagnosebericht werden aus dem laufenden Programm gelesen.
+
+### Verbessert
+
+- Dock, Menüleiste, Kontextmenüs und Panels verwenden eine durchgehend gerundete Windows-Kompositionsfläche mit echter Hintergrundweichzeichnung. Der rechteckige Innenbalken und die davon abweichenden Randstreifen entfallen.
+- Matt-/Glas- und Transparenzeinstellungen ändern die gesamte Glasfläche; die Rahmenhelligkeit wird nicht mehr durch den Glas-Regler verstärkt.
+
 ## [0.13.9] - 2026-10-16
 
 ### Behoben

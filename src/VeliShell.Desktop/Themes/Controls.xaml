@@ -157,6 +157,7 @@
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style x:Key="GlassExpander" TargetType="Expander">
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
    <StackPanel>
     <ToggleButton x:Name="HeaderToggle" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
@@ -164,7 +165,8 @@
                   HorizontalContentAlignment="Stretch">
      <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-      <ContentPresenter Content="{TemplateBinding Header}" VerticalAlignment="Center" />
+      <ContentPresenter Content="{TemplateBinding Header}" VerticalAlignment="Center"
+                        TextElement.Foreground="{TemplateBinding Foreground}" />
       <controls:VeliSymbol x:Name="ExpandGlyph" Grid.Column="1" Symbol="ChevronRight"
                            Width="14" Height="14" VerticalAlignment="Center" Margin="10,0,0,0"
                            Foreground="{DynamicResource TextSecondary}" RenderTransformOrigin="0.5,0.5">
@@ -172,7 +174,8 @@
       </controls:VeliSymbol>
      </Grid>
     </ToggleButton>
-    <ContentPresenter x:Name="ExpandContent" ContentSource="Content" Visibility="Collapsed" />
+    <ContentPresenter x:Name="ExpandContent" ContentSource="Content" Visibility="Collapsed"
+                      TextElement.Foreground="{TemplateBinding Foreground}" />
    </StackPanel>
    <ControlTemplate.Triggers>
     <Trigger Property="IsExpanded" Value="True">

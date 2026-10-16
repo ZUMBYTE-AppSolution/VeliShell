@@ -72,6 +72,8 @@ public sealed class ThemeService : IDisposable
 
     private static void ApplyGlassMaterial(ResourceDictionary dictionary, double gloss, double transparency)
     {
+        dictionary["ShellGlassGloss"] = gloss;
+        dictionary["ShellGlassTransparency"] = transparency;
         // 50/50 keeps the authored appearance. At the transparent end the
         // floating glass retains enough tint for its labels. Settings and
         // other full content windows keep their independent, readable base.
@@ -87,7 +89,7 @@ public sealed class ThemeService : IDisposable
             brush.Freeze();
             dictionary[key] = brush;
         }
-        var sheenScale = 0.35 + gloss * 0.013;
+        var sheenScale = 0.75 + gloss * 0.005;
         if (dictionary["DockMilkOverlay"] is RadialGradientBrush milk)
         {
             var brush = milk.CloneCurrentValue();
@@ -95,13 +97,6 @@ public sealed class ThemeService : IDisposable
                 stop.Color = WithAlpha(stop.Color, sheenScale);
             brush.Freeze();
             dictionary["DockMilkOverlay"] = brush;
-        }
-        foreach (var key in new[] { "DockHighlight", "DockInnerStroke", "GlassPanelStroke" })
-        {
-            if (dictionary[key] is not SolidColorBrush original) continue;
-            var brush = new SolidColorBrush(WithAlpha(original.Color, sheenScale));
-            brush.Freeze();
-            dictionary[key] = brush;
         }
         if (dictionary["ShellAcrylicTint"] is Color tint)
             dictionary["ShellAcrylicTint"] = WithAlpha(tint, opacityScale);

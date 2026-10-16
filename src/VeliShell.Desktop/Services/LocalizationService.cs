@@ -21,9 +21,17 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
     public UiLanguage Preference => _preference;
     public CultureInfo ActiveCulture { get; private set; } = CultureInfo.GetCultureInfo("de-DE");
-    public string this[string key] => _strings.TryGetValue(key, out var value)
-        ? value
-        : GermanStrings.Values.TryGetValue(key, out var fallback) ? fallback : key;
+    public string this[string key]
+    {
+        get
+        {
+            var text = _strings.TryGetValue(key, out var value) ? value :
+                GermanStrings.Values.TryGetValue(key, out var fallback) ? fallback : key;
+            return text.Contains("{version}", StringComparison.Ordinal)
+                ? text.Replace("{version}", GitHubReleaseUpdateService.InstalledVersion.ToString(), StringComparison.Ordinal)
+                : text;
+        }
+    }
 
     public void Apply(UiLanguage preference)
     {

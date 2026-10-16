@@ -90,11 +90,16 @@ public partial class AudioDevicesWindow : Window, ITransientPanel
             MenuPanelPlacement.PlaceBelow(_anchor, this);
     }
 
-    private void AddEmpty(Panel panel) => panel.Children.Add(new TextBlock
+    private void AddEmpty(Panel panel)
     {
-        Text = L("AudioDevices.None"), TextWrapping = TextWrapping.Wrap,
-        Foreground = (Brush)FindResource("TextSecondary"), Margin = new Thickness(8, 4, 8, 12)
-    });
+        var label = new TextBlock
+        {
+            Text = L("AudioDevices.None"), TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(8, 4, 8, 12)
+        };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondary");
+        panel.Children.Add(label);
+    }
 
     private void AddDevice(Panel panel, AudioOutputEndpoint device, bool input)
     {

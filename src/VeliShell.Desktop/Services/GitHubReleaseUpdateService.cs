@@ -71,8 +71,7 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     {
         get
         {
-            var version = Assembly.GetEntryAssembly()?.GetName().Version ??
-                          typeof(GitHubReleaseUpdateService).Assembly.GetName().Version ??
+            var version = typeof(GitHubReleaseUpdateService).Assembly.GetName().Version ??
                           new Version(0, 0, 0);
             return new SemanticVersion(
                 Math.Max(version.Major, 0),
