@@ -18,11 +18,14 @@ internal static class UpdateRestartService
         static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
         var msi = Quote(package.FilePath);
         var expectedHash = Quote(package.Verification.Sha256.ToUpperInvariant());
-        var expectedVersion = Quote(package.Release.Version.ToString());
+        var expectedVersion = Quote($"{package.Release.Version.Major}.{package.Release.Version.Minor}.{package.Release.Version.Patch}");
+        var expectedProductVersion = Quote(package.Release.Version.ToString());
         var original = Quote(currentExecutable);
+        var sameChannel = package.Release.Version.IsPrerelease == BuildIdentity.IsTest;
+        var launchCandidates = sameChannel ? "@($original, $installed)" : "@($installed)";
         var installed = Quote(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            "Zumbyte", "VeliShell", "VeliShell.exe"));
+            "Zumbyte", BuildIdentity.ProductFolder(package.Release.Version.IsPrerelease ? VeliShell.Core.UpdateChannel.Test : VeliShell.Core.UpdateChannel.Stable), "VeliShell.exe"));
         var script = $$"""
             $ErrorActionPreference = 'Stop'
             try {
@@ -32,6 +35,7 @@ internal static class UpdateRestartService
               $installer = {{msi}}
               $expectedHash = {{expectedHash}}
               $expectedVersion = {{expectedVersion}}
+              $expectedProductVersion = {{expectedProductVersion}}
               $original = {{original}}
               $installed = {{installed}}
               if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expectedHash) {
@@ -41,10 +45,11 @@ internal static class UpdateRestartService
               Start-Sleep -Milliseconds 900
               $updated = $null
               if ($run.ExitCode -eq 0 -or $run.ExitCode -eq 3010) {
-                foreach ($candidate in @($original, $installed)) {
+                foreach ($candidate in {{launchCandidates}}) {
                   if (-not (Test-Path -LiteralPath $candidate)) { continue }
                   $version = (Get-Item -LiteralPath $candidate).VersionInfo.FileVersion
-                  if ($version -eq $expectedVersion -or $version.StartsWith($expectedVersion + '.')) {
+                  $productVersion = (Get-Item -LiteralPath $candidate).VersionInfo.ProductVersion
+                  if (($version -eq $expectedVersion -or $version.StartsWith($expectedVersion + '.')) -and ($productVersion -eq $expectedProductVersion -or $productVersion.StartsWith($expectedProductVersion + '+'))) {
                     $updated = $candidate
                     break
                   }

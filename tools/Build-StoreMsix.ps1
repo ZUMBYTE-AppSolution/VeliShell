@@ -11,6 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+[xml]$channelProperties = Get-Content -LiteralPath (Join-Path $root 'Directory.Build.props') -Raw
+if ([string]$channelProperties.Project.PropertyGroup.VeliShellBuildChannel -eq 'Test') {
+    throw 'Test-channel prototypes must not be packaged or submitted to the Microsoft Store.'
+}
 $out = Join-Path $root 'out'
 if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
     throw "MSIX version must be stable SemVer, got '$Version'."

@@ -97,6 +97,11 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 
 ## 🔄 Updates ohne Überraschungen
 
+> **Testkanal:** Der Branch `test` enthält den optionalen nativen Fensterprototyp.
+> [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
+> Testpakete sind ausdrücklich als Vorabversion markiert und ersetzen weder das
+> stabile GitHub-Release noch die Microsoft-Store-Ausgabe.
+
 VeliShell fragt GitHub ausschließlich nach der neuesten veröffentlichten Version. Das Verhalten bestimmst du selbst: nur manuell prüfen, bei neuen Versionen benachrichtigen oder das geprüfte Paket automatisch herunterladen. Das vollständige Changelog bleibt dabei sichtbar; die Installation beginnt nie von allein.
 
 Ist das an die öffentliche IP gebundene GitHub-API-Limit ausgeschöpft, wechselt die Prüfung automatisch auf die offizielle Release-Seite und deren Feed. Release-Tag, Changelog, Dateigröße und SHA-256-Prüfsumme werden dabei weiterhin ausschließlich aus taggebundenen Quellen des offiziellen Repositories zusammengesetzt und gegengeprüft; ein eigener GitHub-Schlüssel ist dafür nicht nötig.

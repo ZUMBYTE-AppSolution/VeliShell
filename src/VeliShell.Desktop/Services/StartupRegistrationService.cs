@@ -13,6 +13,7 @@ public static class StartupRegistrationService
 
     public static async Task<bool> IsUserLoginEnabledAsync()
     {
+        if (BuildIdentity.IsTest) return false;
         if (!OperatingSystem.IsWindows()) return false;
         if (PackageIdentityService.HasIdentity)
         {
@@ -28,6 +29,7 @@ public static class StartupRegistrationService
 
     public static async Task SetUserLoginEnabledAsync(bool enabled)
     {
+        if (BuildIdentity.IsTest) throw new InvalidOperationException(LocalizationService.Current.Get("Prototype.NoAutostart"));
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException(LocalizationService.Current.Get("Startup.WindowsOnly"));
         if (PackageIdentityService.HasIdentity)
         {

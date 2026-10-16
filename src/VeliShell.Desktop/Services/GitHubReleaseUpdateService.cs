@@ -71,6 +71,9 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     {
         get
         {
+            var info = typeof(GitHubReleaseUpdateService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (SemanticVersion.TryParse(info, out var semantic))
+                return new SemanticVersion(semantic.Major, semantic.Minor, semantic.Patch, semantic.PreRelease);
             var version = typeof(GitHubReleaseUpdateService).Assembly.GetName().Version ??
                           new Version(0, 0, 0);
             return new SemanticVersion(
@@ -84,7 +87,15 @@ public sealed class GitHubReleaseUpdateService : IDisposable
     public async Task<UpdateCheckResult> CheckForUpdateAsync(
         SemanticVersion currentVersion,
         CancellationToken cancellationToken = default)
+        => await CheckForUpdateAsync(currentVersion, UpdateChannel.Stable, cancellationToken);
+
+    public async Task<UpdateCheckResult> CheckForUpdateAsync(
+        SemanticVersion currentVersion,
+        UpdateChannel channel,
+        CancellationToken cancellationToken = default)
     {
+        if (!Enum.IsDefined(channel)) throw new ArgumentOutOfRangeException(nameof(channel));
+        if (channel == UpdateChannel.Test) return await CheckTestChannelAsync(currentVersion, cancellationToken);
         using var request = CreateRequest(HttpMethod.Get, LatestReleaseApi, "application/vnd.github+json");
         using var response = await _client.SendAsync(
             request,
@@ -110,7 +121,7 @@ public sealed class GitHubReleaseUpdateService : IDisposable
             cancellationToken);
         var release = ParseRelease(bytes);
         return new UpdateCheckResult(
-            release.Version > currentVersion ? UpdateCheckState.UpdateAvailable : UpdateCheckState.UpToDate,
+            release.Version > currentVersion || currentVersion.IsPrerelease ? UpdateCheckState.UpdateAvailable : UpdateCheckState.UpToDate,
             currentVersion,
             release);
     }
@@ -143,7 +154,7 @@ public sealed class GitHubReleaseUpdateService : IDisposable
 
         // No changelog or package metadata is needed merely to report that this
         // installation is current. This keeps the rate-limit fallback lightweight.
-        if (version <= currentVersion)
+        if (version <= currentVersion && !currentVersion.IsPrerelease)
             return new UpdateCheckResult(UpdateCheckState.UpToDate, currentVersion, null);
 
         var atomBytes = await ReadOfficialMetadataAsync(
@@ -488,17 +499,19 @@ public sealed class GitHubReleaseUpdateService : IDisposable
 
     }
 
-    internal static UpdateRelease ParseRelease(ReadOnlySpan<byte> utf8Json)
+    internal static UpdateRelease ParseRelease(ReadOnlySpan<byte> utf8Json, UpdateChannel channel = UpdateChannel.Stable)
     {
         using var document = JsonDocument.Parse(utf8Json.ToArray());
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object ||
             root.TryGetProperty("draft", out var draft) && draft.GetBoolean() ||
-            root.TryGetProperty("prerelease", out var prerelease) && prerelease.GetBoolean())
+            !root.TryGetProperty("prerelease", out var prerelease) || prerelease.GetBoolean() != (channel == UpdateChannel.Test))
             throw new InvalidDataException("GitHub did not return a published stable release.");
 
         var tag = RequiredString(root, "tag_name");
-        if (!SemanticVersion.TryParse(tag, out var version) || version.IsPrerelease)
+        if (!SemanticVersion.TryParse(tag, out var version) ||
+            (channel == UpdateChannel.Stable ? version.IsPrerelease : !IsTestVersion(version)) ||
+            (channel == UpdateChannel.Test && OptionalString(root, "target_commitish") != "test"))
             throw new InvalidDataException("The latest GitHub release tag is not a stable SemVer version.");
         var changelog = RequiredString(root, "body").Trim();
         if (changelog.Length == 0)
@@ -538,6 +551,36 @@ public sealed class GitHubReleaseUpdateService : IDisposable
         ValidateAsset(tag, version, installer);
 
         return new UpdateRelease(version, tag, displayName, changelog, publishedAt, releasePage, installer);
+    }
+
+    private static bool IsTestVersion(SemanticVersion version) => version.PreRelease is { } pre &&
+        pre.StartsWith("test.", StringComparison.Ordinal) && pre[5..].Length > 0 &&
+        pre[5..].All(character => character is >= '0' and <= '9');
+
+    private async Task<UpdateCheckResult> CheckTestChannelAsync(SemanticVersion currentVersion, CancellationToken cancellationToken)
+    {
+        var uri = new Uri("https://api.github.com/repos/ZUMBYTE-AppSolution/VeliShell/releases?per_page=50");
+        using var request = CreateRequest(HttpMethod.Get, uri, "application/vnd.github+json");
+        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var bytes = await ReadLimitedAsync(response.Content, MaximumMetadataBytes, _bodyReadInactivityTimeout, cancellationToken);
+        using var document = JsonDocument.Parse(bytes);
+        if (document.RootElement.ValueKind != JsonValueKind.Array) throw new InvalidDataException("Invalid test release list.");
+        JsonElement? newest = null;
+        SemanticVersion newestVersion = default;
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("draft", out var draft) || draft.GetBoolean() ||
+                !item.TryGetProperty("prerelease", out var prerelease) || !prerelease.GetBoolean() ||
+                OptionalString(item, "target_commitish") != "test" ||
+                !SemanticVersion.TryParse(OptionalString(item, "tag_name"), out var candidate) || !IsTestVersion(candidate)) continue;
+            if (newest is null || candidate > newestVersion) { newest = item; newestVersion = candidate; }
+        }
+        if (newest is null) return new UpdateCheckResult(UpdateCheckState.NoPublishedRelease, currentVersion, null);
+        var release = ParseRelease(Encoding.UTF8.GetBytes(newest.Value.GetRawText()), UpdateChannel.Test);
+        return new UpdateCheckResult(release.Version > currentVersion || !currentVersion.IsPrerelease
+            ? UpdateCheckState.UpdateAvailable : UpdateCheckState.UpToDate, currentVersion, release);
     }
 
     private static async Task<string> DownloadAndHashAsync(

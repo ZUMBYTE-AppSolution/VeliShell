@@ -1,6 +1,7 @@
 <Project Sdk="WixToolset.Sdk/4.0.6">
   <PropertyGroup>
     <OutputType>Package</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <InstallerPlatform>x64</InstallerPlatform>
     <Cultures>de-DE</Cultures>
     <ProductVersion Condition="'$(ProductVersion)' == ''">$(Version)</ProductVersion>
@@ -12,8 +13,14 @@
     <DefineConstants>ProductVersion=$(ProductVersion);ProductCode=$(ProductCode)</DefineConstants>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <SuppressValidation>false</SuppressValidation>
+    <!-- Test.N releases deliberately share the three-field MSI core version.
+         Unique ProductCodes and removal-before-install allow same-core previews;
+         the in-app updater orders the full SemVer and never auto-downgrades Test. -->
+    <SuppressIces Condition="'$(VeliShellBuildChannel)' == 'Test'">ICE61</SuppressIces>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Package.wxs" Condition="'$(VeliShellBuildChannel)' != 'Test'" />
+    <Compile Include="TestPackage.wxs" Condition="'$(VeliShellBuildChannel)' == 'Test'" />
     <BindPath Include="$(PublishDirectory)" BindName="publish" />
     <Compile Include="$(GeneratedPayloadFile)" />
     <PackageReference Include="WixToolset.UI.wixext" Version="4.0.6" />

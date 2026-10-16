@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+ <Package Name="VeliShell Test" Manufacturer="Zumbyte.de" Version="$(ProductVersion)" ProductCode="$(ProductCode)"
+          Language="1031" Scope="perMachine" UpgradeCode="A1FD7AC7-C2C1-47C1-A3D8-7C118DB2C5EC" Compressed="yes">
+  <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+  <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="Eine neuere Testversion von VeliShell ist bereits installiert." />
+  <Property Id="ARPCONTACT" Value="Zumbyte.de Support" />
+  <Property Id="ARPHELPLINK" Value="https://github.com/ZUMBYTE-AppSolution/VeliShell/issues" />
+  <Property Id="ARPPRODUCTICON" Value="VeliShell.ico" />
+  <Icon Id="VeliShell.ico" SourceFile="$(sys.SOURCEFILEDIR)..\..\src\VeliShell.Desktop\Assets\VeliShellApp.ico" />
+  <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+  <UIRef Id="WixUI_ErrorProgressText" />
+  <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
+  <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)Assets\VeliShellInstallerDialog.png" />
+  <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)Assets\VeliShellInstallerBanner.png" />
+  <StandardDirectory Id="ProgramFiles6432Folder"><Directory Id="VeliShellCompanyFolder" Name="Zumbyte"><Directory Id="INSTALLFOLDER" Name="VeliShell Test" /></Directory></StandardDirectory>
+  <StandardDirectory Id="ProgramMenuFolder"><Directory Id="TestProgramMenu" Name="VeliShell Test">
+   <Component Id="TestShortcuts" Guid="5D4E936F-E402-47BE-BFB1-61F990A68EED">
+    <Shortcut Id="TestAppShortcut" Name="VeliShell Test" Target="[INSTALLFOLDER]VeliShell.exe" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+    <Shortcut Id="TestFrameShortcut" Name="Native Fenstergestaltung testen" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--native-frame-demo" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+    <Shortcut Id="TestRecoveryShortcut" Name="Notfall-Wiederherstellung" Target="[INSTALLFOLDER]VeliShell.exe" Arguments="--restore-native-prototype" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+    <RemoveFolder Id="RemoveTestProgramMenu" On="uninstall" />
+    <RegistryValue Root="HKCU" Key="Software\Zumbyte\VeliShell-Test" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+   </Component>
+  </Directory></StandardDirectory>
+  <Feature Id="VeliShellComplete" Title="VeliShell Test" Level="1" AllowAbsent="no">
+   <ComponentGroupRef Id="VeliShellApplicationPayload" /><ComponentRef Id="TestShortcuts" />
+  </Feature>
+ </Package>
+</Wix>

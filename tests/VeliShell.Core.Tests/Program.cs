@@ -23,6 +23,18 @@ try
     Test("Default language follows system", () => Check(new Settings().Language == UiLanguage.System));
     Test("Startup is opt-in", () => Check(new Settings().Startup == StartupMode.Disabled));
     Test("Update checks default to notify", () => Check(new Settings().Updates == UpdateMode.Notify));
+    Test("Stable is the persisted default update channel", () => Check(new Settings().UpdateSource == UpdateChannel.Stable));
+    Test("Invalid update channel normalizes to stable", () =>
+    {
+        var settings = new Settings { UpdateSource = (UpdateChannel)900 }; settings.Normalize();
+        Check(settings.UpdateSource == UpdateChannel.Stable);
+    });
+    Test("Test channel survives settings roundtrip", () =>
+    {
+        var store = new SettingsStore(Path.Combine(temp, "test-channel"));
+        store.Save(new Settings { UpdateSource = UpdateChannel.Test });
+        Check(store.Load().UpdateSource == UpdateChannel.Test);
+    });
     Test("Taskbar hiding is opt-in", () => Check(!new Settings().HideTaskbar));
     Test("Desktop-icon hiding is opt-in", () => Check(!new Settings().HideDesktopIcons));
     Test("VeliShell dock item is visible by default", () => Check(new Settings().ShowVeliShellDockItem));

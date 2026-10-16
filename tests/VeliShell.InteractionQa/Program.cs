@@ -21,7 +21,7 @@ using VeliShell.Desktop.Services;
 using VeliShell.Desktop.Native;
 using VeliShell.Desktop.Controls;
 
-internal static class Program
+internal static partial class Program
 {
     private static readonly Assembly DesktopAssembly = typeof(VeliShell.Desktop.App).Assembly;
 
@@ -34,6 +34,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--verify-native-frame", StringComparer.OrdinalIgnoreCase)) return VerifyNativeFrame();
         if (args.Contains("--render-start-launcher", StringComparer.OrdinalIgnoreCase))
             return RenderStartLauncher();
         if (args.Contains("--render-folder", StringComparer.OrdinalIgnoreCase))

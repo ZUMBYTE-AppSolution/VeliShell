@@ -16,6 +16,7 @@ public partial class App : Application
         string.Format(LocalizationService.Current.ActiveCulture, L(key), args);
     private Mutex? _mutex;
     private bool _ownsMutex;
+    private bool _prototypeUtility;
     private SingleInstancePinBridge? _pinBridge;
     private DispatcherTimer? _saveTimer;
     private DispatcherTimer? _updateTimer;
@@ -37,7 +38,7 @@ public partial class App : Application
     private SemanticVersion? _lastOfferedVersion;
     public static string DataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "VeliShell");
+        BuildIdentity.ProfileName);
     private static string LegacyDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "HarborDesktop");
@@ -69,6 +70,13 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (NativePrototypeSession.IsUtility(e.Args))
+        {
+            _prototypeUtility = true;
+            try { NativePrototypeSession.Run(e.Args, this); }
+            catch (Exception error) { Log("Native prototype utility failed", error); Shutdown(2); }
+            return;
+        }
         var pinInvocationRequested = e.Args.Any(argument =>
             string.Equals(argument, ShellPinCommand.Option, StringComparison.OrdinalIgnoreCase));
         var hasPinCommand = ShellPinCommand.TryParse(e.Args, out var pendingPinPath);
@@ -110,7 +118,9 @@ public partial class App : Application
         };
         MigrateLegacySettings();
         Store = new SettingsStore(DataDirectory);
+        var freshProfile = !File.Exists(Path.Combine(DataDirectory, "settings.json"));
         Preferences = Store.Load();
+        if (BuildIdentity.IsTest && freshProfile) Preferences.UpdateSource = UpdateChannel.Test;
         LocalizationService.Current.Apply(Preferences.Language);
         ProgramIndex.Start();
         if (Store.LoadWarning is not null) Log(Store.LoadWarning);
@@ -142,7 +152,7 @@ public partial class App : Application
         if (hasPinCommand) AddShellPin(pendingPinPath);
         try
         {
-            if (!PackageIdentityService.HasIdentity && Environment.ProcessPath is { } executablePath)
+            if (!BuildIdentity.IsTest && !PackageIdentityService.HasIdentity && Environment.ProcessPath is { } executablePath)
                 ShellVerbRegistrationService.EnsureRegisteredForCurrentUser(executablePath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
@@ -205,6 +215,7 @@ public partial class App : Application
 
     private static void MigrateLegacySettings()
     {
+        if (BuildIdentity.IsTest) return;
         try
         {
             var destination = Path.Combine(DataDirectory, "settings.json");
@@ -447,6 +458,7 @@ public partial class App : Application
         {
             var result = await _updates.CheckForUpdateAsync(
                 GitHubReleaseUpdateService.InstalledVersion,
+                Preferences.UpdateSource,
                 _shutdown.Token);
             switch (result.State)
             {
@@ -472,7 +484,8 @@ public partial class App : Application
                         ShowUpdateWindow(
                             release,
                             owner,
-                            automaticDownload: !userInitiated && Preferences.Updates == UpdateMode.AutomaticDownload);
+                            automaticDownload: !userInitiated && Preferences.Updates == UpdateMode.AutomaticDownload &&
+                                release.Version.IsPrerelease == BuildIdentity.IsTest);
                     }
                     break;
                 default:
@@ -510,6 +523,19 @@ public partial class App : Application
         }
     }
 
+    internal async Task ChangeUpdateChannelAsync(UpdateChannel channel, Window owner)
+    {
+        if (PackageIdentityService.HasIdentity) return;
+        if (_updateWindow is not null || !await _updateCheckGate.WaitAsync(0))
+        { MessageBox.Show(owner, L("Update.ChannelBusy"), L("Update.Channel")); return; }
+        try
+        {
+            UpdatePreferences(settings => settings.UpdateSource = channel);
+            SaveNow(); _lastOfferedVersion = null; SetUpdateState(UpdateUiState.NotChecked);
+        }
+        finally { _updateCheckGate.Release(); }
+        await CheckForUpdatesAsync(userInitiated: true, owner);
+    }
     private void ShowUpdateWindow(UpdateRelease release, Window? owner, bool automaticDownload)
     {
         if (_updateWindow is not null)
@@ -957,6 +983,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_prototypeUtility) { _updates.Dispose(); ProgramIndex.Dispose(); base.OnExit(e); return; }
+        if (BuildIdentity.IsTest) NativePrototypeSession.RequestClose();
         ProgramIndex.Dispose();
         _saveTimer?.Stop();
         _updateTimer?.Stop();

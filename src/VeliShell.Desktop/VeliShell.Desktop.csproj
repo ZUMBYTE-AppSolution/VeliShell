@@ -17,10 +17,15 @@
     <Copyright>Copyright © 2026 Zumbyte AppSolution</Copyright>
     <Description>A calm, macOS-inspired dock and styling companion for Windows.</Description>
     <NeutralLanguage>de-DE</NeutralLanguage>
+    <DefineConstants Condition="'$(VeliShellBuildChannel)' == 'Test'">$(DefineConstants);VELISHELL_TEST</DefineConstants>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../VeliShell.Core/VeliShell.Core.csproj" /></ItemGroup>
   <ItemGroup><InternalsVisibleTo Include="VeliShell.InteractionQa" /></ItemGroup>
   <ItemGroup>
+    <Content Include="obj/native/VeliShell.NativeFrame.dll" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="VeliShell.NativeFrame.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../WINDOW-RECOVERY.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="WINDOW-RECOVERY.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../NATIVE-TEST.cmd" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-TEST.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../NATIVE-PROTOTYPE.md" Condition="'$(VeliShellBuildChannel)' == 'Test'" Link="NATIVE-PROTOTYPE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\VeliShellApp.png" />
     <Resource Include="Assets\VeliShellMark.png" />
     <Resource Include="Assets\SystemIcons\RecycleBinEmpty.png" />
@@ -32,4 +37,7 @@
     <Content Include="../../THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../THIRD-PARTY-LICENSES/**/*" Link="THIRD-PARTY-LICENSES/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="BuildNativeFramePrototype" BeforeTargets="BeforeBuild" Condition="'$(VeliShellBuildChannel)' == 'Test'" Inputs="../../native/VeliShell.NativeFrame/NativeFrame.cpp;../../tools/Build-NativePrototype.ps1" Outputs="$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll">
+    <Exec Command="pwsh.exe -NoProfile -File &quot;$(MSBuildProjectDirectory)/../../tools/Build-NativePrototype.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)/obj/native/VeliShell.NativeFrame.dll&quot;" />
+  </Target>
 </Project>

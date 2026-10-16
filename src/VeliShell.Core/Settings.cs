@@ -10,6 +10,7 @@ public enum UiLanguage { System, German, English }
 public enum StartupMode { Disabled, UserLogin }
 
 public enum UpdateMode { Manual, Notify, AutomaticDownload }
+public enum UpdateChannel { Stable, Test }
 
 public enum OnlineIconMode { Disabled, OnDemand, AutomaticExactMatches }
 
@@ -53,6 +54,7 @@ public sealed class Settings
     public UiLanguage Language { get; set; } = UiLanguage.System;
     public StartupMode Startup { get; set; } = StartupMode.Disabled;
     public UpdateMode Updates { get; set; } = UpdateMode.Notify;
+    public UpdateChannel UpdateSource { get; set; } = UpdateChannel.Stable;
     public double IconSize { get; set; } = DefaultIconSize;
     public double GlassGloss { get; set; } = 50;
     public double GlassTransparency { get; set; } = 50;
@@ -99,6 +101,7 @@ public sealed class Settings
         if (!Enum.IsDefined(Language)) Language = UiLanguage.System;
         if (!Enum.IsDefined(Startup)) Startup = StartupMode.Disabled;
         if (!Enum.IsDefined(Updates)) Updates = UpdateMode.Notify;
+        if (!Enum.IsDefined(UpdateSource)) UpdateSource = UpdateChannel.Stable;
         if (!Enum.IsDefined(IconStyle)) IconStyle = DockIconStyle.Mac;
         if (!Enum.IsDefined(OnlineIcons)) OnlineIcons = OnlineIconMode.Disabled;
         OnlineIconConsentVersion = Math.Clamp(OnlineIconConsentVersion, 0, CurrentOnlineIconConsentVersion);

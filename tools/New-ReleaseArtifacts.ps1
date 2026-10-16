@@ -33,8 +33,8 @@ if (-not $InstallerPath) { $InstallerPath = Join-Path $out "installer\VeliShell-
 $PortableDirectory = [IO.Path]::GetFullPath($PortableDirectory)
 $InstallerPath = [IO.Path]::GetFullPath($InstallerPath)
 if ($StoreMsixPath) { $StoreMsixPath = [IO.Path]::GetFullPath($StoreMsixPath) }
-if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
-    throw "Release version must be stable SemVer, got '$Version'."
+if ($Version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-test\.[1-9][0-9]*)?$') {
+    throw "Release version must be stable SemVer or a numbered test prerelease, got '$Version'."
 }
 if (-not (Test-Path -LiteralPath (Join-Path $PortableDirectory 'VeliShell.exe') -PathType Leaf)) {
     throw 'The portable VeliShell payload is missing.'
@@ -129,12 +129,13 @@ try {
     }
     finally { $zipStream.Dispose() }
 
-    $releaseInstaller = Join-Path $releaseDirectory ([IO.Path]::GetFileName($InstallerPath))
+    $releaseInstaller = Join-Path $releaseDirectory "VeliShell-$Version-win-x64.msi"
     Copy-Item -LiteralPath $InstallerPath -Destination $releaseInstaller -Force
     # Stable aliases make the README's /releases/latest/download links durable,
     # while versioned names remain available to the in-app updater and archives.
-    $stableZip = Join-Path $releaseDirectory 'VeliShell-Portable-win-x64.zip'
-    $stableInstaller = Join-Path $releaseDirectory 'VeliShell-Setup-win-x64.msi'
+    $isTest = $Version -match '-test\.'
+    $stableZip = Join-Path $releaseDirectory $(if ($isTest) { 'VeliShell-Test-Portable-win-x64.zip' } else { 'VeliShell-Portable-win-x64.zip' })
+    $stableInstaller = Join-Path $releaseDirectory $(if ($isTest) { 'VeliShell-Test-Setup-win-x64.msi' } else { 'VeliShell-Setup-win-x64.msi' })
     Copy-Item -LiteralPath $zipPath -Destination $stableZip -Force
     Copy-Item -LiteralPath $releaseInstaller -Destination $stableInstaller -Force
     $artifacts = @($zipPath, $releaseInstaller, $stableZip, $stableInstaller)

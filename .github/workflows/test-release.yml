@@ -1,0 +1,75 @@
+name: Publish VeliShell test preview
+
+"on":
+  push:
+    branches: [test]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: velishell-test-release
+  cancel-in-progress: false
+
+jobs:
+  test-preview:
+    if: github.ref == 'refs/heads/test'
+    runs-on: windows-2025
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out test source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.402'
+      - name: Validate test identity and repository boundary
+        id: version
+        run: |
+          ./tools/Assert-PublicRepository.ps1
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          $version = [string]$props.Project.PropertyGroup.InformationalVersion
+          $core = [string]$props.Project.PropertyGroup.Version
+          if ([string]$props.Project.PropertyGroup.VeliShellBuildChannel -ne 'Test' -or $version -notmatch '^\d+\.\d+\.\d+-test\.[1-9][0-9]*$' -or -not $version.StartsWith($core + '-test.')) { throw 'Invalid test build identity.' }
+          if (git tag --list "v$version") { throw 'Test versions are immutable. Increase the numbered test version before publishing again.' }
+          ./tools/Get-ReleaseNotes.ps1 -Version $version -OutputPath ./out/test-release-notes.md
+          "full=$version" >> $env:GITHUB_OUTPUT
+          "core=$core" >> $env:GITHUB_OUTPUT
+      - name: Build and test full self-contained application including native DLL
+        run: |
+          ./tools/Build.ps1 -Portable
+          if (-not (Test-Path ./out/portable/VeliShell.NativeFrame.dll) -or -not (Test-Path ./out/portable/WINDOW-RECOVERY.cmd)) { throw 'Native prototype or independent recovery entry point is missing.' }
+      - name: Build isolated test MSI
+        run: ./tools/Build-Installer.ps1 -Version '${{ steps.version.outputs.core }}' -PublishDirectory ./out/portable
+      - name: Smoke-test test installer without changing stable installation
+        run: ./tools/Test-TestChannelInstaller.ps1 -Version '${{ steps.version.outputs.core }}' -AllowMachineChanges
+      - name: Create test release artifacts
+        run: ./tools/New-ReleaseArtifacts.ps1 -Version '${{ steps.version.outputs.full }}' -InstallerPath './out/installer/VeliShell-${{ steps.version.outputs.core }}-win-x64.msi'
+      - name: Upload tested packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: VeliShell-${{ steps.version.outputs.full }}-Windows-x64
+          path: out/release/
+          if-no-files-found: error
+      - name: Publish immutable prerelease without changing Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.full }}'
+          $assets = @(Get-ChildItem ./out/release -File | Select-Object -ExpandProperty FullName)
+          gh release create "v$version" @assets --target test --prerelease --latest=false --title "VeliShell $version · Native Frame Prototype" --notes-file ./out/test-release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Test prerelease publication failed.' }
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: VeliShell-Test-build-logs
+          path: out/*.log
+          if-no-files-found: ignore

@@ -35,7 +35,8 @@ public partial class UpdateWindow : VeliShellWindow
         _release = release;
         InitializeComponent();
         ProductIcon.Source = IconService.For("velishell");
-        ReleaseNotes.Text = release.Changelog;
+        ReleaseNotes.Text = (release.Version.IsPrerelease != BuildIdentity.IsTest
+            ? L(release.Version.IsPrerelease ? "Update.TestConsent" : "Update.StableConsent") + "\n\n" : "") + release.Changelog;
         LocalizationService.Current.Changed += ApplyLocalizedText;
         ApplyLocalizedText();
         Closed += (_, _) =>

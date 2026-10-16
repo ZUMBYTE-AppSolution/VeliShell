@@ -6,7 +6,7 @@ Produktversion, Windows-Version sowie eine kurze, reproduzierbare Beschreibung.
 
 ## Update-Vertrauen
 
-VeliShell liest ausschließlich veröffentlichte stabile Releases aus
+VeliShell liest ausschließlich veröffentlichte Releases des gewählten Kanals aus
 `ZUMBYTE-AppSolution/VeliShell`. Vor einem Download zeigt die Anwendung Version und
 Changelog. Je nach bewusst gewähltem Modus wartet VeliShell auf einen Download-Klick
 oder lädt das Paket automatisch. In beiden Fällen wird es bytegenau gegen den von
@@ -24,6 +24,20 @@ unsignierten Paketen zeigen VeliShell, die Release Notes und gegebenenfalls Wind
 SmartScreen diesen Zustand ausdrücklich an.
 
 ## Unterstützte Versionen
+
+Der freiwillige Testkanal akzeptiert ausschließlich nummerierte `-test.N`-Vorabstände
+mit Release-Ziel `test` aus demselben Repository. Stable lehnt alle Vorabstände ab.
+Ein Kanalwechsel benötigt Zustimmung; Download, Prüfsumme und Installationsfreigabe
+werden nicht umgangen. Test besitzt eine separate MSI-Identität und ein getrenntes
+Einstellungsprofil. Es überschreibt weder die stabile Installation noch deren
+Autostart- oder Explorer-Kontextmenüregistrierung. Store-Pakete bleiben Store-verwaltet.
+
+Die native Prototyp-DLL wird nur in das eigene kooperierende Testfenster geladen.
+Sie prüft Prozess, UI-Thread und Opt-in-Marker vor der Rahmenänderung. Es gibt keine
+Prozessinjektion und keinen Austausch von Systemdateien. Ein unabhängiger Helfer
+empfängt das Notfallkürzel. Bei einem vollständig blockierten Testfenster bleibt
+die Wiederherstellung ausdrücklich ausstehend, bis es wieder reagiert. Siehe
+[Test- und Wiederherstellungshinweise](NATIVE-PROTOTYPE.md).
 
 Sicherheitskorrekturen werden grundsätzlich für die neueste veröffentlichte stabile
 Version bereitgestellt. Vorabstände und selbst kompilierte Änderungen können davon

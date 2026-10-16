@@ -16,6 +16,9 @@ if (-not $Version) {
     $Version = [string]$properties.Project.PropertyGroup.Version
 }
 $runtimeNoticeVersion = [string]$properties.Project.PropertyGroup.VeliShellRuntimeNoticeVersion
+$testChannel = [string]$properties.Project.PropertyGroup.VeliShellBuildChannel -eq 'Test'
+$packageIdentity = if ($testChannel) { [string]$properties.Project.PropertyGroup.InformationalVersion } else { $Version }
+$componentNamespace = if ($testChannel) { 'VeliShell-Test' } else { 'VeliShell' }
 if ($runtimeNoticeVersion -notmatch '^10\.0\.\d+$') {
     throw "Invalid or missing .NET notice version in Directory.Build.props: '$runtimeNoticeVersion'"
 }
@@ -135,7 +138,7 @@ function Add-PayloadGroup([string]$groupId, [string[]]$groupFiles) {
         $directoryId = if ([string]::IsNullOrEmpty($directory)) { 'INSTALLFOLDER' } else { 'dir_' + $directoryIdentity }
         $source = '!(bindpath.publish)' + $relative
         $fileName = [IO.Path]::GetFileName($relative)
-        $componentGuid = New-DeterministicGuid ('VeliShell/component/' + $relative.ToLowerInvariant())
+        $componentGuid = New-DeterministicGuid ($componentNamespace + '/component/' + $relative.ToLowerInvariant())
         $isExecutable = [IO.Path]::GetExtension($relative).Equals('.exe', [StringComparison]::OrdinalIgnoreCase)
         $checksum = if ($isExecutable) { ' Checksum="yes"' } else { '' }
         [void]$xml.AppendLine(('      <Component Id="cmp_{0}" Guid="{1}" Directory="{2}">' -f $identity, $componentGuid, $directoryId))
@@ -152,7 +155,7 @@ Add-PayloadGroup 'VeliShellApplicationPayload' $files
 [void]$xml.AppendLine('</Wix>')
 [IO.File]::WriteAllText($generatedPayload, $xml.ToString(), [Text.UTF8Encoding]::new($false))
 
-$productCode = New-DeterministicGuid ("VeliShell/product/$Version/win-x64")
+$productCode = New-DeterministicGuid ("$componentNamespace/product/$packageIdentity/win-x64")
 
 $dotnet = (Get-Command dotnet -ErrorAction Stop).Source
 $arguments = @(

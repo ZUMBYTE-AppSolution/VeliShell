@@ -6,6 +6,18 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.13.12-test.1] - 2026-10-16
+
+### Experimenteller Teststand – nicht für den Microsoft Store
+
+- Vollständige VeliShell-Testausgabe mit separat startbarem eigenen Testfenster. Eine native DLL integriert Titelleiste und linke Fensterbuttons direkt in dessen Fensterrahmen statt eines außen angesetzten Aufsatzes.
+- Live-Glas über Windows Composition; Titel und Button-Ebene über Direct2D/DirectWrite. Die bekannten Glasfarben, Matt-/Transparenzwerte sowie Hell/Dunkel bleiben erhalten. Bei fehlender Grafikunterstützung wird eine lesbare Ersatzdarstellung verwendet.
+- Windows-Rahmen jederzeit wiederherstellbar. Ein unabhängiger Helfer empfängt Strg + Alt + Umschalt + F12; zusätzlich stehen WINDOW-RECOVERY.cmd und ein Startmenü-Eintrag bereit. Ein vollständig blockiertes Testfenster muss für die Wiederherstellung wieder reagieren.
+- Update-Kanäle Stable und Test mit Changelog, geprüften Downloads und getrennt bestätigter Installation. Auch eine ältere Stable-Version kann ausdrücklich angeboten und danach gestartet werden.
+- Separate Test-Installation und separate Einstellungen. Stable, dessen Autostart und der Explorer-Anheft-Befehl werden nicht überschrieben. Keine Systemdateien werden verändert; keine fremden Programme werden umgestaltet.
+
+Anleitung und Grenzen: [NATIVE-PROTOTYPE.md](NATIVE-PROTOTYPE.md).
+
 ## [0.13.11] - 2026-10-16
 
 ### Neu

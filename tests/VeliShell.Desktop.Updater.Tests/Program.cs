@@ -9,6 +9,19 @@ using VeliShell.Desktop.Services;
 var failures = 0;
 var count = 0;
 
+if (args.Contains("--verify-live-channels", StringComparer.Ordinal))
+{
+    using var live = new GitHubReleaseUpdateService();
+    foreach (var channel in new[] { UpdateChannel.Stable, UpdateChannel.Test })
+    {
+        var result = await live.CheckForUpdateAsync(GitHubReleaseUpdateService.InstalledVersion, channel);
+        if (result.Release is null || result.Release.Version.IsPrerelease != (channel == UpdateChannel.Test))
+            throw new InvalidOperationException("The published channel did not resolve to its own verified release.");
+        Console.WriteLine($"LIVE {channel}: {result.Release.TagName}; {result.State}; {result.Release.Installer.FileName}; digest={result.Release.Installer.Sha256.Length} hex characters");
+    }
+    return 0;
+}
+
 async Task TestAsync(string name, Func<Task> run)
 {
     count++;
@@ -505,6 +518,45 @@ if (args.Contains("--live-update-check", StringComparer.Ordinal))
     });
 }
 
+await TestAsync("Stable rollback is offered even when its version is older than test", async () =>
+{
+    using var service = ServiceForJson(ReleaseJson([ValidAsset([1])]));
+    var result = await service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.12-test.1"), UpdateChannel.Stable);
+    Check(result.IsUpdateAvailable && result.Release!.Version.ToString() == "0.4.0");
+});
+await TestAsync("Test channel selects numeric newest published test from test branch", async () =>
+{
+    var json = "[" + string.Join(",", new[] { TestReleaseJson("0.13.12-test.2"), TestReleaseJson("0.13.12-test.10"), TestReleaseJson("0.13.13-test.1", draft:true), TestReleaseJson("0.15.0-test.1", branch:"main"), ReleaseJson([ValidAsset([1])]) }) + "]";
+    using var service = ServiceForJson(json);
+    var result = await service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.11"), UpdateChannel.Test);
+    Check(result.IsUpdateAvailable && result.Release!.Version.ToString() == "0.13.12-test.10");
+});
+await TestAsync("Stable does not accept a test prerelease", async () =>
+{
+    using var service = ServiceForJson(TestReleaseJson("0.13.12-test.1"));
+    await ExpectAsync<InvalidDataException>(() => service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.11")));
+});
+await TestAsync("Test channel never falls back to stable when only stable exists", async () =>
+{
+    using var service = ServiceForJson("[" + ReleaseJson([ValidAsset([1])]) + "]");
+    Check((await service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.11"), UpdateChannel.Test)).State == UpdateCheckState.NoPublishedRelease);
+});
+await TestAsync("Test switch is offered even when stable version is numerically newer", async () =>
+{
+    using var service = ServiceForJson("[" + TestReleaseJson("0.13.12-test.1") + "]");
+    Check((await service.CheckForUpdateAsync(SemanticVersion.Parse("1.0.0"), UpdateChannel.Test)).IsUpdateAvailable);
+});
+await TestAsync("Test package retains official tag-pinned digest validation", async () =>
+{
+    var json = TestReleaseJson("0.13.12-test.1").Replace("github.com/ZUMBYTE-AppSolution/VeliShell/releases/download", "attacker.invalid/releases/download", StringComparison.Ordinal);
+    using var service = ServiceForJson("[" + json + "]");
+    await ExpectAsync<UpdateSecurityException>(() => service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.11"), UpdateChannel.Test));
+});
+await TestAsync("An equal installed test is not repeatedly offered", async () =>
+{
+    using var service = ServiceForJson("[" + TestReleaseJson("0.13.12-test.1") + "]");
+    Check((await service.CheckForUpdateAsync(SemanticVersion.Parse("0.13.12-test.1+commit"), UpdateChannel.Test)).State == UpdateCheckState.UpToDate);
+});
 Console.WriteLine($"{count - failures}/{count} updater tests passed.");
 return failures == 0 ? 0 : 1;
 
@@ -588,6 +640,15 @@ static AssetSpec ValidAsset(byte[] payload) => new(
     payload.LongLength,
     "https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/download/v0.4.0/VeliShell-0.4.0-win-x64.msi",
     "sha256:" + Sha256(payload));
+
+static string TestReleaseJson(string version, bool draft = false, string branch = "test") => JsonSerializer.Serialize(new
+{
+    tag_name = "v" + version, html_url = "https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/tag/v" + version,
+    published_at = "2026-10-16T12:00:00Z", draft, prerelease = true, target_commitish = branch,
+    name = "VeliShell " + version, body = "Native prototype test release.",
+    assets = new[] { new { name = "VeliShell-" + version + "-win-x64.msi", size = 1,
+        browser_download_url = "https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/download/v" + version + "/VeliShell-" + version + "-win-x64.msi", digest = "sha256:" + Sha256([1]) } }
+});
 
 static UpdateRelease ReleaseFor(
     byte[] payload,

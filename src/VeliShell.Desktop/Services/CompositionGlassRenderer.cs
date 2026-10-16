@@ -24,6 +24,11 @@ internal sealed class CompositionGlassRenderer : IDisposable
     private readonly CompositionGeometricClip _clip = null!;
     private readonly CompositionBackdropBrush _backdropBrush = null!;
     private bool _disposed;
+    private CompositionGraphicsDevice? _captionDevice;
+    private CompositionDrawingSurface? _captionSurface;
+    private CompositionSurfaceBrush? _captionBrush;
+    private SpriteVisual? _captionVisual;
+    private (int Width, int Height, float Scale, bool Dark, uint Plate, int Hover)? _captionSize;
 
     internal CompositionGlassRenderer(nint window)
     {
@@ -54,14 +59,46 @@ internal sealed class CompositionGlassRenderer : IDisposable
         catch { Dispose(); throw; }
     }
 
-    internal void Resize(int width, int height, float radiusX, float radiusY)
+    internal void Resize(int width, int height, float radiusX, float radiusY, bool squareBottom = false)
     {
         var size = new Vector2(width, height);
         _root.Size = size;
-        _shape.Size = size;
+        _shape.Size = new Vector2(width, height + (squareBottom ? radiusY : 0));
         _shape.CornerRadius = new Vector2(Math.Min(radiusX, width / 2f), Math.Min(radiusY, height / 2f));
         _backdrop.Size = size;
         _tint.Size = size;
+    }
+
+    internal void PaintPrototypeCaption(int width, int height, float scale, bool dark, uint plate, int hover, string title, string restore)
+    {
+        if (!BuildIdentity.IsTest) throw new InvalidOperationException("Native caption is test-only.");
+        if (_captionSize == (width, height, scale, dark, plate, hover)) return;
+        if (_captionDevice is null)
+        {
+            var pointer = MarshalInspectable<Compositor>.FromManaged(_compositor);
+            try
+            {
+                Marshal.ThrowExceptionForHR(NativePrototypeMethods.VeliFrameGraphicsDevice(pointer, out var device));
+                try { _captionDevice = MarshalInspectable<CompositionGraphicsDevice>.FromAbi(device); }
+                finally { Marshal.Release(device); }
+            }
+            finally { Marshal.Release(pointer); }
+            _captionBrush = _compositor.CreateSurfaceBrush();
+            _captionVisual = _compositor.CreateSpriteVisual(); _captionVisual.Brush = _captionBrush;
+            _root.Children.InsertAtTop(_captionVisual);
+        }
+        var surface = _captionDevice.CreateDrawingSurface(new Windows.Foundation.Size(width, height),
+            Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, Windows.Graphics.DirectX.DirectXAlphaMode.Premultiplied);
+        try
+        {
+            var pointer = MarshalInspectable<CompositionDrawingSurface>.FromManaged(surface);
+            try { Marshal.ThrowExceptionForHR(NativePrototypeMethods.VeliFramePaintCaption(pointer, width, height, scale, dark ? 1 : 0, plate, hover, title, restore)); }
+            finally { Marshal.Release(pointer); }
+            _captionBrush!.Surface = surface; _captionVisual!.Size = new Vector2(width, height);
+            _captionSurface?.Dispose(); _captionSurface = surface;
+            _captionSize = (width, height, scale, dark, plate, hover);
+        }
+        catch { surface.Dispose(); throw; }
     }
 
     internal void Apply(Color tint, double gloss, double transparency)
@@ -102,6 +139,7 @@ internal sealed class CompositionGlassRenderer : IDisposable
         }
         catch (COMException) { } // The device/target may already be gone during shutdown.
         _backdrop?.Dispose();
+        _captionVisual?.Dispose(); _captionBrush?.Dispose(); _captionSurface?.Dispose(); _captionDevice?.Dispose();
         _tint?.Dispose();
         _backdropBrush?.Dispose();
         _tintBrush?.Dispose();

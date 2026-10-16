@@ -68,6 +68,10 @@ public partial class PreferencesWindow : VeliShellWindow
         foreach (var item in UpdateModeChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.Updates.ToString(), StringComparison.Ordinal);
         UpdateModeChoice.IsEnabled = !PackageIdentityService.HasIdentity;
+        foreach (var item in UpdateChannelChoice.Items.OfType<ComboBoxItem>())
+            item.IsSelected = string.Equals(item.Tag as string, s.UpdateSource.ToString(), StringComparison.Ordinal);
+        UpdateChannelChoice.IsEnabled = !PackageIdentityService.HasIdentity;
+        NativePrototypeCard.Visibility = BuildIdentity.IsTest && !PackageIdentityService.HasIdentity ? Visibility.Visible : Visibility.Collapsed;
         foreach (var item in IconStyleChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.IconStyle.ToString(), StringComparison.Ordinal);
         SizeSlider.Value = s.IconSize;
@@ -202,6 +206,25 @@ public partial class PreferencesWindow : VeliShellWindow
         UpdateThemeStatus();
         UpdateDiagnostics();
         RenderPins();
+    }
+    private void NativePrototype_Click(object sender, RoutedEventArgs e)
+    {
+        try { NativePrototypeSession.Launch(_app); }
+        catch (Exception error) { App.Log("Could not launch own native prototype", error); MessageBox.Show(this, L("Prototype.AttachFailed"), L("Prototype.Title")); }
+    }
+    private void NativePrototypeRestore_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(this, L(NativePrototypeSession.SignalRecovery() > 0 ? "Prototype.RecoverySent" : "Prototype.NoSession"), L("Prototype.Title"));
+    }
+    private async void UpdateChannelChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || UpdateChannelChoice.SelectedItem is not ComboBoxItem { Tag: string value } ||
+            !Enum.TryParse<UpdateChannel>(value, out var channel) || channel == _app.Preferences.UpdateSource) return;
+        if (MessageBox.Show(this, L(channel == UpdateChannel.Test ? "Update.TestConsent" : "Update.StableConsent"),
+                L("Update.Channel"), MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        { SyncUi(); return; }
+        await _app.ChangeUpdateChannelAsync(channel, this);
+        SyncUi();
     }
     private void UpdateModeChoice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -364,6 +387,11 @@ public partial class PreferencesWindow : VeliShellWindow
     private async Task SyncStartupUiAsync()
     {
         if (UserStartupSwitch is null || StartupStatus is null) return;
+        if (BuildIdentity.IsTest)
+        {
+            UserStartupSwitch.IsEnabled = false; UserStartupSwitch.IsChecked = false;
+            StartupStatus.Text = L("Prototype.NoAutostart"); return;
+        }
         UserStartupSwitch.IsEnabled = false;
         try
         {
