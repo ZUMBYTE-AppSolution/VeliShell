@@ -16,6 +16,8 @@ public partial class UpdateWindow : VeliShellWindow
     private VerifiedUpdatePackage? _package;
     private bool _downloading;
     private bool _verifying;
+    private bool _installing;
+    private CancellationTokenSource? _installCancellation;
     private int _downloadPercent;
     private double _downloadMiB;
     private double _downloadSpeed;
@@ -43,6 +45,7 @@ public partial class UpdateWindow : VeliShellWindow
         {
             LocalizationService.Current.Changed -= ApplyLocalizedText;
             _downloadCancellation?.Cancel();
+            _installCancellation?.Cancel();
         };
         if (automaticDownload)
         {
@@ -58,6 +61,7 @@ public partial class UpdateWindow : VeliShellWindow
 
     private async void Primary_Click(object sender, RoutedEventArgs e)
     {
+        if (_installing) return;
         if (_downloading)
         {
             _downloadCancellation?.Cancel();
@@ -66,7 +70,7 @@ public partial class UpdateWindow : VeliShellWindow
 
         if (_package is not null)
         {
-            StartInstaller();
+            await StartInstallerAsync();
             return;
         }
 
@@ -176,6 +180,13 @@ public partial class UpdateWindow : VeliShellWindow
             _release.Version,
             _release.PublishedAt.ToLocalTime().ToString("d", LocalizationService.Current.ActiveCulture));
 
+        if (_installing)
+        {
+            PrimaryButton.Content = L("Update.PreparingInstall");
+            ProgressText.Text = L("Update.PreparingFrames");
+            return;
+        }
+
         if (_package is not null)
         {
             PrimaryButton.Content = L("Update.Install");
@@ -198,40 +209,60 @@ public partial class UpdateWindow : VeliShellWindow
         }
     }
 
-    private void StartInstaller()
+    private void SetInstallingUi(bool installing)
     {
-        if (_package is null) return;
-        if (NativeFramesController.HasLoadedApps()) {
-            _app.UpdatePreferences(settings => settings.NativeFramesEnabled = false);
-            _app.NativeFrames?.Stop();
-            MessageBox.Show(this, L("NativeFrames.UpdateBlocked"), L("NativeFrames.Title"), MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        _installing = installing;
+        PrimaryButton.IsEnabled = !installing && (_package?.Verification.Authenticode == AuthenticodeStatus.Valid || UnsignedAcknowledgement.IsChecked == true);
+        LaterButton.IsEnabled = !installing;
+        UnsignedAcknowledgement.IsEnabled = !installing;
+        ProgressPanel.Visibility = installing ? Visibility.Visible : Visibility.Collapsed;
+        DownloadProgress.IsIndeterminate = installing;
+        ApplyLocalizedText();
+    }
+
+    private async Task StartInstallerAsync()
+    {
+        if (_package is null || _installing) return;
         var acceptedUnsigned = _package.Verification.Authenticode == AuthenticodeStatus.Valid ||
                                UnsignedAcknowledgement.IsChecked == true;
         if (MessageBox.Show(this, LF("Update.InstallConfirm", _release.Version),
                 L("Update.ReadyTitle"), MessageBoxButton.YesNo, MessageBoxImage.Question) !=
             MessageBoxResult.Yes) return;
+        _installCancellation = new CancellationTokenSource();
+        SetInstallingUi(true);
         try
         {
-            GitHubReleaseUpdateService.StartVerifiedInstallerWithRestart(
-                _package,
-                userConfirmedInstall: true,
-                userAcceptedUnsignedPublisherWarning: acceptedUnsigned);
-            Close();
-            _app.RequestExit();
+            using var updateScope = _app.NativeFrames?.SuspendForUpdate();
+            var result = await UpdateInstallationPreparation.RunAsync(true,
+                _app.DisableNativeFramesForUpdate,
+                token => _app.NativeFrames?.PrepareForUpdateAsync(token) ?? Task.Run(() => !NativeFramesController.HasPendingRestoration(), token),
+                NativeFramesController.HasLoadedApps,
+                () => GitHubReleaseUpdateService.StartVerifiedInstallerWithRestart(_package, true, acceptedUnsigned),
+                _installCancellation.Token);
+            if (result == UpdatePreparationResult.Started)
+            { Close(); _app.RequestExit(); }
+            else if (IsVisible)
+                MessageBox.Show(this, L(result == UpdatePreparationResult.LegacyAppsOpen ? "NativeFrames.UpdateBlocked" : "Update.RestorationPending"),
+                    L("Update.ReadyTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
+        catch (OperationCanceledException) when (_installCancellation.IsCancellationRequested) { }
         catch (Exception exception)
         {
             App.Log("Could not start verified update installer", exception);
-            MessageBox.Show(this, LF("Update.InstallFailed", L("Update.SafeFailureDetail")),
+            if (IsVisible) MessageBox.Show(this, LF("Update.InstallFailed", L("Update.SafeFailureDetail")),
                 L("Update.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _installCancellation.Dispose();
+            _installCancellation = null;
+            SetInstallingUi(false);
         }
     }
 
     private void UnsignedAcknowledgement_Changed(object sender, RoutedEventArgs e)
     {
-        if (_package is not null && _package.Verification.Authenticode != AuthenticodeStatus.Valid)
+        if (!_installing && _package is not null && _package.Verification.Authenticode != AuthenticodeStatus.Valid)
             PrimaryButton.IsEnabled = UnsignedAcknowledgement.IsChecked == true;
     }
 

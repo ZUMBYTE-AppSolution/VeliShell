@@ -195,10 +195,25 @@ selbst zurücksetzen. Ein unerwarteter Helferausfall stoppt die gesamte Aufnahme
   und kein automatisches Abschießen oder erzwungenes Entladen fremder Prozesse.
 
 Die DLL bleibt nach dem Rollback inaktiv geladen, bis du die jeweilige Ziel-App selbst
-schließt. Deshalb müssen betroffene Apps vor VeliShell-Updates geschlossen werden;
-der Updater weist darauf hin. Der Installer verwendet kein automatisches Schließen
-fremder Apps durch Restart Manager. Bei direktem Installieren oder Deinstallieren
-ebenfalls zuerst das Modul deaktivieren und die betroffenen Apps selbst schließen.
+schließt. Der aktuelle Update-Arbeitsstand deaktiviert die Fenstergestaltung nach
+deiner Installationsbestätigung automatisch, speichert die ausgeschaltete Einstellung
+und wartet bis zu 15 Sekunden auf die Wiederherstellung und das Ende der eigenen
+Helfer. Ein noch aktiver oder unlesbarer Zustand startet keine Installation.
+
+Neue Adapter laufen aus hashgeprüften, unveränderlichen Kopien unter
+`%LOCALAPPDATA%\VeliShell\native-runtime` (Testprofil entsprechend `VeliShell-Test`).
+Eine dort inaktive DLL sperrt keine Paketdatei im MSI-Installationsordner mehr.
+Ältere Kopien bleiben erhalten, solange Apps sie geladen halten können; sie werden
+nicht automatisch überschrieben oder gelöscht. Eine andere Adapterversion wird
+weiterhin erst nach einem selbst gewählten App-Neustart eingebunden.
+
+**Übergang von älteren Paketen:** Eine schon aus dem Installationsordner geladene
+DLL lässt sich nicht nachträglich verschieben oder sicher entladen. Dafür bleibt
+einmaliges Schließen der betroffenen App bzw. Ab-/Anmelden beim Explorer nötig.
+Der Updater nennt diese Sperre erst nach dem automatischen Rücksetzen. Der Installer
+verwendet kein automatisches Schließen fremder Apps durch Restart Manager. Vor einer
+direkten Installation/Deinstallation außerhalb des Updaters das Modul weiterhin
+selbst deaktivieren und bei älteren Adaptern die betroffenen Apps schließen.
 
 Lokale Journale enthalten Prozessidentität und Rücksetzstatus. Windows stellt nur den
 wirksamen NC-Rendering-Zustand lesbar bereit, nicht den ursprünglichen internen

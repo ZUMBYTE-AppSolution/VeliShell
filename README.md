@@ -149,6 +149,7 @@ Ist das an die öffentliche IP gebundene GitHub-API-Limit ausgeschöpft, wechsel
 - Größen- und SHA-256-Prüfung vor dem Start des Installers;
 - deutlicher Hinweis, wenn ein Paket noch keine gültige Windows-Herausgebersignatur besitzt;
 - nach dem Download eine eigene Bestätigung vor der Installation und automatischer VeliShell-Neustart nach dem MSI;
+- vor dem Installer wird die Fenstergestaltung automatisch deaktiviert; der Dialog wartet auf wiederhergestellte Fenster und beendete eigene Helfer. Neue, geprüfte Laufzeitkopien liegen getrennt vom Installationsordner. Bei alten, noch aus dem Installationsordner geladenen Adaptern kann einmaliges Schließen der betroffenen Apps nötig bleiben; es wird nichts zwangsweise beendet;
 - jederzeit auch manuell über **Einstellungen → Info → Nach Updates suchen**.
 
 Die Versionshistorie steht in [CHANGELOG.md](CHANGELOG.md). Jede stabile Version erhält zusätzlich einen eigenen Eintrag unter [GitHub Releases](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases).

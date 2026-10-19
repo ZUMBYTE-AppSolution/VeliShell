@@ -46,7 +46,7 @@ internal static class ClassicFrameSession
     internal static bool HasOtherAdapterVersion(Candidate candidate)
     {
         using var target=Process.GetProcessById(candidate.Pid);
-        string expected=Path.Combine(AppContext.BaseDirectory,candidate.Is32Bit?"VeliShell.NativeFrame.x86.dll":"VeliShell.NativeFrame.dll");
+        string expected=NativeFrameRuntimeCache.Shared.Library(candidate.Is32Bit);
         foreach(ProcessModule module in target.Modules) {
             if(module.ModuleName is not { } name || !name.StartsWith("VeliShell.NativeFrame",StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".dll",StringComparison.OrdinalIgnoreCase))continue;
             // A pinned DLL from a different package must not silently receive a

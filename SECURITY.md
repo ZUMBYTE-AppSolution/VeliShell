@@ -43,9 +43,15 @@ Ein unabhängiger Helfer empfängt vor der Aktivierung das Notfallkürzel. Ein l
 Heartbeat löst bei dessen Ausfall das Rücksetzen auf dem Ziel-UI-Thread aus. Bei
 einem vollständig blockierten Fenster bleibt die Wiederherstellung ausdrücklich
 ausstehend, bis es wieder reagiert. Die DLL wird nicht gewaltsam entladen; nach
-Rücksetzen bleibt sie inaktiv bis zum Zielprozess-Ende. Updates blockieren deshalb,
-solange journalisierte Zielprozesse noch leben; der Installer schließt keine Apps
-automatisch. Ein lokaler Notfall-Latch verhindert unbewusstes Wiederaktivieren nach
+Rücksetzen bleibt sie inaktiv bis zum Zielprozess-Ende. Der Updater deaktiviert vor
+der Installation das Modul und wartet auf die bestätigte Rücksetzung und eigene Helfer.
+Neue native Laufzeitkopien liegen in unveränderlichen, inhaltsadressierten Verzeichnissen
+außerhalb des MSI-Pakets. Hashvergleich mit den Paketdateien und Lesesperren während
+des Ladens verhindern das Verwenden veränderter Kopien. Fremde DLLs werden nicht entladen.
+Alte, noch im Installationsordner geladene Module, unlesbare Prozesszustände oder eine
+ausstehende Rücksetzung blockieren weiterhin; eine weiterlaufende App mit inaktiver
+Cache-DLL allein blockiert nicht mehr. Der Installer schließt keine Apps automatisch.
+Ein lokaler Notfall-Latch verhindert unbewusstes Wiederaktivieren nach
 einem Ausfall. Keine allgemeine Verträglichkeitszusage für Spiele oder Sonderrahmen;
 solche Programme müssen vor Aktivierung ausgeschlossen werden. Siehe
 [Test- und Wiederherstellungshinweise](NATIVE-PROTOTYPE.md).

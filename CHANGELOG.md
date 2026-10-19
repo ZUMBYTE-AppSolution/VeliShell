@@ -6,6 +6,21 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+- Vor der bestätigten Update-Installation wird die Fenstergestaltung automatisch
+  deaktiviert und gespeichert. Der Updater wartet auf zurückgesetzte Fenster und
+  beendete eigene Helfer. Bei Abbruch, Fehler oder ausstehender Wiederherstellung
+  wird kein Installer gestartet. Der Vorbereitungsstatus bleibt im Dialog sichtbar.
+- Geprüfte, unveränderliche x86-/x64-Laufzeitkopien außerhalb des Installationsordners
+  verhindern, dass inaktive Adapter in weiterlaufenden Apps künftige MSI-Updates
+  blockieren. Vor dem Laden werden ihre Hashes mit den Paketdateien verglichen.
+  Keine fremden Apps werden beendet oder DLLs zwangsweise entladen.
+- Übergangsgrenze: Bereits geladene DLLs älterer Ausgaben aus dem Installationsordner
+  erfordern weiterhin einmaliges Schließen betroffener Apps bzw. Ab-/Anmelden bei
+  Explorer. Unlesbare oder noch aktive Zustände bleiben eine Installationssperre.
+- Neue Hintergrundprüfungen für Vorbereitung, Abbruch, Fehlersperren, tatsächliche
+  native Importe aus eigenen Testkopien und den DE-/EN-Dialog in Hell/Dunkel.
+  Ein vollständiger Echte-App-/MSI-Updatezyklus in der VM ist damit nicht nachgewiesen.
+
 ## [0.14.2] - 2026-10-19
 
 ### Korrigiert

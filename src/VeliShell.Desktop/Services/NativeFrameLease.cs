@@ -11,12 +11,14 @@ internal sealed class NativeFrameLease : IDisposable
 {
     private readonly ClassicFrameSession.Candidate _app;
     private nint _native;
+    private NativeFrameRuntime? _runtime;
     private MemoryMappedFile? _mapping;
     private MemoryMappedViewAccessor? _wire;
     private Process? _bridge;
+    private IDisposable? _runtimePins;
     private bool _stopped, _ended;
     internal bool Material => _app.Material;
-    internal int Error => _native != 0 ? NativePrototypeMethods.VeliClassicError(_native) : _wire?.ReadInt32(24) ?? 0;
+    internal int Error => _native != 0 ? _runtime!.Error(_native) : _wire?.ReadInt32(24) ?? 0;
     internal bool Faulted => !_stopped && _bridge is { HasExited: true } && _wire is not null && _wire.ReadInt32(16) is not (2 or 3);
     private NativeFrameLease(ClassicFrameSession.Candidate app) => _app = app;
     internal static NativeFrameLease? Begin(ClassicFrameSession.Candidate app, Guid id, NativeFramesConfig config)
@@ -27,10 +29,9 @@ internal sealed class NativeFrameLease : IDisposable
         var lease = new NativeFrameLease(app);
         try {
             if (!app.Is32Bit && !app.Material) {
-                lease._native = app.Adapter != 0
-                    ? NativePrototypeMethods.VeliModernBegin(app.Window, id.ToString("N"), (uint)app.Pid, (ulong)app.Started, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint)
-                    : NativePrototypeMethods.VeliClassicBegin(app.Window, id.ToString("N"), (uint)app.Pid, (ulong)app.Started, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint);
-                if (lease._native == 0) error = NativePrototypeMethods.VeliClassicBeginError();
+                lease._runtime = NativeFrameRuntime.X64;
+                lease._native = lease._runtime.Begin(app, id, config);
+                if (lease._native == 0) error = lease._runtime.BeginError;
                 return lease._native == 0 ? null : lease;
             }
             // Default kernel-object DACL is inherited from the current user token;
@@ -43,21 +44,23 @@ internal sealed class NativeFrameLease : IDisposable
             wire.Write(44, owner.Id); wire.Write(48, owner.StartTime.ToUniversalTime().ToFileTimeUtc());
             wire.Write(56, app.Pid); wire.Write(64, app.Started); wire.Write(72, (ulong)unchecked((uint)app.Window.ToInt64()));
             lease.Configure(config); wire.Write(8, Environment.TickCount64);
-            var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "VeliShell.FrameBridge.x86.exe")) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
+            lease._runtimePins = NativeFrameRuntimeCache.Shared.PinBundle(true);
+            var start = new ProcessStartInfo(NativeFrameRuntimeCache.Shared.Bridge) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
             start.ArgumentList.Add(id.ToString("N"));
+            start.ArgumentList.Add(Environment.ProcessPath ?? throw new IOException("Supervisor executable is unavailable."));
             lease._bridge = Process.Start(start) ?? throw new IOException("Compatibility bridge did not start.");
             return lease;
         } catch { lease.Dispose(); throw; }
     }
     internal void Configure(NativeFramesConfig config)
     {
-        if (_native != 0) NativePrototypeMethods.VeliClassicConfigure(_native, config.Dark ? 1 : 0, config.Gloss, config.Transparency, config.Tint);
+        if (_native != 0) _runtime!.Configure(_native, config);
         if (_wire is { } wire) { wire.Write(28, config.Dark ? 1 : 0); wire.Write(32, config.Gloss); wire.Write(36, config.Transparency); wire.Write(40, config.Tint); }
     }
     internal int Poll(bool stop)
     {
         _stopped |= stop;
-        if (_native != 0) return NativePrototypeMethods.VeliClassicPoll(_native, _stopped ? 1 : 0);
+        if (_native != 0) return _runtime!.Poll(_native, _stopped);
         if (_wire is null) return -1;
         _wire.Write(8, Environment.TickCount64); if (_stopped) _wire.Write(20, 1);
         if (_bridge?.HasExited == true) {
@@ -90,13 +93,13 @@ internal sealed class NativeFrameLease : IDisposable
     internal bool End()
     {
         if (_ended) return true;
-        if (_native != 0) { if (NativePrototypeMethods.VeliClassicEnd(_native) != 1) return false; _native = 0; }
+        if (_native != 0) { if (_runtime!.End(_native) != 1) return false; _native = 0; }
         if (_wire is not null && _bridge is { HasExited: false }) { _wire.Write(20, 1); return false; }
         _ended = true; Dispose(); return true;
     }
     public void Dispose()
     {
         if (_wire is not null) _wire.Write(20, 1);
-        _wire?.Dispose(); _mapping?.Dispose(); _bridge?.Dispose(); _wire = null; _mapping = null; _bridge = null;
+        _wire?.Dispose(); _mapping?.Dispose(); _bridge?.Dispose(); _runtimePins?.Dispose(); _wire = null; _mapping = null; _bridge = null; _runtimePins = null;
     }
 }

@@ -31,7 +31,7 @@ if ($FixturePath) {
 }
 if ($BridgePath) {
     $BridgePath = [IO.Path]::GetFullPath($BridgePath)
-    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE (Join-Path $taskRoot 'native\VeliShell.NativeFrame\FrameBridge.cpp') "/Fo$taskObjectDirectory\FrameBridge.obj" /link "/OUT:$BridgePath" /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT /CETCOMPAT "$taskObjectDirectory\NativeFrame.lib" user32.lib dwmapi.lib shell32.lib advapi32.lib
+    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro (Join-Path $taskRoot 'native\VeliShell.NativeFrame\FrameBridge.cpp') "/Fo$taskObjectDirectory\FrameBridge.obj" /link "/OUT:$BridgePath" /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT /CETCOMPAT "$taskObjectDirectory\NativeFrame.lib" user32.lib dwmapi.lib shell32.lib advapi32.lib
     if ($LASTEXITCODE -ne 0) { throw 'Native compatibility bridge build failed.' }
 }
 if ($MaterialCheckPath) {

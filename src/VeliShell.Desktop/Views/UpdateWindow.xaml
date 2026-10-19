@@ -48,11 +48,6 @@
       </Grid>
      </Border>
 
-     <StackPanel x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,2,0,12">
-      <ProgressBar x:Name="DownloadProgress" Height="5" Minimum="0" Maximum="100" />
-      <TextBlock x:Name="ProgressText" Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
-     </StackPanel>
-
      <Border x:Name="VerificationPanel" Style="{StaticResource Card}" Visibility="Collapsed" Margin="0,0,0,12">
       <StackPanel>
        <TextBlock Text="{services:Loc Update.ReadyTitle}" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,8" />
@@ -70,8 +65,14 @@
 
    <Border Grid.Row="2" BorderBrush="{DynamicResource CardStroke}" BorderThickness="0,1,0,0" Padding="20,14">
     <Grid>
-     <Button Content="{services:Loc Update.ReleasePage}" HorizontalAlignment="Left" Click="ReleasePage_Click" />
-     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+     <StackPanel x:Name="ProgressPanel" Grid.Row="0" Visibility="Collapsed" Margin="0,0,0,12">
+      <ProgressBar x:Name="DownloadProgress" Height="5" Minimum="0" Maximum="100"
+                   Foreground="{DynamicResource Accent}" Background="{DynamicResource AccentSoft}" />
+      <TextBlock x:Name="ProgressText" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+     </StackPanel>
+     <Button Grid.Row="1" Content="{services:Loc Update.ReleasePage}" HorizontalAlignment="Left" Click="ReleasePage_Click" />
+     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
       <Button x:Name="LaterButton" Content="{services:Loc Update.Later}" Click="Later_Click" Margin="0,0,9,0" />
       <Button x:Name="PrimaryButton" Content="{services:Loc Update.Download}" Style="{StaticResource PrimaryButton}"
               Click="Primary_Click" MinWidth="150" />

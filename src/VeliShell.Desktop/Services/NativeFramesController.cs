@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Threading;
 using VeliShell.Core;
+using VeliShell.Desktop.Native;
 
 namespace VeliShell.Desktop.Services;
 
@@ -23,6 +24,7 @@ internal sealed record NativeFrameStatus(string Title, string Path, string State
 }
 internal sealed record NativeFramesStatus(bool Ready, bool Stopping, NativeFrameStatus[] Windows, string? Error = null);
 internal sealed record NativeFrameLoaded(int Pid, long Started, string Path);
+internal sealed record NativeFrameAdmission(int Pid, long Started, long Hwnd);
 
 internal sealed class NativeFramesController : IDisposable
 {
@@ -37,7 +39,7 @@ internal sealed class NativeFramesController : IDisposable
     private Guid _id;
     private readonly bool _preview;
     private readonly NativeFrameTarget[]? _targets;
-    private bool _disposed, _stopped;
+    private bool _disposed, _stopped, _preparingUpdate;
     private NativeFramesConfig? _lastConfig;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     internal NativeFramesStatus Status { get; private set; } = new(false, false, []);
@@ -79,6 +81,7 @@ internal sealed class NativeFramesController : IDisposable
     private NativeFramesConfig Config(Settings settings, bool dark) => new(settings.NativeFramesEnabled, dark, (int)settings.GlassGloss, (int)settings.GlassTransparency, settings.NativeFrameExclusions.ToArray(), _preview, CaptionTint(dark), settings.NativeModernMaterialsEnabled && settings.NativeModernMaterialsConsentVersion == 1, settings.NativeModernFramesEnabled && settings.NativeModernFramesConsentVersion == 1, _targets);
     internal async Task EnableAsync(Settings settings, bool dark, bool explicitConsent)
     {
+        if (_preparingUpdate) throw new InvalidOperationException(LocalizationService.Current.Get("Update.PreparingFrames"));
         if (_disposed || !Supported || settings.NativeFramesConsentVersion != 1) throw new InvalidOperationException(LocalizationService.Current.Get("NativeFrames.Unsupported"));
         if (Active) { Update(settings, dark); return; }
         if (_guard is { HasExited: false }) throw new InvalidOperationException(LocalizationService.Current.Get("NativeFrames.Restoring"));
@@ -97,14 +100,65 @@ internal sealed class NativeFramesController : IDisposable
     internal void Update(Settings settings, bool dark)
     {
         if (_disposed || _guard is null || _guard.HasExited) return;
-        _lastConfig = Config(settings, dark); Write(FileFor(_id, "json"), _lastConfig);
+        _lastConfig = Config(settings, dark) with { Enabled = settings.NativeFramesEnabled && !_preparingUpdate }; Write(FileFor(_id, "json"), _lastConfig);
         if (!settings.NativeFramesEnabled) Stop();
     }
     internal void Stop()
     {
         _stopped = true;
-        if (_guard is { HasExited: false } && _lastConfig is not null) { _lastConfig = _lastConfig with { Enabled = false }; Write(FileFor(_id, "json"), _lastConfig); }
-        Signal(_id); RefreshStatus();
+        try { if (_guard is { HasExited: false } && _lastConfig is not null) { _lastConfig = _lastConfig with { Enabled = false }; Write(FileFor(_id, "json"), _lastConfig); } }
+        finally { Signal(_id); }
+        RefreshStatus();
+    }
+    internal async Task<bool> PrepareForUpdateAsync(CancellationToken cancellationToken)
+    {
+        Stop();
+        var watch = Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // A dead guard alone does not prove target windows restored.
+            if ((_guard is null || _guard.HasExited) && !await Task.Run(HasPendingRestoration, cancellationToken)) return true;
+            if (watch.Elapsed >= TimeSpan.FromSeconds(15)) return false;
+            await Task.Delay(100, cancellationToken);
+        }
+    }
+    // The UI holds this through lock scanning and installer launch as well, so
+    // another settings window cannot re-enable styling between await points.
+    internal IDisposable SuspendForUpdate()
+    {
+        if (_disposed || _preparingUpdate) throw new InvalidOperationException(LocalizationService.Current.Get("Update.PreparingFrames"));
+        _preparingUpdate = true;
+        return new UpdateScope(this);
+    }
+    private sealed class UpdateScope(NativeFramesController owner) : IDisposable
+    {
+        private NativeFramesController? _owner = owner;
+        public void Dispose() { var controller = Interlocked.Exchange(ref _owner, null); if (controller is not null) controller._preparingUpdate = false; }
+    }
+    internal static bool HasPendingRestoration()
+    {
+        if (!Directory.Exists(Folder)) return false;
+        var scanned = 0;
+        foreach (var file in Directory.EnumerateFiles(Folder, "*.admission"))
+        {
+            if (++scanned > 512) return true;
+            var record = Read<NativeFrameAdmission>(file);
+            if (record is null || record.Pid <= 0 || record.Started <= 0 || record.Hwnd == 0) return true;
+            if (!NativeMethods.IsWindow((nint)record.Hwnd)) continue;
+            NativeMethods.GetWindowThreadProcessId((nint)record.Hwnd, out var pid);
+            if (pid != record.Pid) continue;
+            try
+            {
+                using var process = Process.GetProcessById(record.Pid);
+                if (process.HasExited || process.StartTime.ToUniversalTime().ToFileTimeUtc() != record.Started) continue;
+                if (NativePrototypeMethods.GetProp((nint)record.Hwnd, NativePrototypeMethods.ClassicActive) != 0 ||
+                    NativePrototypeMethods.GetProp((nint)record.Hwnd, "VeliShell.Material.Active") != 0) return true;
+            }
+            catch (ArgumentException) { }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { return true; }
+        }
+        return false;
     }
     internal static bool Signal(Guid id)
     {
@@ -133,17 +187,26 @@ internal sealed class NativeFramesController : IDisposable
     {
         if (!Directory.Exists(Folder)) return false;
         var scanned = 0;
+        var inspected = new HashSet<(int Pid, long Started)>();
         foreach (var file in Directory.EnumerateFiles(Folder, "*.loaded")) {
             if (++scanned > 512) return true; // Unscanned records must never allow an unsafe update.
-            var record = Read<NativeFrameLoaded>(file); if (record is null) return true;
+            var record = Read<NativeFrameLoaded>(file); if (record is null || record.Pid <= 0 || record.Started <= 0 || string.IsNullOrWhiteSpace(record.Path)) return true;
+            if (!inspected.Add((record.Pid, record.Started))) continue;
             try {
                 using var process = Process.GetProcessById(record.Pid);
-                if (!process.HasExited && process.StartTime.ToUniversalTime().ToFileTimeUtc() == record.Started) return true;
-            } catch (ArgumentException) { } catch (System.ComponentModel.Win32Exception) { return true; }
+                if (!process.HasExited && process.StartTime.ToUniversalTime().ToFileTimeUtc() == record.Started) {
+                    foreach (ProcessModule module in process.Modules)
+                        if (IsInstallerBlockingModule(module.ModuleName, module.FileName, AppContext.BaseDirectory)) return true;
+                    continue; // Runtime copies outside this install do not block its MSI.
+                }
+            } catch (ArgumentException) { } catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { return true; }
             File.Delete(file);
         }
         return false;
     }
+    internal static bool IsInstallerBlockingModule(string? name, string path, string installDirectory) =>
+        name is not null && name.StartsWith("VeliShell.NativeFrame", StringComparison.OrdinalIgnoreCase) &&
+        name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && NativeFrameRuntimeCache.IsWithin(path, installDirectory);
     public void Dispose()
     {
         if (_disposed) return;

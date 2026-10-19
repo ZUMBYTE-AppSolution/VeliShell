@@ -75,19 +75,21 @@ bool Material(Control* c,HWND window) {
 }
 int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR,int) {
     int count{}; auto args=CommandLineToArgvW(GetCommandLineW(),&count);
-    if(!args || count!=2 || wcslen(args[1])!=32) { if(args)LocalFree(args); return 2; }
-    std::wstring id=args[1]; LocalFree(args);
+    if(!args || count!=3 || wcslen(args[1])!=32 || wcslen(args[2])<4 || wcslen(args[2])>=32768) { if(args)LocalFree(args); return 2; }
+    std::wstring id=args[1],expectedOwner=args[2]; LocalFree(args);
     if(id.find_first_not_of(L"0123456789abcdefABCDEF")!=std::wstring::npos)return 2;
     auto mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,(L"Local\\VeliShell.FrameBridge."+id).c_str()); if(!mapping)return 2;
     auto c=static_cast<Control*>(MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,256));
     if(!c) { CloseHandle(mapping); return 2; }
     auto owner=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,c->owner);
     auto target=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,c->target);
-    wchar_t ownPath[32768]{},ownerPath[32768]{}; GetModuleFileNameW(nullptr,ownPath,32768); DWORD length=32768;
+    wchar_t ownerPath[32768]{}; DWORD length=32768;
     bool valid=c->magic==Magic && c->mode<=1 && owner && target && Started(owner)==c->ownerStart && SameUser(owner) && SameUser(target) && QueryFullProcessImageNameW(owner,0,ownerPath,&length);
-    auto slash=wcsrchr(ownPath,L'\\'); if(slash)*slash=0;
-    std::wstring expected=std::wstring(ownPath)+L"\\VeliShell.exe";
-    valid=valid && _wcsicmp(expected.c_str(),ownerPath)==0 && c->window<=0xFFFFFFFFULL;
+    auto ownerName=wcsrchr(ownerPath,L'\\');
+    // The verified bridge/DLL bundle now lives outside the MSI directory.
+    // Still bind it to the exact live supervisor, identity and same-user token.
+    valid=valid && ownerName && _wcsicmp(ownerName+1,L"VeliShell.exe")==0 &&
+        _wcsicmp(expectedOwner.c_str(),ownerPath)==0 && c->window<=0xFFFFFFFFULL;
     HWND window=reinterpret_cast<HWND>(static_cast<ULONG_PTR>(c->window));
     valid=valid && Identity(c,window,target) && !c->stop && GetTickCount64()-static_cast<ULONGLONG>(InterlockedCompareExchange64(&c->heartbeat,0,0))<3000;
     void* lease=nullptr;

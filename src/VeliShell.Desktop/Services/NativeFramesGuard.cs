@@ -102,13 +102,16 @@ internal static class NativeFramesGuard
                         NativeFramesController.Write(NativeFramesController.FileFor(binding.Id, "loaded"), new NativeFrameLoaded(binding.App.Pid, binding.App.Started, binding.App.Path));
                     }
                     if (state is 2 or 3 or -1 || !NativeMethods.IsWindow(binding.App.Window)) {
+                        // This lease used the immutable runtime, not MSI files.
+                        // Drop only its own record after End confirms restoration;
+                        // legacy records from older packages remain for update checks.
                         if (state == 2 && !binding.Stopping && binding.Lease.Error != 0) lastError = "Native adapter restored itself: " + binding.Lease.Error;
                         if (state == -1 || state == 2 && !stopping && !binding.ExclusionRestore && !binding.MaterialOptOut)
                             failures[pair.Key]=Row(binding.App,"Failed",binding.TimedOut?"Timeout":"Activation",binding.Lease.Error);
-                        if (binding.Lease.End()) { bindings.Remove(pair.Key); if (state == 3 || binding.ExclusionRestore || binding.MaterialOptOut) attempted.Remove((pair.Key, binding.App.Pid, binding.App.Started)); File.Delete(NativeFramesController.FileFor(binding.Id, "admission")); }
+                        if (binding.Lease.End()) { bindings.Remove(pair.Key); if (state == 3 || binding.ExclusionRestore || binding.MaterialOptOut) attempted.Remove((pair.Key, binding.App.Pid, binding.App.Started)); File.Delete(NativeFramesController.FileFor(binding.Id, "admission")); File.Delete(NativeFramesController.FileFor(binding.Id, "loaded")); }
                     } else if (state == 0 && binding.Stopping && binding.Lease.End()) {
                         if(binding.TimedOut)failures[pair.Key]=Row(binding.App,"Failed","Timeout",binding.Lease.Error);
-                        bindings.Remove(pair.Key); File.Delete(NativeFramesController.FileFor(binding.Id,"admission"));
+                        bindings.Remove(pair.Key); File.Delete(NativeFramesController.FileFor(binding.Id,"admission")); File.Delete(NativeFramesController.FileFor(binding.Id,"loaded"));
                     }
                 }
                 if (stopping) { SaveStatus(); if (bindings.Count == 0) app.Shutdown(); return; }

@@ -259,6 +259,15 @@ public partial class App : Application
         try { await NativeFrames!.EnableAsync(Preferences, Themes.IsDark, explicitConsent: false); }
         catch (Exception error) { Log("Native windows did not resume", error); Preferences.NativeFramesEnabled = false; Store.Save(Preferences); }
     }
+    internal void DisableNativeFramesForUpdate()
+    {
+        UpdatePreferences(settings => settings.NativeFramesEnabled = false);
+        NativeFrames?.Stop();
+        // Persist before starting an installer/watcher, not on a debounce tick.
+        // A failed/cancelled update must not silently re-enable the adapter.
+        _saveTimer?.Stop();
+        Store.Save(Preferences);
+    }
 
     private void StabilizeLegacyExecutablePins()
     {

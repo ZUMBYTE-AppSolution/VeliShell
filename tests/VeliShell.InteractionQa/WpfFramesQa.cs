@@ -58,7 +58,7 @@ internal static partial class Program
                     using(var guard=Process.GetProcessById((int)guardPid)) {
                         int bridgePid=(int)NativePrototypeMethods.GetProp(two,"VeliShell.Material.Active");
                         using(var bridge=Process.GetProcessById(bridgePid)) {
-                            Require(string.Equals(bridge.MainModule?.FileName,Path.Combine(AppContext.BaseDirectory,"VeliShell.FrameBridge.x86.exe"),StringComparison.OrdinalIgnoreCase),"Wrong material bridge identity");
+                            Require(string.Equals(bridge.MainModule?.FileName,NativeFrameRuntimeCache.Shared.Bridge,StringComparison.OrdinalIgnoreCase),"Wrong verified material bridge identity");
                             bridge.Kill(); await bridge.WaitForExitAsync();
                         }
                         await Until(()=>NativePrototypeMethods.GetProp(two,"VeliShell.Material.Active")==0 && NativePrototypeMethods.GetProp(one,"VeliShell.ClassicFrame.Glass")==0,"Independent bridge failure rollback");
