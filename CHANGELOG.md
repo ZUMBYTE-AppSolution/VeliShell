@@ -6,6 +6,31 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1-test.5] - 2026-10-19
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Startmenü an denselben nativen Glas-Host, dieselben Materialien und die gleichen
+  Matt-/Glas-, Transparenz- und Theme-Einstellungen wie das Kontrollzentrum angebunden.
+  Gemeinsame weiche Rundung, lesbarer Fallback und Freigabe des Renderers beim Schließen.
+- Neu gegliedert: Suche oben, angeheftete Dock-Apps als flaches Raster, weitere
+  installierte Apps, separate „Alle Apps“-Ansicht und Schnellzugriffe auf Dokumente,
+  Downloads, Explorer, VeliShell-Einstellungen und das originale Windows-Startmenü.
+- Ein/Aus-Menü mit Sperren, Abmelden, Neustart und Herunterfahren. Sitzungsbefehle
+  benötigen eine Bestätigung und verwenden den bestehenden Wiederherstellungsweg
+  für Windows-Oberflächen. Kein erzwungenes Schließen fremder Apps.
+- Keine synchronen Shell-Icon-Abfragen mehr beim Menüaufbau: begrenzter STA-Leser,
+  Bildcache, abgebrochene Anfragen für verworfene Elemente und virtualisierte App-Liste.
+  Der lokale Programmindex wird wiederverwendet; keine neue Suche beim Öffnen.
+- Suchergebnisse und Tastaturauswahl verwenden dieselbe Reihenfolge. Drag & Drop
+  für lokale Verknüpfungen/Dateien sowie Anheften über das App-Kontextmenü bleiben verfügbar.
+- Unsichtbare Prüfungen mit 2.402 Katalogeinträgen, Hell/Dunkel, DE/EN, Glaswerten
+  0/50/100, blockiertem Icon-Leser und simulierten, nicht ausgeführten Systembefehlen.
+
+Der echte Desktop wurde nicht übernommen. Live-Glas, Dock-Verankerung und reale
+Sitzungsaktionen müssen bei Bedarf separat in der VM geprüft werden; der Test
+sperrt oder beendet den Rechner ausdrücklich nicht.
+
 ## [0.14.1-test.4] - 2026-10-19
 
 Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.

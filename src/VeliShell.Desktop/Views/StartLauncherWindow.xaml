@@ -3,92 +3,93 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:services="clr-namespace:VeliShell.Desktop.Services"
  xmlns:controls="clr-namespace:VeliShell.Desktop.Controls"
- Title="{services:Loc Start.Title}" Width="610" Height="640" MinWidth="410" MinHeight="380"
+ Title="{services:Loc Start.Title}" Width="640" Height="670" MinWidth="410" MinHeight="380"
  WindowStyle="None" AllowsTransparency="True" Background="Transparent"
  Foreground="{DynamicResource TextPrimary}" ResizeMode="NoResize" ShowInTaskbar="False"
  WindowStartupLocation="Manual" UseLayoutRounding="True" SnapsToDevicePixels="True"
  KeyDown="Window_KeyDown">
- <Border Margin="9" Background="{DynamicResource GlassPanelSurface}" CornerRadius="23"
+ <Border x:Name="GlassPlate" Margin="8" Background="{DynamicResource GlassPanelSurface}" CornerRadius="24"
          BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Padding="1">
-  <Border.Effect>
-   <DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.44" />
-  </Border.Effect>
-  <Grid ClipToBounds="True">
-   <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="22" IsHitTestVisible="False" />
-   <Ellipse Width="360" Height="280" HorizontalAlignment="Right" VerticalAlignment="Top"
-            Margin="0,-185,-150,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.14"
-            IsHitTestVisible="False"><Ellipse.Effect><BlurEffect Radius="52" /></Ellipse.Effect></Ellipse>
-   <Border Height="1" Margin="27,1" VerticalAlignment="Top" Background="{DynamicResource GlassHighlight}"
-           Opacity="0.75" IsHitTestVisible="False" />
-   <Grid Margin="20,16,20,16">
+  <Border.Effect><DropShadowEffect Color="{DynamicResource GlassShadowColor}" BlurRadius="10" ShadowDepth="1" Opacity="0.42" /></Border.Effect>
+  <Grid controls:RoundedClip.Radius="23">
+   <Border Background="{DynamicResource DockMilkOverlay}" CornerRadius="23" IsHitTestVisible="False" />
+   <Ellipse Width="310" Height="250" HorizontalAlignment="Left" VerticalAlignment="Top"
+            Margin="-180,-155,0,0" Fill="{DynamicResource AmbientGlowGradient}" Opacity="0.12" IsHitTestVisible="False">
+    <Ellipse.Effect><BlurEffect Radius="54" /></Ellipse.Effect>
+   </Ellipse>
+   <Border Height="1" Margin="25,1" VerticalAlignment="Top" Background="{DynamicResource GlassHighlight}" Opacity="0.72" IsHitTestVisible="False" />
+   <Grid Margin="22,20,22,12">
     <Grid.RowDefinitions>
-     <RowDefinition Height="Auto" />
-     <RowDefinition Height="Auto" />
-     <RowDefinition Height="*" />
-     <RowDefinition Height="Auto" />
+     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" />
+     <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
-
-    <Grid Margin="2,0,2,14">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-     <StackPanel>
-      <TextBlock Text="{services:Loc Start.Eyebrow}" Foreground="{DynamicResource TextSecondary}"
-                 FontSize="11" FontWeight="SemiBold" />
-      <TextBlock Text="{services:Loc Start.Title}" FontSize="23" FontWeight="SemiBold" Margin="0,2,0,0" />
-     </StackPanel>
-     <Border Grid.Column="1" Width="40" Height="40" CornerRadius="13"
-             Background="{DynamicResource GlassControlSurface}" BorderBrush="{DynamicResource GlassCardStroke}"
-             BorderThickness="1" VerticalAlignment="Center">
-      <controls:VeliSymbol Symbol="Apps" Width="21" Height="21" Foreground="{DynamicResource TextPrimary}" />
-     </Border>
-    </Grid>
-
-    <Border Grid.Row="1" Background="{DynamicResource GlassControlSurface}"
-            BorderBrush="{DynamicResource GlassCardStroke}" BorderThickness="1" CornerRadius="14"
-            Padding="12,8" Margin="0,0,0,13">
-     <DockPanel>
-      <controls:VeliSymbol Symbol="Search" Width="18" Height="18" DockPanel.Dock="Left"
-                           Margin="0,0,9,0" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextSecondary}" />
-      <TextBox x:Name="QueryBox" Background="Transparent" BorderThickness="0" FontSize="15"
-               VerticalContentAlignment="Center" TextChanged="QueryBox_TextChanged"
+    <Border Background="{DynamicResource GlassControlSurface}" BorderBrush="{DynamicResource GlassCardStroke}"
+            BorderThickness="1" CornerRadius="14" Padding="13,10" Margin="0,0,0,18">
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+      <controls:VeliSymbol Symbol="Search" Width="18" Height="18" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+      <TextBox x:Name="QueryBox" Grid.Column="1" Background="Transparent" BorderThickness="0" Padding="0"
+               FontSize="14" VerticalContentAlignment="Center" TextChanged="QueryBox_TextChanged"
                AutomationProperties.Name="{services:Loc Start.Search}" />
-     </DockPanel>
+      <TextBlock x:Name="QueryHint" Grid.Column="1" Text="{services:Loc Start.Search}" Foreground="{DynamicResource TextSecondary}" IsHitTestVisible="False" VerticalAlignment="Center" />
+     </Grid>
     </Border>
-
-    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid Grid.Row="1" Margin="4,0,4,12">
+     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <TextBlock x:Name="ListHeading" Text="{services:Loc Start.Pinned}" FontSize="14" FontWeight="SemiBold" />
+      <TextBlock x:Name="ResultCount" Margin="9,2,0,0" FontSize="11" Foreground="{DynamicResource TextSecondary}" />
+     </StackPanel>
+     <Button x:Name="AllAppsButton" Content="{services:Loc Start.AllApps}" HorizontalAlignment="Right" Style="{StaticResource GlassTileButton}" Padding="12,6" Click="AllApps_Click" />
+    </Grid>
+    <ScrollViewer x:Name="PinnedSection" Grid.Row="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
      <StackPanel>
-      <StackPanel x:Name="PinnedSection" Margin="0,0,0,13">
-       <TextBlock Text="{services:Loc Start.Pinned}" FontSize="12" FontWeight="SemiBold"
-                  Margin="3,0,0,9" Foreground="{DynamicResource TextSecondary}" />
-       <WrapPanel x:Name="PinnedPanel" />
-      </StackPanel>
-      <Grid Margin="3,2,3,8">
-       <TextBlock x:Name="ListHeading" Text="{services:Loc Start.AllApps}"
-                  FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondary}" />
-       <TextBlock x:Name="ResultCount" HorizontalAlignment="Right" FontSize="11"
-                  Foreground="{DynamicResource TextSecondary}" />
-      </Grid>
-      <StackPanel x:Name="AppsPanel" />
-      <Button x:Name="MoreButton" Style="{StaticResource GlassTileButton}"
-              Content="{services:Loc Start.More}" Margin="0,8,0,3" Padding="10,9"
-              Visibility="Collapsed" Click="More_Click" />
+      <WrapPanel x:Name="PinnedPanel" HorizontalAlignment="Center" />
+      <TextBlock x:Name="PinnedEmpty" Text="{services:Loc Start.NoPins}" Foreground="{DynamicResource TextSecondary}"
+                 TextWrapping="Wrap" Margin="12,24,12,12" Visibility="Collapsed" />
+      <TextBlock x:Name="SuggestionsHeading" Text="{services:Loc Start.MoreApps}" FontWeight="SemiBold" FontSize="13" Margin="10,20,10,8" />
+      <UniformGrid x:Name="SuggestionsPanel" Columns="2" Margin="4,0" />
+      <TextBlock Text="{services:Loc Start.DragHint}" Foreground="{DynamicResource TextSecondary}"
+                 FontSize="11" TextWrapping="Wrap" Margin="10,16,10,14" />
      </StackPanel>
     </ScrollViewer>
-
-    <Grid Grid.Row="3" Margin="2,14,2,0">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-     <StackPanel VerticalAlignment="Center">
-      <TextBlock x:Name="UserLabel" FontSize="12" FontWeight="SemiBold" />
-      <TextBlock Text="{services:Loc Start.DragHint}" FontSize="10.5"
-                 Foreground="{DynamicResource TextSecondary}" />
-     </StackPanel>
-     <Button Grid.Column="1" Style="{StaticResource GlassTileButton}"
-             Content="{services:Loc Start.Settings}" Padding="11,7" Margin="5,0"
-             Click="Settings_Click" />
-     <Button Grid.Column="2" Style="{StaticResource GlassTileButton}"
-             Content="{services:Loc Start.WindowsMenu}" Padding="11,7"
-             Click="WindowsMenu_Click" />
+    <ListBox x:Name="AppsList" Grid.Row="2" Visibility="Collapsed" Background="Transparent" BorderThickness="0"
+             ScrollViewer.VerticalScrollBarVisibility="Hidden" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+             ItemContainerStyle="{StaticResource StartAppListItem}" PreviewMouseLeftButtonDown="AppList_MouseDown"
+             PreviewMouseMove="AppList_MouseMove" PreviewMouseLeftButtonUp="AppList_MouseUp" PreviewMouseRightButtonUp="AppList_RightClick"
+             AutomationProperties.Name="{services:Loc Start.AllApps}" />
+    <TextBlock x:Name="EmptyResults" Grid.Row="2" Text="{services:Loc Start.Empty}" Foreground="{DynamicResource TextSecondary}"
+               TextWrapping="Wrap" Margin="12,24" Visibility="Collapsed" IsHitTestVisible="False" />
+    <Grid Grid.Row="3" Margin="0,12,0,12">
+     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+     <Button Style="{StaticResource GlassTileButton}" Click="Documents_Click" Margin="0,0,5,0" Padding="9,10">
+      <StackPanel Orientation="Horizontal"><controls:VeliSymbol Symbol="Document" Width="17" Height="17" Margin="0,0,7,0" /><TextBlock Text="{services:Loc Start.Documents}" /></StackPanel>
+     </Button>
+     <Button Grid.Column="1" Style="{StaticResource GlassTileButton}" Click="Downloads_Click" Margin="5,0" Padding="9,10">
+      <StackPanel Orientation="Horizontal"><controls:VeliSymbol Symbol="Folder" Width="17" Height="17" Margin="0,0,7,0" /><TextBlock Text="{services:Loc Start.Downloads}" /></StackPanel>
+     </Button>
+     <Button Grid.Column="2" Style="{StaticResource GlassTileButton}" Click="Explorer_Click" Margin="5,0,0,0" Padding="9,10">
+      <StackPanel Orientation="Horizontal"><controls:VeliSymbol Symbol="Windows" Width="17" Height="17" Margin="0,0,7,0" /><TextBlock Text="{services:Loc Start.Explorer}" /></StackPanel>
+     </Button>
     </Grid>
+    <Border Grid.Row="4" BorderBrush="{DynamicResource GlassSeparator}" BorderThickness="0,1,0,0" Padding="2,12,2,0">
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+      <TextBlock x:Name="UserLabel" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <Button Grid.Column="1" Content="{services:Loc Start.Settings}" Style="{StaticResource GlassTileButton}" Padding="10,8" Click="Settings_Click" Margin="5,0" />
+      <Button Grid.Column="2" Style="{StaticResource GlassTileButton}" Padding="10,8" Click="WindowsMenu_Click" ToolTip="{services:Loc Start.WindowsMenu}" AutomationProperties.Name="{services:Loc Start.WindowsMenu}" Margin="0,0,5,0">
+       <controls:VeliSymbol Symbol="Windows" Width="19" Height="19" />
+      </Button>
+      <Button x:Name="PowerButton" Grid.Column="3" Style="{StaticResource GlassTileButton}" Padding="10,8" Click="Power_Click" ToolTip="{services:Loc Start.Power}" AutomationProperties.Name="{services:Loc Start.Power}">
+       <controls:VeliSymbol Symbol="Power" Width="19" Height="19" />
+      </Button>
+     </Grid>
+    </Border>
+    <Border x:Name="PowerPanel" Grid.RowSpan="5" Width="236" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            Margin="0,0,0,54" Padding="7" CornerRadius="15" Background="{DynamicResource WindowSurface}"
+            BorderBrush="{DynamicResource GlassPanelStroke}" BorderThickness="1" Visibility="Collapsed">
+     <StackPanel x:Name="PowerActionsPanel" />
+    </Border>
    </Grid>
   </Grid>
  </Border>

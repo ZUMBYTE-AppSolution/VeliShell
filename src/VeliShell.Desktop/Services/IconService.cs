@@ -27,7 +27,7 @@ internal static class IconService
     // Keep provenance with the resolved pixels: an unavailable/ignored override
     // must not disable the optional backdrop on the actual native fallback.
     internal static Artwork Resolve(string id, string target = "", IconReference? icon = null,
-        DockIconStyle? style = null)
+        DockIconStyle? style = null, int? pixelSize = null)
     {
         // A user-selected local image is an explicit override in either icon
         // style. Online catalog artwork keeps the existing Mac-style behavior.
@@ -64,7 +64,7 @@ internal static class IconService
         try
         {
             if (!path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) path = Path.GetFullPath(path);
-            var pixels = RequestedPixelSize();
+            var pixels = pixelSize is { } explicitPixels ? Math.Clamp(explicitPixels, 48, 512) : RequestedPixelSize();
             var cacheKey = $"shell:{iconStyle}:{id}:{pixels}:{path}";
             if (TryGetCached(cacheKey, out var cached)) return new(cached, true);
 
