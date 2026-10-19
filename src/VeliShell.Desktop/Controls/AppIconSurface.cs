@@ -101,7 +101,9 @@ internal sealed class AppIconSurface : Grid
 
     private void UpdateBackground()
     {
-        _background = _backgroundEnabled && !_freeform && IconImage.Source is { } source
+        // Already-shaped original icons fill the normal dock surface unchanged:
+        // no second plate, inset or contrast halo around their own tile.
+        _background = _backgroundEnabled && !_freeform && !_appearance.HasTileShape && IconImage.Source is { } source
             ? AppIconBackground.For(source) : null;
         _plate.Background = HasAdaptiveBackground
             ? SystemParameters.HighContrast ? SystemColors.WindowBrush : _background!.Brush : null;
@@ -143,8 +145,8 @@ internal sealed class AppIconSurface : Grid
 
         var normalized = _appearance.NormalizedArtworkBounds;
         var normalizedSide = Math.Clamp(Math.Max(normalized.Width, normalized.Height), 1d / 256, 1);
-        // The outer plate stays exactly at dock size; native art gets the same
-        // inset at every size. Chosen/bundled icons retain their existing scale.
+        // Only free-standing artwork receives the background inset. Existing
+        // square/rounded tiles and chosen/bundled icons retain their full scale.
         var sourceCanvasSide = side * (HasAdaptiveBackground ? .78 : 1) / normalizedSide;
         if (_contrastHalo is not null) _contrastHalo.BlurRadius = Math.Clamp(side * .04, 1, 3);
         var mappedWidth = normalized.Width * sourceCanvasSide;

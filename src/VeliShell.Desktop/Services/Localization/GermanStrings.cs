@@ -272,7 +272,7 @@ internal static class GermanStrings
         ["Apps.IconStyleWindows"] = "Originale Windows-Symbole",
         ["Apps.IconStyleDescription"] = "Im Mac-Stil verwendet VeliShell passende Mac-Symbole, sofern verfügbar. Der Windows-Stil liest die Originalsymbole direkt aus den installierten Apps. Alle App-Symbole werden exakt skaliert und einheitlich gerundet.",
         ["Apps.AdaptiveIconBackgrounds"] = "Farblich passende Icon-Hintergründe",
-        ["Apps.AdaptiveIconBackgroundsDescription"] = "Unveränderte App-Symbole erhalten im Dock einen dezenten Verlauf aus ihren eigenen Farben. Der Hintergrund wird für gute Erkennbarkeit heller oder dunkler abgestimmt. Gilt für Mac- und Windows-Stil; eigene und heruntergeladene Ersatz-Icons, Ordner und Papierkorb bleiben unverändert.",
+        ["Apps.AdaptiveIconBackgroundsDescription"] = "Freigestellte App-Symbole erhalten im Dock einen dezenten, kontrastreich abgestimmten Verlauf aus ihren eigenen Farben. Bereits quadratische oder abgerundete Icon-Kacheln bleiben ohne Zusatzfläche in voller Größe. Gilt für Mac- und Windows-Stil; eigene und heruntergeladene Ersatz-Icons, Ordner und Papierkorb bleiben unverändert.",
         ["Apps.DockElementsSection"] = "Feste Dock-Elemente",
         ["Apps.DockElementsDescription"] = "Wähle für jedes feste Element ein eigenes Bild oder setze es auf den VeliShell-Standard zurück. Beim Papierkorb werden Leer- und Vollzustand getrennt verwaltet.",
         ["Apps.VeliShellDockIcon"] = "VeliShell-Einstellungen",

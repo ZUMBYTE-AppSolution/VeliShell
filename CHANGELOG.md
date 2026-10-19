@@ -6,6 +6,14 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+- Optionale Icon-Hintergründe erkennen bereits quadratische und abgerundete
+  Kacheln anhand ihrer sichtbaren Alpha-Kontur. Diese erhalten keinen zusätzlichen
+  Verlauf, keine Verkleinerung und keinen Kontrastsaum. Transparente Sicherheitsränder
+  und weiche Schatten werden bei der Formprüfung ignoriert. Gilt für beide Iconstile,
+  laufende/angeheftete Apps und die gemeinsame Drag-/Einfügevorschau.
+- Freigestellte Symbole behalten den optionalen farblich passenden Hintergrund;
+  eigene Ersatz-Icons, Ordner und Papierkorb bleiben unverändert.
+
 ## [0.14.1] - 2026-10-19
 
 ### Startmenü

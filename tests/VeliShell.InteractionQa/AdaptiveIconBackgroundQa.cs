@@ -72,6 +72,7 @@ internal static partial class Program
             for (var i = 0; i < transparentRgb.Length; i += 4) { transparentRgb[i] = 255; transparentRgb[i + 2] = 255; }
             Check(!AppIconBackground.Analyze(transparentRgb).HasArtwork, "Invisible RGB values polluted the palette.");
             Check(!AppIconBackground.Analyze([1, 2, 3]).HasArtwork, "Partial pixel input was not bounded.");
+            VerifyExistingIconTiles(Check, output);
 
             // Seed only this QA process's memory cache: no AppData writes, real
             // icon imports, network requests or user-cache cleanup.
@@ -86,9 +87,23 @@ internal static partial class Program
                 {
                     settings.IconStyle = style;
                     themes.Apply(Appearance.Dark);
-                    var native = new DockItem { Key = "pin:qa", Name = "Native", Target = "", IconId = "qa-native" };
+                    // Seed only the process-local Shell image cache for an
+                    // existing own file: deterministic freeform native artwork,
+                    // no import, network, real app launch or settings write.
+                    var target = typeof(VeliShell.Desktop.App).Assembly.Location;
+                    var pixels = (int)RequireMethod(typeof(IconService), "RequestedPixelSize").Invoke(null, null)!;
+                    RequireMethod(typeof(IconService), "StoreCached").Invoke(null, [$"shell:{style}:qa-native:{pixels}:{target}", custom]);
+                    var shapedSource = IconTileFixture("rounded");
+                    RequireMethod(typeof(IconService), "StoreCached").Invoke(null, [$"shell:{style}:qa-shaped:{pixels}:{target}", shapedSource]);
+                    var native = new DockItem { Key = "pin:qa", Name = "Native", Target = target, IconId = "qa-native" };
                     var tile = new DockTile(native, 58, true);
-                    Check(tile.HasAdaptiveBackground, "Native fallback not styled in " + style);
+                    Check(tile.HasAdaptiveBackground, "Native freeform artwork not styled in " + style);
+                    tile.UpdateItem(new DockItem { Key = native.Key, Name = "Shaped native", Target = target, IconId = "qa-shaped" }, true);
+                    Check(!tile.HasAdaptiveBackground, "Existing native tile received a second background in " + style);
+                    tile.UpdateItem(native, true);
+                    Check(tile.HasAdaptiveBackground, "Native tile-to-glyph update did not restore background eligibility in " + style);
+                    var fallback = new DockTile(new DockItem { Key = "pin:missing", Name = "Missing", IconId = "qa-missing" }, 58, true);
+                    Check(!fallback.HasAdaptiveBackground, "Already-tiled built-in fallback received a second background in " + style);
                     var replaced = new DockItem { Key = native.Key, Name = "Custom", IconId = native.IconId, Icon = reference };
                     var resolved = IconService.Resolve(replaced.IconId, replaced.Target, reference, style);
                     Check(!resolved.IsOriginal && ReferenceEquals(resolved.Source, custom), "Custom artwork provenance lost in " + style);
@@ -97,7 +112,9 @@ internal static partial class Program
                     tile.UpdateItem(native, true); Check(tile.HasAdaptiveBackground, "Resetting an override did not restore the optional background.");
                     tile.UpdateItem(native, false); Check(!tile.HasAdaptiveBackground, "Live preference disable did not affect an existing tile.");
                     var bundled = new DockTile(new DockItem { Key = "pin:files", Name = "Files", IconId = "files", Target = "explorer.exe" }, 58, true);
-                    Check(bundled.HasAdaptiveBackground == (style == DockIconStyle.Windows), "Authored Mac / original Windows icon eligibility is incorrect.");
+                    var bundledSource = IconService.Resolve("files", "explorer.exe", style: style);
+                    Check(bundled.HasAdaptiveBackground == (bundledSource.IsOriginal && !AppIconAppearance.For(bundledSource.Source).HasTileShape),
+                        "Authored Mac / original Windows icon shape eligibility is incorrect.");
                     foreach (var id in new[] { "velishell", "trash", "start", "overflow" })
                         Check(!new DockTile(new DockItem { Key = id, Name = id, IconId = id }, 58, true).HasAdaptiveBackground, "Authored utility artwork was changed.");
                     Check(!new DockTile(new DockItem { Key = "pin:folder", Name = "Folder", IconId = "folder-shortcut" }, 58, true).HasAdaptiveBackground, "Folder source shape was changed.");
@@ -134,7 +151,7 @@ internal static partial class Program
             }
             // Existing default behaviour stays covered without opening any UI.
             TestDockTileHoverMask(); TestVeliShellAssetSurface();
-            Console.WriteLine($"PASS: {count} adaptive icon checks, original/custom provenance in both styles, persistent opt-in, shared drag artwork, full-size masks, 24–96 DIP / 100–200% scaling.");
+            Console.WriteLine($"PASS: {count} adaptive icon checks, existing tile shape detection, unchanged full-size tiles, original/custom provenance in both styles, shared drag artwork, 24–96 DIP / 100–200% scaling.");
             Console.WriteLine("PASS: four real settings-card renders plus light/dark icon sheets; no windows shown, input, real preferences, taskbar, native frames or app processes changed.");
             Console.WriteLine(output);
             app.Shutdown(); return 0;

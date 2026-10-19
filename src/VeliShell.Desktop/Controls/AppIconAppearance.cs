@@ -5,7 +5,7 @@ using System.Windows.Media.Imaging;
 
 namespace VeliShell.Desktop.Controls;
 
-internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
+internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds, bool HasTileShape = false)
 {
     private const int SampleSize = 256;
     private const byte ArtworkAlphaThreshold = 128;
@@ -20,7 +20,8 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
         try
         {
             var pixels = RenderSquareSample(source, SampleSize);
-            return new AppIconAppearance(FindArtworkBounds(pixels));
+            var bounds = FindArtworkBounds(pixels, out var hasTileShape);
+            return new AppIconAppearance(bounds, hasTileShape);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or NotSupportedException)
         {
@@ -56,17 +57,20 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
         return pixels;
     }
 
-    private static Rect FindArtworkBounds(byte[] pixels)
+    private static Rect FindArtworkBounds(byte[] pixels, out bool hasTileShape)
     {
+        hasTileShape = false;
         var left = SampleSize;
         var top = SampleSize;
         var right = -1;
         var bottom = -1;
+        var opaquePixels = 0;
         for (var y = 0; y < SampleSize; y++)
         {
             for (var x = 0; x < SampleSize; x++)
             {
                 if (pixels[(y * SampleSize + x) * 4 + 3] < ArtworkAlphaThreshold) continue;
+                opaquePixels++;
                 left = Math.Min(left, x);
                 top = Math.Min(top, y);
                 right = Math.Max(right, x);
@@ -83,10 +87,46 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
         // transparent safe zones no longer make one dock icon look smaller.
         var width = right - left + 1;
         var height = bottom - top + 1;
+        hasTileShape = IsTileShape(pixels, left, top, width, height, opaquePixels);
         var side = Math.Clamp(Math.Max(width, height) / (double)SampleSize, 1d / SampleSize, 1);
         var sourceCenterX = (left + right + 1) / (2d * SampleSize);
         var sourceCenterY = (top + bottom + 1) / (2d * SampleSize);
         return new Rect(sourceCenterX - side / 2, sourceCenterY - side / 2, side, side);
+    }
+
+    private static bool IsTileShape(byte[] pixels, int left, int top, int width, int height, int opaquePixels)
+    {
+        // Classify the visible silhouette, not the source canvas: ICO/PNG files
+        // commonly contain asymmetric transparent padding or a soft shadow.
+        // Filled square/rounded-square tiles have near-square extents, a dense
+        // body and four long, almost flat sides. Circles, diamonds, folders,
+        // sparse glyphs and outlines must not qualify just by their square file.
+        if (Math.Min(width, height) < 12 || Math.Min(width, height) / (double)Math.Max(width, height) < .92 ||
+            opaquePixels / (double)(width * height) < .84) return false;
+
+        bool HasSide(bool vertical, bool opposite)
+        {
+            var length = vertical ? height : width;
+            var depth = vertical ? width : height;
+            var start = (int)Math.Ceiling((length - 1) * .24);
+            var end = (int)Math.Floor((length - 1) * .76);
+            var tolerance = Math.Max(1, (int)Math.Ceiling(depth * .045));
+            var covered = 0;
+            for (var position = start; position <= end; position++)
+            {
+                for (var inset = 0; inset < tolerance; inset++)
+                {
+                    var edge = opposite ? depth - 1 - inset : inset;
+                    var x = left + (vertical ? edge : position);
+                    var y = top + (vertical ? position : edge);
+                    if (pixels[(y * SampleSize + x) * 4 + 3] < ArtworkAlphaThreshold) continue;
+                    covered++;
+                    break;
+                }
+            }
+            return covered / (double)(end - start + 1) >= .94;
+        }
+        return HasSide(true, false) && HasSide(true, true) && HasSide(false, false) && HasSide(false, true);
     }
 
 }
