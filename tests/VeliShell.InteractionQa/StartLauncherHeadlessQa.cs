@@ -123,7 +123,10 @@ internal static partial class Program
                 var compactPower = power.TransformToAncestor(root).TransformBounds(new Rect(power.RenderSize));
                 Check(compactPower.Bottom <= 380 && compactPower.Right <= 410 && power.ActualHeight >= 30, "Power controls clipped on a compact monitor.");
                 Check(new WindowInteropHelper(view).Handle == 0, "Offscreen rendering opened Start on the desktop.");
-                view.CloseOnce(); view.CloseOnce();
+                // Exercise the same lookup as the older hosted render/anchor probe:
+                // CloseOnce is now public through the transient-panel contract.
+                var close = RequireMethod(typeof(StartLauncherWindow), nameof(StartLauncherWindow.CloseOnce));
+                close.Invoke(view, null); close.Invoke(view, null);
                 Console.WriteLine($"PASS {language} {(dark ? "dark" : "light")} {material:0}: constructed in {watch.Elapsed.TotalMilliseconds:F1} ms; shared material, all apps, search, back, power and offscreen rendering.");
             }
             foreach (var command in StartSessionActions.Commands)

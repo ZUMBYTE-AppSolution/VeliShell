@@ -4094,7 +4094,7 @@ internal static partial class Program
         DesktopAssembly.GetType(name, throwOnError: true)!;
 
     private static MethodInfo RequireMethod(Type type, string name) =>
-        type.GetMethod(name, BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic)
+        type.GetMethod(name, BindingFlags.Static | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
         ?? throw new MissingMethodException(type.FullName, name);
 
     private static FieldInfo RequireField(Type type, string name) =>
