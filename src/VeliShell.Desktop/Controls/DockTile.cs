@@ -21,8 +21,11 @@ internal sealed class DockTile : Button
     private readonly Ellipse _indicator;
     internal DockItem Item { get; set; }
     internal double IconSize { get; }
+    internal bool HasAdaptiveBackground => _iconSurface.HasAdaptiveBackground;
 
-    internal DockTile(DockItem item, double size)
+    internal DockTile(DockItem item, double size) : this(item, size, false) { }
+
+    internal DockTile(DockItem item, double size, bool adaptiveBackgrounds)
     {
         Item = item;
         IconSize = size;
@@ -51,7 +54,8 @@ internal sealed class DockTile : Button
         _folderDropHalo.SetResourceReference(Border.BackgroundProperty, "AccentSoft");
         _folderDropHalo.SetResourceReference(Border.BorderBrushProperty, "AccentStroke");
         grid.Children.Add(_folderDropHalo);
-        var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
+        var iconArtwork = IconService.Resolve(item.IconId, item.Target, item.Icon);
+        var iconSource = iconArtwork.Source;
         var iconTransforms = new TransformGroup();
         iconTransforms.Children.Add(_scale);
         iconTransforms.Children.Add(_launchOffset);
@@ -63,6 +67,7 @@ internal sealed class DockTile : Button
             RenderTransformOrigin = new Point(0.5, 1), RenderTransform = iconTransforms
         };
         _iconSurface = new AppIconSurface(iconSource, size, UsesFreeformArtwork(item));
+        _iconSurface.SetAdaptiveBackground(adaptiveBackgrounds && iconArtwork.IsOriginal && !item.IsUtility);
         artwork.Children.Add(_iconSurface);
         if (IsFolder(item))
         {
@@ -105,14 +110,16 @@ internal sealed class DockTile : Button
     internal void SetFolderDropTarget(bool active) =>
         _folderDropHalo.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
 
-    internal void UpdateItem(DockItem item)
+    internal void UpdateItem(DockItem item, bool adaptiveBackgrounds = false)
     {
         Item = item;
         ToolTip = TooltipFor(item);
         AutomationProperties.SetName(this, item.Name);
         UpdateAutomationStatus(item);
-        var iconSource = IconService.For(item.IconId, item.Target, item.Icon);
+        var iconArtwork = IconService.Resolve(item.IconId, item.Target, item.Icon);
+        var iconSource = iconArtwork.Source;
         _iconSurface.UpdateSource(iconSource, UsesFreeformArtwork(item));
+        _iconSurface.SetAdaptiveBackground(adaptiveBackgrounds && iconArtwork.IsOriginal && !item.IsUtility);
         UpdateFolder(item);
         UpdateIndicator();
     }

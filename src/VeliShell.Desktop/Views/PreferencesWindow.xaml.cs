@@ -74,6 +74,7 @@ public partial class PreferencesWindow : VeliShellWindow
         NativePrototypeCard.Visibility = BuildIdentity.IsTest && !PackageIdentityService.HasIdentity ? Visibility.Visible : Visibility.Collapsed;
         foreach (var item in IconStyleChoice.Items.OfType<ComboBoxItem>())
             item.IsSelected = string.Equals(item.Tag as string, s.IconStyle.ToString(), StringComparison.Ordinal);
+        AdaptiveIconBackgroundsSwitch.IsChecked = s.AdaptiveIconBackgrounds;
         SizeSlider.Value = s.IconSize;
         SizeLabel.Text = $"{s.IconSize:0} DIP";
         ReducedMotionSwitch.IsChecked = s.ReducedMotion;
@@ -248,6 +249,10 @@ public partial class PreferencesWindow : VeliShellWindow
         if (_loading || IconStyleChoice.SelectedItem is not ComboBoxItem { Tag: string value } ||
             !Enum.TryParse<DockIconStyle>(value, out var iconStyle)) return;
         _app.UpdatePreferences(s => s.IconStyle = iconStyle);
+    }
+    private void AdaptiveIconBackgrounds_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_loading) _app.UpdatePreferences(s => s.AdaptiveIconBackgrounds = AdaptiveIconBackgroundsSwitch.IsChecked == true);
     }
     private void UpdateUpdateStatus()
     {

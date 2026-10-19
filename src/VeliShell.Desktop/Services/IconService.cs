@@ -11,6 +11,7 @@ namespace VeliShell.Desktop.Services;
 
 internal static class IconService
 {
+    internal readonly record struct Artwork(ImageSource Source, bool IsOriginal);
     private const int CacheCapacity = 64;
     private static readonly object CacheGate = new();
     private static readonly Dictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
@@ -21,54 +22,60 @@ internal static class IconService
             ? "folder-shortcut" : pin.Id;
 
     internal static ImageSource For(string id, string target = "", IconReference? icon = null)
+        => Resolve(id, target, icon).Source;
+
+    // Keep provenance with the resolved pixels: an unavailable/ignored override
+    // must not disable the optional backdrop on the actual native fallback.
+    internal static Artwork Resolve(string id, string target = "", IconReference? icon = null,
+        DockIconStyle? style = null)
     {
         // A user-selected local image is an explicit override in either icon
         // style. Online catalog artwork keeps the existing Mac-style behavior.
-        if (CustomIconService.TryLoad(icon) is { } custom) return custom;
-        if (id == "virtual-folder") return BuiltIn(id);
+        if (CustomIconService.TryLoad(icon) is { } custom) return new(custom, false);
+        if (id == "virtual-folder") return new(BuiltIn(id), false);
         if (id == "folder-shortcut")
-            return BundledAsset(id, "/VeliShell;component/Assets/SystemIcons/FolderShortcut.png");
-        var iconStyle = CurrentIconStyle();
+            return new(BundledAsset(id, "/VeliShell;component/Assets/SystemIcons/FolderShortcut.png"), false);
+        var iconStyle = style ?? CurrentIconStyle();
         if (iconStyle == DockIconStyle.Mac)
         {
-            if (OnlineIconService.TryLoad(icon) is { } online) return online;
-            if (id == "velishell") return VeliShellAsset();
+            if (icon is not null && OnlineIconService.TryLoad(icon) is { } online) return new(online, false);
+            if (id == "velishell") return new(VeliShellAsset(), false);
             if (id is "files" or "browser" or "notes" or "system" or "trash" or "trash-full" or "overflow" or "start")
-                return id switch
+                return new(id switch
                 {
                     "trash" => BundledAsset("trash", "/VeliShell;component/Assets/SystemIcons/RecycleBinEmpty.png"),
                     "trash-full" => BundledAsset("trash-full", "/VeliShell;component/Assets/SystemIcons/RecycleBinFull.png"),
                     _ => BuiltIn(id)
-                };
+                }, false);
         }
         else if (id == "velishell")
         {
-            return VeliShellAsset();
+            return new(VeliShellAsset(), false);
         }
         else if (id is "overflow" or "start")
         {
-            return BuiltIn(id);
+            return new(BuiltIn(id), false);
         }
 
         var path = ResolveShellTarget(id, target, iconStyle);
         if (string.IsNullOrWhiteSpace(path) ||
             !(path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) || File.Exists(path) || Directory.Exists(path)))
-            return BuiltIn("app");
+            return new(BuiltIn("app"), true);
         try
         {
             if (!path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) path = Path.GetFullPath(path);
             var pixels = RequestedPixelSize();
             var cacheKey = $"shell:{iconStyle}:{id}:{pixels}:{path}";
-            if (TryGetCached(cacheKey, out var cached)) return cached;
+            if (TryGetCached(cacheKey, out var cached)) return new(cached, true);
 
             var artworkPath = WebAppArtworkPath(path);
             var image = ShellImage(artworkPath, pixels) ?? LegacyShellIcon(artworkPath) ??
                 (artworkPath != path ? ShellImage(path, pixels) ?? LegacyShellIcon(path) : null) ?? BuiltIn("app");
             StoreCached(cacheKey, image);
-            return image;
+            return new(image, true);
         }
         catch (Exception ex) { App.Log("Could not read an app icon", ex); }
-        return BuiltIn("app");
+        return new(BuiltIn("app"), true);
     }
 
     internal static ImageSource? ForOriginalWindowsIcon(string id, string target)

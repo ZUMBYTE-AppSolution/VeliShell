@@ -62,6 +62,7 @@ try {
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Desktop.Updater.Tests/VeliShell.Desktop.Updater.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'desktop-updater-tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-native-frames-headless') -Log (Join-Path $Out 'native-frames-headless-qa.log')
+    Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-adaptive-icon-backgrounds') -Log (Join-Path $Out 'adaptive-icon-backgrounds-qa.log')
     foreach ($taskMaterialArchitecture in @('x64','x86')) {
         & (Join-Path $Root "src/VeliShell.Desktop/obj/native/FrameMaterialChecks.$taskMaterialArchitecture.exe") 2>&1 | Tee-Object -FilePath (Join-Path $Out "native-material-$taskMaterialArchitecture.log")
         if ($LASTEXITCODE -ne 0) { throw "Native material checks failed ($taskMaterialArchitecture)." }

@@ -6,6 +6,26 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1-test.4] - 2026-10-19
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Neue, zunächst ausgeschaltete Option **Farblich passende Icon-Hintergründe**
+  unter Einstellungen → Apps & Symbole. Gilt im Dock für unveränderte App-Icons
+  im Mac- und Windows-Stil, auch für laufende Apps ohne eigenen Dock-Pin.
+- Lokale, alpha-gewichtete Farbanalyse mit Kontrastbewertung: Ein dezenter Verlauf
+  aus der Iconfarbe wird heller oder dunkler abgestimmt. Transparente Ränder und
+  unsichtbare RGB-Werte beeinflussen die Farbauswahl nicht; ein feiner Kontaktsaum
+  hilft bei gemischten Motiven. Ergebnisse werden pro Bild zwischengespeichert.
+- Gemeinsame Icon-Rundung und exakt gleich große Hintergrundflächen, mit einheitlichem
+  Innenabstand für das Originalmotiv. Drag-Ghost und Einfügevorschau übernehmen die Option.
+- Eigene und geladene Ersatz-Icons sowie bereits gestaltete Mac-Icons bleiben unverändert.
+  Ordner, Papierkorb und feste VeliShell-Bedienelemente erhalten keine neue Kachel.
+- Auswahl wird gespeichert und wirkt ohne Neustart auf bestehende Dock-Einträge.
+  Ordneransichten, Suche und Menüleisten-Symbole werden nicht zusätzlich eingekachelt.
+- Hintergrundprüfungen für beide Iconstile, 24–96 DIP und 100–200 % Skalierung sowie
+  gerenderte Hell-/Dunkelbeispiele und deutsche/englische Einstellungskarten.
+
 ## [0.14.1-test.3] - 2026-10-16
 
 Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.

@@ -1,13 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 
 namespace VeliShell.Desktop.Controls;
 
 /// <summary>
 /// Keeps app artwork centered, exactly sized, and continuously rounded. Source
-/// alpha bounds normalize transparent safe zones; VeliShell deliberately draws
-/// no generated color, gradient, tile, or backdrop behind the icon. Explicit
+/// alpha bounds normalize transparent safe zones. A dock-only, opt-in background
+/// can frame unmodified app artwork; default and chosen icons remain untouched. Explicit
 /// freeform utility art (such as the Recycle Bin and folder shortcuts) preserves its source canvas.
 /// </summary>
 internal sealed class AppIconSurface : Grid
@@ -15,10 +16,14 @@ internal sealed class AppIconSurface : Grid
     private readonly Canvas _plate;
     private AppIconAppearance _appearance;
     private bool _freeform;
+    private bool _backgroundEnabled;
+    private AppIconBackground? _background;
+    private DropShadowEffect? _contrastHalo;
 
     internal Image IconImage { get; }
     internal FrameworkElement PlateElement => _plate;
     internal Rect NormalizedArtworkBounds => _appearance.NormalizedArtworkBounds;
+    internal bool HasAdaptiveBackground => _background is { HasArtwork: true } && !_freeform;
     // Kept temporarily for binary/test compatibility while callers move to the
     // more accurate name. These are source crop bounds, not output plate bounds.
     internal Rect NormalizedPlateBounds => NormalizedArtworkBounds;
@@ -81,8 +86,30 @@ internal sealed class AppIconSurface : Grid
         _appearance = AppIconAppearance.For(source);
         IconImage.Source = source;
         IconImage.Visibility = Visibility.Visible;
+        UpdateBackground();
         var actual = Math.Min(RenderSize.Width, RenderSize.Height);
         ApplyLayout(double.IsFinite(actual) && actual > 0 ? actual : Width);
+    }
+
+    internal void SetAdaptiveBackground(bool enabled)
+    {
+        _backgroundEnabled = enabled;
+        UpdateBackground();
+        var actual = Math.Min(RenderSize.Width, RenderSize.Height);
+        ApplyLayout(double.IsFinite(actual) && actual > 0 ? actual : Width);
+    }
+
+    private void UpdateBackground()
+    {
+        _background = _backgroundEnabled && !_freeform && IconImage.Source is { } source
+            ? AppIconBackground.For(source) : null;
+        _plate.Background = HasAdaptiveBackground
+            ? SystemParameters.HighContrast ? SystemColors.WindowBrush : _background!.Brush : null;
+        if (!HasAdaptiveBackground) { IconImage.Effect = null; return; }
+        _contrastHalo ??= new DropShadowEffect { ShadowDepth = 0, Opacity = .28 };
+        _contrastHalo.Color = SystemParameters.HighContrast ? SystemColors.WindowTextColor :
+            _background!.IsDark ? Colors.White : Colors.Black;
+        IconImage.Effect = _contrastHalo;
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -116,7 +143,10 @@ internal sealed class AppIconSurface : Grid
 
         var normalized = _appearance.NormalizedArtworkBounds;
         var normalizedSide = Math.Clamp(Math.Max(normalized.Width, normalized.Height), 1d / 256, 1);
-        var sourceCanvasSide = side / normalizedSide;
+        // The outer plate stays exactly at dock size; native art gets the same
+        // inset at every size. Chosen/bundled icons retain their existing scale.
+        var sourceCanvasSide = side * (HasAdaptiveBackground ? .78 : 1) / normalizedSide;
+        if (_contrastHalo is not null) _contrastHalo.BlurRadius = Math.Clamp(side * .04, 1, 3);
         var mappedWidth = normalized.Width * sourceCanvasSide;
         var mappedHeight = normalized.Height * sourceCanvasSide;
 

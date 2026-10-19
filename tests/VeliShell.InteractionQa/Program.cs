@@ -34,6 +34,7 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if(args.Length==1 && args[0]=="--verify-adaptive-icon-backgrounds") return VerifyAdaptiveIconBackgrounds();
         if(args.Length==2 && args[0]=="--inspect-real-app") return InspectRealApp(args[1]);
         if(args.Length==1 && args[0]=="--verify-native-frames-headless") return VerifyNativeFramesHeadless();
         if (args.Contains("--verify-automatic-frames", StringComparer.OrdinalIgnoreCase)) return VerifyAutomaticFrames(args.Contains("--x86", StringComparer.OrdinalIgnoreCase));

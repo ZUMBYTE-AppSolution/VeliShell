@@ -40,7 +40,7 @@ public sealed record Pin(
 
 public sealed class Settings
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
     public const int CurrentOnlineIconConsentVersion = 5;
     public const double MinimumIconSize = 24;
     public const double DefaultIconSize = 52;
@@ -78,6 +78,7 @@ public sealed class Settings
     public bool ShowWindowsStartDockItem { get; set; }
     public bool WindowsNotificationsEnabled { get; set; }
     public DockIconStyle IconStyle { get; set; } = DockIconStyle.Mac;
+    public bool AdaptiveIconBackgrounds { get; set; }
     public bool MenuBarEnabled { get; set; }
     public bool MenuBarOnAllDisplays { get; set; }
     public bool MenuBarAutoHide { get; set; }

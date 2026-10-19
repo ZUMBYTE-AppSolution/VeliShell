@@ -19,7 +19,7 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
     {
         try
         {
-            var pixels = RenderSquareSample(source);
+            var pixels = RenderSquareSample(source, SampleSize);
             return new AppIconAppearance(FindArtworkBounds(pixels));
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or NotSupportedException)
@@ -28,19 +28,19 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
         }
     }
 
-    private static byte[] RenderSquareSample(ImageSource source)
+    internal static byte[] RenderSquareSample(ImageSource source, int sampleSize)
     {
         var width = source.Width;
         var height = source.Height;
         if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0)
-            width = height = SampleSize;
+            width = height = sampleSize;
 
-        var scale = Math.Min(SampleSize / width, SampleSize / height);
+        var scale = Math.Min(sampleSize / width, sampleSize / height);
         var renderWidth = width * scale;
         var renderHeight = height * scale;
         var target = new Rect(
-            (SampleSize - renderWidth) / 2,
-            (SampleSize - renderHeight) / 2,
+            (sampleSize - renderWidth) / 2,
+            (sampleSize - renderHeight) / 2,
             renderWidth,
             renderHeight);
 
@@ -49,10 +49,10 @@ internal sealed record AppIconAppearance(Rect NormalizedArtworkBounds)
         using (var drawing = visual.RenderOpen())
             drawing.DrawImage(source, target);
 
-        var sample = new RenderTargetBitmap(SampleSize, SampleSize, 96, 96, PixelFormats.Pbgra32);
+        var sample = new RenderTargetBitmap(sampleSize, sampleSize, 96, 96, PixelFormats.Pbgra32);
         sample.Render(visual);
-        var pixels = new byte[SampleSize * SampleSize * 4];
-        sample.CopyPixels(pixels, SampleSize * 4, 0);
+        var pixels = new byte[sampleSize * sampleSize * 4];
+        sample.CopyPixels(pixels, sampleSize * 4, 0);
         return pixels;
     }
 

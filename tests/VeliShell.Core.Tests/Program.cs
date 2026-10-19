@@ -75,6 +75,22 @@ try
     Test("Windows Start dock item is opt-in", () =>
         Check(!new Settings().ShowWindowsStartDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
+    Test("Adaptive icon backgrounds are opt-in, including older settings", () =>
+    {
+        Check(!new Settings().AdaptiveIconBackgrounds);
+        var old = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"SchemaVersion\":14,\"IconStyle\":1}")!;
+        old.Normalize(); Check(!old.AdaptiveIconBackgrounds && old.IconStyle == DockIconStyle.Windows);
+    });
+    Test("Adaptive icon background choice persists independently in both icon styles", () =>
+    {
+        foreach (var style in Enum.GetValues<DockIconStyle>())
+        {
+            var store = new SettingsStore(Path.Combine(temp, "icon-backgrounds-" + style));
+            store.Save(new Settings { IconStyle = style, AdaptiveIconBackgrounds = true });
+            var settings = store.Load(); Check(settings.AdaptiveIconBackgrounds && settings.IconStyle == style);
+            settings.AdaptiveIconBackgrounds = false; store.Save(settings); Check(!store.Load().AdaptiveIconBackgrounds);
+        }
+    });
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
     Test("Always-visible tray icons are opt-in", () =>
         Check(!new Settings().MenuBarAlwaysShowTrayApps));

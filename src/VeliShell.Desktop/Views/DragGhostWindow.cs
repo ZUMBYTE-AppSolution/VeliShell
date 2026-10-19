@@ -21,7 +21,17 @@ internal sealed class DragGhostWindow : Window, IDisposable
         this(owner, source, iconSize, freeform: false) { }
 
     internal DragGhostWindow(Window owner, ImageSource source, double iconSize, bool freeform) :
-        this(owner, new AppIconSurface(source, Math.Clamp(iconSize, 32, 96), freeform), iconSize) { }
+        this(owner, source, iconSize, freeform, false) { }
+
+    internal DragGhostWindow(Window owner, ImageSource source, double iconSize, bool freeform, bool adaptiveBackground) :
+        this(owner, CreateAppArtwork(source, iconSize, freeform, adaptiveBackground), iconSize) { }
+
+    private static AppIconSurface CreateAppArtwork(ImageSource source, double iconSize, bool freeform, bool adaptiveBackground)
+    {
+        var surface = new AppIconSurface(source, Math.Clamp(iconSize, 32, 96), freeform);
+        surface.SetAdaptiveBackground(adaptiveBackground);
+        return surface;
+    }
 
     internal DragGhostWindow(Window owner, Pin folder, double iconSize) :
         this(owner, CreateFolderArtwork(folder, iconSize), iconSize) { }
