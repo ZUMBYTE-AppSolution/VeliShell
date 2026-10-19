@@ -286,7 +286,7 @@ public partial class DockWindow : Window
         if (_tiles.Count == items.Count && _tiles.Select(t => t.Item.Key).SequenceEqual(items.Select(i => i.Key))
             && _tiles.All(t => Math.Abs(t.IconSize - preferences.IconSize) < 0.01))
         {
-            for (var i = 0; i < items.Count; i++) _tiles[i].UpdateItem(items[i]);
+            for (var i = 0; i < items.Count; i++) _tiles[i].UpdateItem(items[i], preferences.AdaptiveIconBackgrounds);
             StopCompletedLaunches();
             return;
         }
@@ -302,7 +302,7 @@ public partial class DockWindow : Window
                 divider.SetResourceReference(Border.BackgroundProperty, "Divider");
                 ItemsPanel.Children.Add(divider);
             }
-            var tile = new DockTile(item, preferences.IconSize);
+            var tile = new DockTile(item, preferences.IconSize, preferences.AdaptiveIconBackgrounds);
             tile.Click += (_, _) =>
             {
                 if (Environment.TickCount64 >= _suppressActivationUntil) ActivateItem(tile.Item, tile);
@@ -1037,7 +1037,8 @@ public partial class DockWindow : Window
         {
             _dragGhostKey = key;
             _dragGhost = folder is null
-                ? new DragGhostWindow(this, source, _app.Preferences.IconSize, freeform)
+                ? new DragGhostWindow(this, source, _app.Preferences.IconSize, freeform,
+                    _app.Preferences.AdaptiveIconBackgrounds && _tiles.Any(tile => tile.Item.Key == key && tile.HasAdaptiveBackground))
                 : new DragGhostWindow(this, folder, _app.Preferences.IconSize);
             _dragGhost.ShowAtCursor();
         }
@@ -1179,6 +1180,7 @@ public partial class DockWindow : Window
         {
             Opacity = previewIcon is null ? 0.24 : 0.78,
         };
+        iconSurface.SetAdaptiveBackground(_app.Preferences.AdaptiveIconBackgrounds && !freeform);
 
         var placeholder = new Grid
         {

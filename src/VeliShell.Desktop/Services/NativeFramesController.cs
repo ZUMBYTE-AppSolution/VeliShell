@@ -7,9 +7,20 @@ using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
 
-internal sealed record NativeFramesConfig(bool Enabled, bool Dark, int Gloss, int Transparency, string[] Exclusions, bool Preview, uint Tint);
-internal sealed record NativeFrameStatus(string Title, string Path, string State)
-{ public override string ToString() => Title + " · " + LocalizationService.Current.Get("NativeFrames.State." + State); }
+internal sealed record NativeFrameTarget(long Window, int Pid, long Started);
+internal sealed record NativeFramesConfig(bool Enabled, bool Dark, int Gloss, int Transparency, string[] Exclusions, bool Preview, uint Tint, bool ModernMaterials = false, bool ModernFrames = false, NativeFrameTarget[]? Targets = null);
+internal sealed record NativeFrameStatus(string Title, string Path, string State, string? Reason = null, long Window = 0, int Pid = 0, long Started = 0, int Adapter = 0, int Error = 0)
+{
+    public override string ToString() {
+        string L(string key) => LocalizationService.Current.Get("NativeFrames." + key);
+        var text = Title + " · " + L("State." + State);
+        if (Adapter != 0) text += " · " + L("Adapter." + Adapter);
+        if (Reason is not null) text += " · " + L("Reason." + Reason);
+        if (Error != 0) text += " · " + L("ErrorCode") + " " + Error + " (0x" + unchecked((uint)Error).ToString("X8", CultureInfo.InvariantCulture) + ")";
+        if (Pid != 0) text += "\n" + Path + " · PID " + Pid + " · HWND 0x" + Window.ToString("X", CultureInfo.InvariantCulture);
+        return text;
+    }
+}
 internal sealed record NativeFramesStatus(bool Ready, bool Stopping, NativeFrameStatus[] Windows, string? Error = null);
 internal sealed record NativeFrameLoaded(int Pid, long Started, string Path);
 
@@ -25,15 +36,26 @@ internal sealed class NativeFramesController : IDisposable
     private Process? _guard;
     private Guid _id;
     private readonly bool _preview;
+    private readonly NativeFrameTarget[]? _targets;
     private bool _disposed, _stopped;
     private NativeFramesConfig? _lastConfig;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     internal NativeFramesStatus Status { get; private set; } = new(false, false, []);
     internal event Action? Changed;
     internal bool Active => _guard is { HasExited: false } && !_stopped;
-    internal NativeFramesController(bool preview = false)
+    internal bool Restoring => _guard is { HasExited: false } && _stopped;
+    internal bool RequestIsolatedRecovery() => _preview && _targets is { Length: > 0 } && Signal(_id);
+    internal void TestIsolatedHelperFailure()
     {
-        _preview = preview; _timer.Tick += (_, _) => {
+        if (!BuildIdentity.IsTest || !_preview || _targets is not { Length: 1 } || _guard is not { HasExited: false } ||
+            !string.Equals(_guard.MainModule?.FileName,Environment.ProcessPath,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("No exact-window test helper is available.");
+        _guard.Kill(); // Only our retained child process, never the target app.
+    }
+    internal NativeFramesController(bool preview = false, NativeFrameTarget[]? targets = null)
+    {
+        if (targets is not null && (!preview || !BuildIdentity.IsTest || targets.Length is < 1 or > 8)) throw new ArgumentException("Test-only exact-window scope required.");
+        _targets = targets; _preview = preview; _timer.Tick += (_, _) => {
             try { RefreshStatus(); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { _stopped = true; Signal(_id); Status = new(false, true, [], error.GetType().Name); App.Log("Native styling status failed closed", error); Changed?.Invoke(); }
         }; _timer.Start();
@@ -54,7 +76,7 @@ internal sealed class NativeFramesController : IDisposable
         var color = (System.Windows.Media.Color)dictionary["NativeCaptionTint"];
         return (uint)(color.A << 24 | color.R << 16 | color.G << 8 | color.B);
     }
-    private NativeFramesConfig Config(Settings settings, bool dark) => new(settings.NativeFramesEnabled, dark, (int)settings.GlassGloss, (int)settings.GlassTransparency, settings.NativeFrameExclusions.ToArray(), _preview, CaptionTint(dark));
+    private NativeFramesConfig Config(Settings settings, bool dark) => new(settings.NativeFramesEnabled, dark, (int)settings.GlassGloss, (int)settings.GlassTransparency, settings.NativeFrameExclusions.ToArray(), _preview, CaptionTint(dark), settings.NativeModernMaterialsEnabled && settings.NativeModernMaterialsConsentVersion == 1, settings.NativeModernFramesEnabled && settings.NativeModernFramesConsentVersion == 1, _targets);
     internal async Task EnableAsync(Settings settings, bool dark, bool explicitConsent)
     {
         if (_disposed || !Supported || settings.NativeFramesConsentVersion != 1) throw new InvalidOperationException(LocalizationService.Current.Get("NativeFrames.Unsupported"));

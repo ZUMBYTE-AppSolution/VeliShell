@@ -94,6 +94,8 @@
  </Style>
  <!-- App-folder entries have no permanent card: only a quiet hover/focus cue. -->
  <Style x:Key="FolderAppButton" TargetType="Button">
+  <Setter Property="HorizontalContentAlignment" Value="Center" />
+  <Setter Property="VerticalContentAlignment" Value="Center" />
   <Setter Property="Background" Value="Transparent" />
   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
   <Setter Property="BorderThickness" Value="0" />
@@ -103,7 +105,7 @@
   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
    <Border x:Name="Body" Background="Transparent" CornerRadius="13" BorderThickness="1"
            BorderBrush="Transparent" Padding="{TemplateBinding Padding}">
-    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
    </Border>
    <ControlTemplate.Triggers>
     <Trigger Property="IsMouseOver" Value="True">
@@ -322,6 +324,22 @@
      <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
     </Trigger>
     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Body" Property="BorderBrush" Value="{DynamicResource AccentStroke}" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="StartAppListItem" TargetType="ListBoxItem">
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  <Setter Property="Padding" Value="10,7" /><Setter Property="MinHeight" Value="50" />
+  <Setter Property="Margin" Value="0,1" /><Setter Property="Cursor" Value="Hand" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+   <Border x:Name="Plate" CornerRadius="11" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="1" BorderBrush="Transparent">
+    <ContentPresenter />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Plate" Property="Background" Value="{DynamicResource HoverSurface}" /></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="Plate" Property="Background" Value="{DynamicResource AccentSoft}" /></Trigger>
+    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Plate" Property="BorderBrush" Value="{DynamicResource AccentStroke}" /></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -623,5 +641,36 @@
     </ControlTemplate></Setter.Value></Setter>
    </Trigger>
   </Style.Triggers>
+ </Style>
+ <Style x:Key="NativeFramesListItem" TargetType="ListBoxItem">
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="Padding" Value="12,9" />
+  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+   <Border x:Name="ItemBody" CornerRadius="7" Background="Transparent" Padding="{TemplateBinding Padding}" Margin="2,1">
+    <ContentPresenter RecognizesAccessKey="False" />
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource HoverSurface}" /></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBody" Property="Background" Value="{DynamicResource AccentSoft}" /></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="NativeFramesList" TargetType="ListBox">
+  <Setter Property="Background" Value="{DynamicResource ControlSurface}" />
+  <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+  <Setter Property="BorderBrush" Value="{DynamicResource GlassListStroke}" />
+  <Setter Property="BorderThickness" Value="1" />
+  <Setter Property="ItemContainerStyle" Value="{StaticResource NativeFramesListItem}" />
+  <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+  <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+  <Setter Property="ItemTemplate"><Setter.Value><DataTemplate>
+   <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{DynamicResource TextPrimary}" />
+  </DataTemplate></Setter.Value></Setter>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBox">
+   <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="3">
+    <ScrollViewer Focusable="False"><ItemsPresenter /></ScrollViewer>
+   </Border>
+  </ControlTemplate></Setter.Value></Setter>
  </Style>
 </ResourceDictionary>

@@ -32,6 +32,7 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Optionale Glas-Fensterrahmen:** Unter **Einstellungen → Windows & Start → Fenstergestaltung** einmal aktivieren; vorhandene und neu geöffnete kompatible klassische 64-Bit-Apps bekommen bündige Live-Glas-Titelleisten und Fensterbuttons links. Eine Ausnahmeliste, gemeinsames Rollback und ein unabhängiger Notfall-Helfer sind integriert. Das Modul ist experimentell und zunächst aus, benötigt Windows 11 ab Build 22621 und ersetzt weder Systemfenster, erhöhte Apps noch eigene Titelleisten oder App-Inhalte. Spiele und kritische Programme vorher ausschließen. [Aktivierung, VM-Test und Wiederherstellung](NATIVE-PROTOTYPE.md).
 
 - **Einheitliche App-Icons:** Jedes Symbol belegt exakt dieselbe eingestellte Fläche. Transparente Ränder oder ungewöhnliche Quelldateien verändern die Größe im Dock nicht.
+- **Optionale farbige Icon-Hintergründe:** Unter **Einstellungen → Apps & Symbole → Farblich passende Icon-Hintergründe** bekommen unveränderte App-Icons im Dock einen dezenten Verlauf aus ihren eigenen Farben. VeliShell prüft helle und dunkle Varianten, damit das Motiv erkennbar bleibt. Die Option gilt für beide Iconstile, ist zunächst aus und übernimmt die gemeinsame Icon-Rundung. Eigene/geladene Ersatz-Icons, bereits gestaltete Mac-Icons, Ordner und Papierkorb bleiben unverändert.
 - **Gemeinsame Rundung für Apps:** App-Icon, geladene App-Symbole, Hover-Zustand und Drag-Ghost verwenden dieselbe kontinuierliche Superellipse. Ordner und Papierkorb behalten dagegen ihre Originalform.
 - **Drag & Drop wie erwartet:** Programme, Dateien und Ordner lassen sich vom Desktop ins Dock ziehen und dort verschieben. Ziehst du einen Eintrag aus dem Dock heraus, wird er nur aus dem Dock entfernt – VeliShell erstellt dabei keine Verknüpfung. Der Ghost sitzt direkt am künftigen Einfügeplatz.
 - **Direkt aus dem Explorer anheften:** Dateien und Ordner erhalten den statischen Kontextmenü-Befehl **„Im Dock anheften“**. Unter Windows 11 kann er im klassischen Bereich **„Weitere Optionen anzeigen“** stehen; VeliShell lädt dafür keinen Erweiterungscode in den Explorer.
@@ -46,7 +47,7 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Steam in der Menüleiste:** Läuft Steam nur im Hintergrund, bleibt sein echtes Symbol aus der installierten `steam.exe` sichtbar – lediglich entsättigt, mit erhaltenen Details und Transparenz. Linksklick öffnet Steam; Rechtsklick bietet Öffnen, Einstellungen und Beenden nach Bestätigung. Ein bloßer SteamWebHelper ohne Steam-Client erscheint nicht.
 - **Andere Hintergrund-Apps in der Menüleiste:** VeliShell merkt sich Apps, deren Fenster es bei aktivierter Menüleiste gesehen hat. Schließt sich das letzte Fenster, während derselbe Prozess weiterläuft, erscheint sein lokal installiertes App-Symbol rechts in der Leiste. Linksklick öffnet die App; Rechtsklick bietet Öffnen, Speicherort und – falls ein Schließfenster vorhanden ist – reguläres Beenden. „Sofort beenden …“ erfordert eine Warnungsbestätigung und beendet ausschließlich den geprüften Prozess, nicht seine gesamte Prozessgruppe. Das gilt auch für Apps im `+N`-Menü. Explorer, Windows-Shell-Hosts, Helferprozesse und reine Dienste werden nicht als Apps angezeigt. Bereits vor dem Start von VeliShell geschlossene Fenster können nicht rückwirkend erkannt werden.
 - **Windows-Infosymbole in der Menüleiste:** VeliShell spiegelt erkannte Tray-App-Symbole aus dem lokalen Windows-Iconcache, sofern die zugehörige Anwendung in deiner Sitzung noch läuft. Die Originalsymbole werden nur entsättigt; Helligkeitsabstufungen und transparente Konturen bleiben in hellem und dunklem Design erhalten. Per Rechtsklick blendest du ein Symbol in der Leiste aus; das linke Chevron schiebt ausgeblendete Symbole direkt neben die übrigen Icons. Nach Fokusverlust oder Verlassen der Leiste klappt die Ansicht nach zehn Sekunden sanft ein; erneute Interaktion bricht den Countdown ab. Auf Wunsch bleiben aktive Tray-Apps – auch zuvor ausgeblendete – dauerhaft direkt in der Leiste, ohne doppelte App-Symbole. Bei ausgeblendeter Windows-Taskleiste ist dies bewusst eine bestmögliche Spiegelung, keine vollständige oder live steuerbare Kopie der Original-Traymenüs.
-- **Eigenes Startmenü am Dock-Button:** Der optionale Start-Knopf öffnet VeliShells App-Launcher direkt über seiner Position im Dock. Dort kannst du lokale Programme suchen, starten oder per Drag & Drop ins Dock ziehen. Das reguläre Windows-Startmenü bleibt über einen separaten Knopf erreichbar; nicht alle Windows-Start-Funktionen sind bereits nachgebaut.
+- **Eigenes Startmenü am Dock-Button:** Der optionale Start-Knopf öffnet VeliShells Menü direkt über seiner Position im Dock. Suche, angeheftete Apps, „Alle Apps“, Dokumente, Downloads und Explorer sind getrennt erreichbar. Icons werden im Hintergrund geladen; die App-Liste stellt nur sichtbare Zeilen dar. Das Menü übernimmt denselben Glasrenderer und dieselben Nutzereinstellungen wie das Kontrollzentrum. Im Ein/Aus-Menü findest du Sperren, Abmelden, Neustart und Herunterfahren; die letzten drei benötigen eine Bestätigung. Lokale Verknüpfungen lassen sich ins Dock ziehen oder per App-Menü anheften. Das reguläre Windows-Startmenü bleibt separat erreichbar; nicht alle Windows-Start-Funktionen sind nachgebaut.
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
 - **Papierkorb im Dock:** Leer- und Vollzustand haben eigene Symbole; der Papierkorb lässt sich direkt über das Dock leeren.
@@ -103,8 +104,36 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 > Die automatische Glas-Fenstergestaltung ist ab 0.14.0 auch im regulären GitHub-Paket
 > enthalten, bleibt aber ausdrücklich optional und standardmäßig ausgeschaltet.
 > [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
-> Testpakete sind ausdrücklich als Vorabversion markiert und ersetzen weder das
-> stabile GitHub-Release noch die Microsoft-Store-Ausgabe.
+
+> **Neu in 0.14.1:** Überarbeitetes Startmenü mit Ein/Aus-Aktionen und denselben
+> Glaswerten wie das Kontrollzentrum, optionale farblich passende Icon-Hintergründe
+> sowie erweiterte experimentelle Fenstergestaltung. Ausschließlich GitHub;
+> die Microsoft-Store-Ausgabe wird mit diesem Release nicht aktualisiert.
+>
+> Die optionalen Titelleisten erhalten einen
+> nativen Gauß-Glaseffekt mit mehr Farbdurchlass; zusätzliches Windows-Zeichnen der
+> hellen Seitenkante wird unterdrückt. Rollback und unabhängige Notfall-Rücksetzung
+> bleiben erhalten. **Die abschließende visuelle Abnahme des Glas-/Kantenfixes an
+> echten VM-Apps steht noch aus.** Das Modul bleibt standardmäßig ausgeschaltet.
+
+Version 0.14.1 erweitert die Fenstergestaltung um **32-Bit-Apps,
+WPF mit Standardrahmen und Glas rund um den gesamten Außenrahmen**. Eine getrennte,
+freiwillige native Farbanpassung berücksichtigt außerdem geeignete Explorer- und
+App-Fenster mit eigener Titelleiste, ohne Tabs oder Suchfelder zu verdecken. Diese
+begrenzte Anpassung verschiebt keine app-eigenen Buttons und ersetzt nicht deren
+Oberfläche. Die Kompatibilitätsanzeige erklärt, warum ein Fenster übersprungen wird.
+Enthalten sind zusätzlich erste, separat freizugebende
+Adapter für Explorer, Paint und Editor sowie eine bereinigte Kompatibilitätsanzeige.
+Bei eigenen Tab-/Suchzeilen wird die neue Titelleiste innerhalb der Fenstergrenzen
+reserviert, statt Bedienelemente zu überdecken. **Diese Adapter sind noch nicht
+an echten Apps abgenommen.** `VM-APP-CHECK.cmd` öffnet im Testpaket eine isolierte,
+benutzerbediente VM-Prüfung mit einem exakt ausgewählten echten Fenster,
+lokalem Bericht und Rücksetz-/Wächterausfall-Prüfung. Sie startet keine Apps,
+übernimmt keine Maus/Tastatur und verändert keine gespeicherten Einstellungen.
+
+Die isolierte VM-Prüfansicht ist weiterhin dem Testkanal vorbehalten. Testpakete
+sind ausdrücklich als Vorabversion markiert und werden separat installiert;
+der Branch allein ändert keine installierte Version.
 
 VeliShell fragt GitHub ausschließlich nach der neuesten veröffentlichten Version. Das Verhalten bestimmst du selbst: nur manuell prüfen, bei neuen Versionen benachrichtigen oder das geprüfte Paket automatisch herunterladen. Das vollständige Changelog bleibt dabei sichtbar; die Installation beginnt nie von allein.
 

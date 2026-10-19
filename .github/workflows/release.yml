@@ -71,7 +71,10 @@ jobs:
               './out/portable/VeliShell.dll',
               './out/portable/VeliShell.Core.dll',
               './out/portable/VeliShell.NativeFrame.dll',
-              './out/portable/VeliShell.ClassicSample.exe'
+              './out/portable/VeliShell.ClassicSample.exe',
+              './out/portable/VeliShell.NativeFrame.x86.dll',
+              './out/portable/VeliShell.FrameBridge.x86.exe',
+              './out/portable/VeliShell.ClassicSample.x86.exe'
             )
             ./tools/Sign-WindowsArtifacts.ps1 -Files $applicationFiles -CertificateBase64 $env:SIGNING_PFX -CertificatePassword $env:SIGNING_PASSWORD
             $invalidPortableSignatures = @(

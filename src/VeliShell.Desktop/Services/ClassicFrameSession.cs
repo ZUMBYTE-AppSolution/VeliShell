@@ -18,13 +18,14 @@ internal static class ClassicFrameSession
     internal const string Guard = "--classic-frame-guard";
     internal static string Folder => Path.Combine(App.DataDirectory, "classic-frames");
     internal static string Event(Guid id, string kind) => @"Local\VeliShell.ClassicFrame." + id.ToString("N") + "." + kind;
-    internal sealed record Candidate(nint Window, int Pid, long Started, string Path, string Hash, string Title)
+    internal sealed record Candidate(nint Window, int Pid, long Started, string Path, string Hash, string Title, bool Is32Bit = false, bool Material = false, int Adapter = 0)
     { public override string ToString() => $"{Title}  ·  {System.IO.Path.GetFileName(Path)}  ·  PID {Pid}"; }
-    internal static Candidate? Inspect(nint window, bool includeHash = true)
+    internal static Candidate? Inspect(nint window, bool includeHash = true, bool crossBitness = false, bool material = false, bool modern = false)
     {
         try
         {
-            if (NativePrototypeMethods.VeliClassicEligible(window) != 1) return null;
+            var reason = NativePrototypeMethods.VeliClassicReason(window, crossBitness ? 1 : 0);
+            if (modern ? NativePrototypeMethods.VeliModernReason(window) is not (0 or 100) : material ? NativePrototypeMethods.VeliMaterialEligible(window) != 1 : reason != 0 && !(crossBitness && reason == 100)) return null;
             NativeMethods.GetWindowThreadProcessId(window, out var pid);
             using var target = Process.GetProcessById((int)pid);
             var path = target.MainModule?.FileName;
@@ -32,7 +33,7 @@ internal static class ClassicFrameSession
             var title = new System.Text.StringBuilder(512); NativeMethods.GetWindowText(window, title, title.Capacity);
             var hash = "";
             if (includeHash) { using var input = File.OpenRead(path); hash = Convert.ToHexString(SHA256.HashData(input)); }
-            return new(window, target.Id, target.StartTime.ToUniversalTime().ToFileTimeUtc(), path, hash, title.ToString());
+            return new(window, target.Id, target.StartTime.ToUniversalTime().ToFileTimeUtc(), path, hash, title.ToString(), reason == 100, material, modern ? NativePrototypeMethods.VeliModernKind(window) : 0);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException or InvalidOperationException) { return null; }
     }
@@ -41,6 +42,18 @@ internal static class ClassicFrameSession
         var windows = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) => { windows.Add(hwnd); return true; }, 0);
         return windows.Select(window => Inspect(window)).OfType<Candidate>().OrderBy(c => c.Title, StringComparer.CurrentCultureIgnoreCase).ToArray();
+    }
+    internal static bool HasOtherAdapterVersion(Candidate candidate)
+    {
+        using var target=Process.GetProcessById(candidate.Pid);
+        string expected=Path.Combine(AppContext.BaseDirectory,candidate.Is32Bit?"VeliShell.NativeFrame.x86.dll":"VeliShell.NativeFrame.dll");
+        foreach(ProcessModule module in target.Modules) {
+            if(module.ModuleName is not { } name || !name.StartsWith("VeliShell.NativeFrame",StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".dll",StringComparison.OrdinalIgnoreCase))continue;
+            // A pinned DLL from a different package must not silently receive a
+            // newer bootstrap protocol. The user closes/restarts the app, never us.
+            if(!string.Equals(module.FileName,expected,StringComparison.OrdinalIgnoreCase))return true;
+        }
+        return false;
     }
     internal static async Task<Guid> BeginAsync(Candidate candidate, bool dark, int gloss, int transparency)
     {

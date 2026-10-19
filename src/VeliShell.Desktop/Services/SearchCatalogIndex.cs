@@ -6,8 +6,10 @@ internal sealed class SearchCatalogIndex : IDisposable
     private readonly PeriodicTimer _timer = new(TimeSpan.FromMinutes(15));
     private IReadOnlyList<SearchEntry> _snapshot = [];
     private Task? _work;
+    private volatile bool _ready;
 
     internal IReadOnlyList<SearchEntry> Snapshot => Volatile.Read(ref _snapshot);
+    internal bool IsReady => _ready;
     internal event Action? Changed;
 
     internal void Start() => _work ??= Task.Run(async () =>
@@ -20,6 +22,7 @@ internal sealed class SearchCatalogIndex : IDisposable
                 {
                     var entries = SearchCatalogService.Discover();
                     Volatile.Write(ref _snapshot, entries);
+                    _ready = true;
                     Changed?.Invoke();
                 }
                 catch (Exception exception)

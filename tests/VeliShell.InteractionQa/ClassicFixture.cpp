@@ -14,11 +14,14 @@ LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
     if(m==WM_DESTROY) { PostQuitMessage(0); return 0; }
     return DefWindowProcW(w,m,wp,lp);
 }
-int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show) {
+int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int show) {
     WNDCLASSW c{}; c.lpfnWndProc=WindowProc; c.hInstance=instance; c.lpszClassName=L"VeliShellClassicFixture";
     c.hCursor=LoadCursorW(nullptr,IDC_ARROW); c.hbrBackground=(HBRUSH)(COLOR_WINDOW+1); RegisterClassW(&c);
     HMENU menu=CreateMenu(), file=CreatePopupMenu(); AppendMenuW(file,MF_STRING,202,L"Pause UI for recovery test"); AppendMenuW(file,MF_STRING,201,L"Exit"); AppendMenuW(menu,MF_POPUP,(UINT_PTR)file,L"File");
-    HWND window=CreateWindowW(c.lpszClassName,L"Independent Classic Fixture",WS_OVERLAPPEDWINDOW,120,160,800,480,nullptr,menu,instance,nullptr);
+    // Keep disposable QA windows out of an older installed adapter's eligibility
+    // set, without disabling or changing that user's active VeliShell instance.
+    DWORD extended=wcsstr(arguments,L"--isolated")?WS_EX_TOPMOST:0;
+    HWND window=CreateWindowExW(extended,c.lpszClassName,L"Independent Classic Fixture",WS_OVERLAPPEDWINDOW,120,160,800,480,nullptr,menu,instance,nullptr);
     ShowWindow(window,show); MSG message{};
     while(GetMessageW(&message,nullptr,0,0)>0) { TranslateMessage(&message); DispatchMessageW(&message); }
     return 0;

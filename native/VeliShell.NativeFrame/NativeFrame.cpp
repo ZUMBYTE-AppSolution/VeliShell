@@ -164,6 +164,21 @@ extern "C" __declspec(dllexport) HRESULT __cdecl VeliFramePaintCaption(IUnknown*
             hr = factory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12 * scale, L"en-US", &format);
             if (SUCCEEDED(hr)) {
                 format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER); format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+                DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,0,0};ComPtr<IDWriteInlineObject> ellipsis;
+                if(SUCCEEDED(factory->CreateEllipsisTrimmingSign(format.Get(),&ellipsis)))format->SetTrimming(&trimming,ellipsis.Get());
+                context->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+                if(!cooperative) {
+                    // Contrast belongs to the glyphs, not to an opaque strip
+                    // across the glass. This remains readable on white/black.
+                    brush->SetColor(D2D1::ColorF(dark?0x000000:0xFFFFFF,.85f));
+                    const float halo=scale<1.0f?1.0f:scale;
+                    for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)if(x || y) {
+                        context->SetTransform(D2D1::Matrix3x2F::Translation(offset.x+x*halo,offset.y+y*halo));
+                        context->DrawTextW(title,static_cast<UINT32>(wcslen(title)),format.Get(),D2D1::RectF(100*scale,0,width-100*scale,static_cast<float>(height)),brush.Get());
+                    }
+                    context->SetTransform(D2D1::Matrix3x2F::Translation(static_cast<float>(offset.x),static_cast<float>(offset.y)));
+                }
                 brush->SetColor(D2D1::ColorF(dark ? 0xF0F4FC : 0x1D2942));
                 context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), format.Get(), D2D1::RectF(100 * scale, 0, width - (cooperative ? 155 : 100) * scale, static_cast<float>(height)), brush.Get());
                 if (cooperative) {

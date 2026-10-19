@@ -1,5 +1,7 @@
 #pragma once
+#include <unknwn.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Composition.Desktop.h>
@@ -9,6 +11,7 @@
 #include <roapi.h>
 #include <memory>
 #include <map>
+#include "ClassicMaterial.h"
 
 extern "C" HRESULT __cdecl VeliFrameGraphicsDevice(IUnknown*, IUnknown**);
 extern "C" HRESULT __cdecl VeliFramePaintCaption(IUnknown*,int,int,float,int,UINT32,int,const wchar_t*,const wchar_t*);
@@ -18,6 +21,7 @@ struct ClassicGraphics {
     winrt::Windows::System::DispatcherQueueController queue{nullptr};
     winrt::Windows::UI::Composition::Compositor compositor{nullptr};
     winrt::Windows::UI::Composition::CompositionGraphicsDevice graphics{nullptr};
+    winrt::Windows::UI::Composition::CompositionEffectFactory blurFactory{nullptr};
     bool apartment=false;
     ClassicGraphics() {
         apartment=SUCCEEDED(RoInitialize(RO_INIT_SINGLETHREADED));
@@ -30,10 +34,11 @@ struct ClassicGraphics {
             winrt::com_ptr<IUnknown> device;
             winrt::check_hresult(VeliFrameGraphicsDevice(reinterpret_cast<IUnknown*>(winrt::get_abi(compositor)),device.put()));
             graphics=device.as<winrt::Windows::UI::Composition::CompositionGraphicsDevice>();
+            blurFactory=compositor.CreateEffectFactory(winrt::make<ClassicBlurEffect>(),{L"FrameBlur.BlurAmount"});
         } catch(...) { if(apartment) { RoUninitialize(); apartment=false; } throw; }
     }
     ~ClassicGraphics() noexcept {
-        graphics=nullptr; compositor=nullptr;
+        blurFactory=nullptr; graphics=nullptr; compositor=nullptr;
         try { if(queue) queue.ShutdownQueueAsync(); } catch(...) { }
         queue=nullptr; if(apartment) RoUninitialize();
     }
@@ -42,10 +47,15 @@ struct ClassicGlass {
     std::shared_ptr<ClassicGraphics> shared;
     winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget target{nullptr};
     winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
-    winrt::Windows::UI::Composition::SpriteVisual backdrop{nullptr},label{nullptr};
+    winrt::Windows::UI::Composition::SpriteVisual backdrop{nullptr},tintLayer{nullptr},label{nullptr};
+    winrt::Windows::UI::Composition::ShapeVisual outline{nullptr};
+    winrt::Windows::UI::Composition::CompositionSpriteShape stroke{nullptr};
+    winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry strokeShape{nullptr};
     winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry shape{nullptr};
     winrt::Windows::UI::Composition::CompositionDrawingSurface surface{nullptr};
-    int lastWidth=0,lastHeight=0,lastDark=-1,lastHover=-2,lastGloss=-1,lastTransparency=-1;
+    winrt::Windows::UI::Composition::CompositionEffectBrush blurBrush{nullptr};
+    int lastWidth=0,lastHeight=0,lastCaption=0,lastDark=-1,lastHover=-2,lastGloss=-1,lastTransparency=-1;
+    UINT lastDpi=0;bool lastMaximized=false;
     UINT32 lastTint=0;
     std::wstring lastTitle;
     HRESULT error=S_OK;
@@ -56,40 +66,51 @@ struct ClassicGlass {
             shared=cache.lock(); if(!shared) { shared=std::make_shared<ClassicGraphics>(); cache=shared; }
             int enabled=1;
             winrt::check_hresult(DwmSetWindowAttribute(window,17,&enabled,sizeof(enabled)));
+            int disabled=1; DwmSetWindowAttribute(window,2,&disabled,sizeof(disabled));
+            DWORD noBorder=0xFFFFFFFE;DwmSetWindowAttribute(window,34,&noBorder,sizeof(noBorder));
             auto compositor=shared->compositor;
             auto interop=compositor.as<ABI::Windows::UI::Composition::Desktop::ICompositorDesktopInterop>();
             winrt::check_hresult(interop->CreateDesktopWindowTarget(window,FALSE,reinterpret_cast<ABI::Windows::UI::Composition::Desktop::IDesktopWindowTarget**>(winrt::put_abi(target))));
             root=compositor.CreateContainerVisual();
             shape=compositor.CreateRoundedRectangleGeometry(); root.Clip(compositor.CreateGeometricClip(shape));
-            backdrop=compositor.CreateSpriteVisual(); backdrop.Brush(compositor.CreateHostBackdropBrush());
+            blurBrush=shared->blurFactory.CreateBrush();blurBrush.SetSourceParameter(L"Backdrop",compositor.CreateHostBackdropBrush());
+            backdrop=compositor.CreateSpriteVisual(); backdrop.Brush(blurBrush);
+            tintLayer=compositor.CreateSpriteVisual();
             label=compositor.CreateSpriteVisual();
-            root.Children().InsertAtBottom(backdrop); root.Children().InsertAtTop(label); target.Root(root);
+            outline=compositor.CreateShapeVisual(); strokeShape=compositor.CreateRoundedRectangleGeometry();
+            stroke=compositor.CreateSpriteShape(strokeShape); stroke.StrokeThickness(1); outline.Shapes().Append(stroke);
+            root.Children().InsertAtBottom(backdrop); root.Children().InsertAtTop(tintLayer); root.Children().InsertAtTop(label); root.Children().InsertAtTop(outline); target.Root(root);
             return true;
         } catch(...) { error=winrt::to_hresult(); return false; }
     }
-    HRESULT Paint(HWND owner,int width,int height,int dark,int gloss,int transparency,UINT32 tint,int hover,bool maximized) noexcept {
+    HRESULT Paint(HWND owner,int width,int height,int captionHeight,int dark,int gloss,int transparency,UINT32 tint,int hover,bool maximized) noexcept {
         try {
             using namespace winrt::Windows::Graphics::DirectX;
             wchar_t title[512]{}; GetWindowTextW(owner,title,512);
-            if(width==lastWidth && height==lastHeight && dark==lastDark && hover==lastHover && gloss==lastGloss && transparency==lastTransparency && tint==lastTint && lastTitle==title) return S_OK;
+            const UINT dpi=GetDpiForWindow(owner);
+            if(width==lastWidth && height==lastHeight && captionHeight==lastCaption && dark==lastDark && hover==lastHover && gloss==lastGloss && transparency==lastTransparency && tint==lastTint && lastTitle==title && lastDpi==dpi && lastMaximized==maximized) return S_OK;
             root.Size({static_cast<float>(width),static_cast<float>(height)});
-            backdrop.Size(root.Size()); label.Size(root.Size());
-            const float scale=GetDpiForWindow(owner)/96.0f,radius=maximized?0.0f:8.0f*scale;
-            shape.Size({static_cast<float>(width),height+radius}); shape.CornerRadius({radius,radius});
-            auto next=shared->graphics.CreateDrawingSurface({static_cast<float>(width),static_cast<float>(height)},DirectXPixelFormat::B8G8R8A8UIntNormalized,DirectXAlphaMode::Premultiplied);
-            const double glossAmount=std::clamp(gloss,0,100)/100.0,clearAmount=std::clamp(transparency,0,100)/100.0;
-            // Title text needs a contrast floor even over a white/black desktop.
-            const auto alpha=static_cast<UINT32>(std::clamp(static_cast<double>(tint>>24)-45*glossAmount-30*clearAmount,160.0,245.0));
-            const UINT32 plate=(alpha<<24)|(tint&0xFFFFFF);
-            HRESULT hr=VeliFramePaintCaption(reinterpret_cast<IUnknown*>(winrt::get_abi(next)),width,height,scale,dark,plate,hover,title,L"");
+            backdrop.Size(root.Size()); tintLayer.Size(root.Size()); outline.Size(root.Size()); label.Size({static_cast<float>(width),static_cast<float>(captionHeight)});
+            const float scale=dpi/96.0f,radius=maximized?0.0f:8.0f*scale;
+            shape.Size({static_cast<float>(width),static_cast<float>(height)}); shape.CornerRadius({radius,radius});
+            strokeShape.Offset({.5f,.5f}); strokeShape.Size({width-1.0f,height-1.0f}); strokeShape.CornerRadius({radius,radius});
+            auto next=shared->graphics.CreateDrawingSurface({static_cast<float>(width),static_cast<float>(captionHeight)},DirectXPixelFormat::B8G8R8A8UIntNormalized,DirectXAlphaMode::Premultiplied);
+            const auto material=ClassicMaterial(gloss,transparency,dark!=0,scale);
+            blurBrush.Properties().InsertScalar(L"FrameBlur.BlurAmount",material.blurPixels);
+            const auto alpha=static_cast<UINT32>(std::lround(material.tintOpacity*255));
+            winrt::Windows::UI::Color colour{static_cast<BYTE>(alpha),static_cast<BYTE>(tint>>16),static_cast<BYTE>(tint>>8),static_cast<BYTE>(tint)};
+            tintLayer.Brush(shared->compositor.CreateColorBrush(colour));
+            winrt::Windows::UI::Color edge{static_cast<BYTE>(std::lround(material.strokeOpacity*255)),static_cast<BYTE>(dark?255:0),static_cast<BYTE>(dark?255:0),static_cast<BYTE>(dark?255:0)};
+            stroke.StrokeBrush(shared->compositor.CreateColorBrush(edge));
+            HRESULT hr=VeliFramePaintCaption(reinterpret_cast<IUnknown*>(winrt::get_abi(next)),width,captionHeight,scale,dark,0,hover,title,L"");
             if(FAILED(hr)) return hr;
             label.Brush(shared->compositor.CreateSurfaceBrush(next)); surface=next;
-            lastWidth=width; lastHeight=height; lastDark=dark; lastHover=hover; lastGloss=gloss; lastTransparency=transparency; lastTint=tint; lastTitle=title;
+            lastWidth=width; lastHeight=height; lastCaption=captionHeight; lastDark=dark; lastHover=hover; lastGloss=gloss; lastTransparency=transparency; lastTint=tint; lastTitle=title;lastDpi=dpi;lastMaximized=maximized;
             return S_OK;
         } catch(...) { return winrt::to_hresult(); }
     }
     ~ClassicGlass() noexcept {
         try { if(target) target.Root(nullptr); if(root) root.Children().RemoveAll(); } catch(...) { }
-        surface=nullptr; label=nullptr; backdrop=nullptr; shape=nullptr; root=nullptr; target=nullptr; shared.reset();
+        surface=nullptr; label=nullptr; tintLayer=nullptr; outline=nullptr; stroke=nullptr; strokeShape=nullptr; backdrop=nullptr;blurBrush=nullptr; shape=nullptr; root=nullptr; target=nullptr; shared.reset();
     }
 };

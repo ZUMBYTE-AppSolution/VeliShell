@@ -6,6 +6,146 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-19
+
+### Startmenü
+
+- Gleicher nativer Glasrenderer und dieselben Matt-/Glas-, Transparenz- und
+  Theme-Einstellungen wie im Kontrollzentrum, mit lesbarem Ersatzmaterial.
+- Neuer Aufbau mit Suche, angehefteten Dock-Apps, weiteren installierten Apps,
+  separater „Alle Apps“-Ansicht und Schnellzugriffen auf Dokumente, Downloads,
+  Explorer, VeliShell-Einstellungen und das originale Windows-Startmenü.
+- Ein/Aus-Menü mit Sperren, Abmelden, Neustart und Herunterfahren. Die letzten
+  drei Aktionen benötigen eine Bestätigung und stellen zuvor die von VeliShell
+  ausgeblendeten Windows-Oberflächen wieder her; kein erzwungenes App-Schließen.
+- Icons werden über einen begrenzten Hintergrundleser mit Cache geladen. Die
+  App-Liste ist virtualisiert, der bestehende Programmindex wird wiederverwendet.
+  Suche, Tastaturauswahl, Drag & Drop und Anheften verwenden denselben App-Katalog.
+
+### Dock-Icons
+
+- Neue, zunächst ausgeschaltete Option **Farblich passende Icon-Hintergründe**
+  unter Einstellungen → Apps & Symbole, für unveränderte App-Icons in beiden Iconstilen.
+- Lokale Farbanalyse und Kontrastbewertung erzeugen dezente passende Verläufe.
+  Einheitliche Größe und Rundung gelten auch für Drag-Ghost und Einfügevorschau.
+  Eigene Ersatz-Icons, gestaltete Mac-Icons, Ordner und Papierkorb bleiben unverändert.
+
+### Optionale Fenstergestaltung · experimentell
+
+- Ergänzt klassische 32-Bit-Apps, WPF mit echtem Standardrahmen und Glas rund um
+  den gesamten Außenrahmen. Native Gauß-Weichzeichnung lässt mehr Farbe durch;
+  zusätzliches Windows-Zeichnen der hellen Seitenkante wird unterdrückt.
+- Separat freizugebende Adapter für Explorer, Paint und Editor; Tab-/Suchzeilen
+  bleiben innerhalb der Fenstergrenzen erhalten. Bereinigte Statusanzeige,
+  lesbare Verwaltungsansicht sowie Fehlercodes statt voreiliger Erfolgsmeldungen.
+- Das Modul bleibt standardmäßig ausgeschaltet. Ausnahmeliste, Rollback,
+  unabhängiger Notfall-Helfer und **Strg + Alt + Umschalt + F12** bleiben erhalten.
+  Keine Systemdateiänderungen, globalen Hooks, Rechteerhöhung oder automatisch
+  geschlossenen fremden Apps. Vor Updates das Modul deaktivieren und betroffene
+  Apps selbst schließen, damit keine alte Adapter-DLL geladen bleibt.
+- **Prüfgrenze:** Die VM-Aufnahme des Vorabstands zeigt linke Buttons und erhaltene
+  Tabs bei Explorer/Editor. Die abschließende Sicht-/Bedien- und Rücksetzprüfung
+  des neuen Glas-/Kantenfixes an echten Apps, insbesondere Paint, steht noch aus.
+  Keine Zusage für sämtliche Windows-Fenster. Anleitung: [Fenstergestaltung](NATIVE-PROTOTYPE.md).
+
+Ausschließlich GitHub-Veröffentlichung auf `main`; keine neue Microsoft-Store-Einreichung.
+Die folgenden Testabschnitte dokumentieren die Entwicklung vor dieser Übernahme.
+
+## [0.14.1-test.5] - 2026-10-19
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Startmenü an denselben nativen Glas-Host, dieselben Materialien und die gleichen
+  Matt-/Glas-, Transparenz- und Theme-Einstellungen wie das Kontrollzentrum angebunden.
+  Gemeinsame weiche Rundung, lesbarer Fallback und Freigabe des Renderers beim Schließen.
+- Neu gegliedert: Suche oben, angeheftete Dock-Apps als flaches Raster, weitere
+  installierte Apps, separate „Alle Apps“-Ansicht und Schnellzugriffe auf Dokumente,
+  Downloads, Explorer, VeliShell-Einstellungen und das originale Windows-Startmenü.
+- Ein/Aus-Menü mit Sperren, Abmelden, Neustart und Herunterfahren. Sitzungsbefehle
+  benötigen eine Bestätigung und verwenden den bestehenden Wiederherstellungsweg
+  für Windows-Oberflächen. Kein erzwungenes Schließen fremder Apps.
+- Keine synchronen Shell-Icon-Abfragen mehr beim Menüaufbau: begrenzter STA-Leser,
+  Bildcache, abgebrochene Anfragen für verworfene Elemente und virtualisierte App-Liste.
+  Der lokale Programmindex wird wiederverwendet; keine neue Suche beim Öffnen.
+- Suchergebnisse und Tastaturauswahl verwenden dieselbe Reihenfolge. Drag & Drop
+  für lokale Verknüpfungen/Dateien sowie Anheften über das App-Kontextmenü bleiben verfügbar.
+- Unsichtbare Prüfungen mit 2.402 Katalogeinträgen, Hell/Dunkel, DE/EN, Glaswerten
+  0/50/100, blockiertem Icon-Leser und simulierten, nicht ausgeführten Systembefehlen.
+
+Der echte Desktop wurde nicht übernommen. Live-Glas, Dock-Verankerung und reale
+Sitzungsaktionen müssen bei Bedarf separat in der VM geprüft werden; der Test
+sperrt oder beendet den Rechner ausdrücklich nicht.
+
+## [0.14.1-test.4] - 2026-10-19
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Neue, zunächst ausgeschaltete Option **Farblich passende Icon-Hintergründe**
+  unter Einstellungen → Apps & Symbole. Gilt im Dock für unveränderte App-Icons
+  im Mac- und Windows-Stil, auch für laufende Apps ohne eigenen Dock-Pin.
+- Lokale, alpha-gewichtete Farbanalyse mit Kontrastbewertung: Ein dezenter Verlauf
+  aus der Iconfarbe wird heller oder dunkler abgestimmt. Transparente Ränder und
+  unsichtbare RGB-Werte beeinflussen die Farbauswahl nicht; ein feiner Kontaktsaum
+  hilft bei gemischten Motiven. Ergebnisse werden pro Bild zwischengespeichert.
+- Gemeinsame Icon-Rundung und exakt gleich große Hintergrundflächen, mit einheitlichem
+  Innenabstand für das Originalmotiv. Drag-Ghost und Einfügevorschau übernehmen die Option.
+- Eigene und geladene Ersatz-Icons sowie bereits gestaltete Mac-Icons bleiben unverändert.
+  Ordner, Papierkorb und feste VeliShell-Bedienelemente erhalten keine neue Kachel.
+- Auswahl wird gespeichert und wirkt ohne Neustart auf bestehende Dock-Einträge.
+  Ordneransichten, Suche und Menüleisten-Symbole werden nicht zusätzlich eingekachelt.
+- Hintergrundprüfungen für beide Iconstile, 24–96 DIP und 100–200 % Skalierung sowie
+  gerenderte Hell-/Dunkelbeispiele und deutsche/englische Einstellungskarten.
+
+## [0.14.1-test.3] - 2026-10-16
+
+Lokaler Teststand; keine GitHub-Veröffentlichung und keine Store-Einreichung.
+
+- Helle Seitenkante: Bei aktivem Glasrahmen wird der Windows-Standardrahmen nicht
+  zusätzlich nachgezeichnet. Aktivierungswechsel bleiben erhalten; minimierte Fenster
+  und die ursprüngliche App-Geometrie werden nicht umdefiniert.
+- Echte, einstellbare Gauß-Weichzeichnung im Windows-Composition-Effektgraphen über
+  dem Live-Host-Hintergrund. Matt/Glas steuert die Streuung, Transparenz die Tönung
+  der gesamten Fläche; der Rand ist nur noch eine dezente Kontur.
+- Weniger deckende Tönung für mehr Hintergrundfarbe. Die Titel bleiben mit einem
+  feinen Kontrastsaum unmittelbar an den Buchstaben lesbar, ohne dunklen Innenbalken.
+- Größen-/DPI-/Maximierungszustand wird beim Aktualisieren der Rundung berücksichtigt.
+- Hintergrundtests für x86/x64: echter Composition-Effekt, Direct2D-Pixelberechnung
+  und ein eigener, niemals angezeigter Kompositions-Host; keine Eingriffe in Arbeits-Apps.
+- Rollback, unabhängiger Wächter und Notfall-Wiederherstellung bleiben unverändert.
+  Fremde, nicht zuverlässig auslesbare DWM-Randfarben werden nicht überschrieben.
+
+Die VM-Aufnahme von test.2 bestätigt sichtbare linke Buttons und erhaltene Tabzeilen
+bei Explorer/Editor, aber weder diesen Kanten-/Glasfix noch Paint oder einen vollständigen
+Rücksetztest. Die visuelle Abnahme dieses neuen Pakets an echten VM-Apps steht aus.
+
+## [0.14.1-test.2] - 2026-10-16
+
+Lokaler Prüfstand, noch nicht veröffentlicht oder an echten Apps abgenommen.
+
+- Erste optionale Rahmenadapter für Explorer, Paint und Editor mit eigener Zustimmung;
+  vorhandene Tab-/Suchzeilen sollen innerhalb der Fenstergrenzen erhalten bleiben.
+  Echte-App-Sicht- und Rücksetzprüfung stehen noch aus, keine Kompatibilitätsfreigabe.
+- Statusanzeige nach Fenster-/Prozessidentität bereinigt, fehlgeschlagene Aktivierungen
+  mit Fehlercode statt missverständlichem „Nicht aktiviert“; kein Material-Erfolg vor Bestätigung.
+- Lesbare Einstellungen mit deckender Basis sowie eigene, umgebungsabhängig gefärbte
+  Prüflisten statt weißer Windows-Standardlisten im Darkmode.
+- Isolierte, benutzerbediente VM-Prüfansicht mit Auswahl eines echten Fensters,
+  lokalem Bericht, Rücksetzsignal und gezieltem Ausfall des eigenen Wächters.
+
+## [0.14.1-test.1] - 2026-10-16
+
+### Erweiterte Fenstergestaltung im Teststand
+
+- Passende native x86-DLL und kleiner 32-Bit-Helfer für klassische 32-Bit-Apps, statt diese wie bisher pauschal abzulehnen. Die x64-App bleibt erhalten; kein zusätzliches .NET-/Visual-Studio-Paket zum Starten nötig.
+- WPF mit echtem Standardrahmen wird anhand der tatsächlichen Fenstergeometrie erkannt. App-gezeichnete Titelbereiche, Tabs und Suchfelder werden nicht abgeschnitten oder überdeckt.
+- Der vollständige klassische Außenrahmen verwendet Windows Composition: Titelbereich, Seiten, Unterkante und alle Rundungen. Der innere Ausschnitt lässt App-Inhalt und Menüs an ihrer ursprünglichen Position; Rahmenkanten und Titel übernehmen dieselben Theme-/Glaswerte.
+- Separate Freigabe für native Windows-Farben, Rundung und verfügbare Mica-/Acrylic-Materialien bei geeigneten Explorer-, WPF-/WinUI- und eigenen Titelleisten. Kein DLL-Laden in diese Fenster und kein Verschieben ihrer Buttons; Apps können Systemmaterialien selbst überzeichnen. Das ist ausdrücklich kein vollständiger Skin eigener Titelleisten oder App-Inhalte.
+- Die Kompatibilitätsanzeige erklärt übersprungene Fenster, unter anderem eigene Formen, Sonderrahmen, Ausnahmen, geschützte Systeme oder abweichende Rechte.
+- Ein ausgefallener Kompatibilitätshelfer löst gemeinsames Rollback aus. Die Material-Helfer überwachen zusätzlich den Hauptwächter; der Wächter kann bei einem Material-Helferabsturz die gesicherten DWM-Werte selbst zurücksetzen. Keine automatische Wiederaufnahme nach einem Ausfall.
+- Eigene isolierte x86-/x64- und WPF-Testfenster prüfen Live-Hintergrund, Außenkanten, linke Buttons, App-Geometrie, getrennte Materialfreigabe sowie Rollback und Helfer-Ausfälle in Hell/Dunkel. Keine Änderungen an der parallel installierten stabilen Ausgabe. Der reale Notfall-Hotkey bleibt ihr im isolierten QA-Modus vorbehalten.
+
+Dieser Stand wird auf `test` vorbereitet. Ein Versionsabschnitt allein bedeutet keine Veröffentlichung; Stable und Microsoft Store werden nicht automatisch aktualisiert.
+
 ## [0.14.0] - 2026-10-16
 
 ### Neu

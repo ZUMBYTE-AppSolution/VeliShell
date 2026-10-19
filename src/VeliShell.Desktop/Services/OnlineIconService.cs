@@ -10,12 +10,12 @@ namespace VeliShell.Desktop.Services;
 internal static class OnlineIconService
 {
     internal static BitmapSource? TryLoad(IconReference? reference) =>
-        AppStoreIconService.TryLoad(reference) ?? MacOsIconsApiService.TryLoad(reference) ??
+        reference is null ? null : AppStoreIconService.TryLoad(reference) ?? MacOsIconsApiService.TryLoad(reference) ??
         WikipediaIconService.TryLoad(reference) ??
         LegacyMacOsIconCacheService.TryLoad(reference);
 
     internal static AppStoreIconAttribution? TryGetAttribution(IconReference? reference) =>
-        AppStoreIconService.TryGetAttribution(reference) ?? MacOsIconsApiService.TryGetAttribution(reference) ??
+        reference is null ? null : AppStoreIconService.TryGetAttribution(reference) ?? MacOsIconsApiService.TryGetAttribution(reference) ??
         WikipediaIconService.TryGetAttribution(reference) ??
         LegacyMacOsIconCacheService.TryGetAttribution(reference);
 

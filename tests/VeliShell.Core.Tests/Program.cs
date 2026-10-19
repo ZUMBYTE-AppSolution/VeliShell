@@ -31,6 +31,25 @@ try
         var s = new Settings { NativeFrameExclusions = [" sample.exe ", "SAMPLE.EXE", "*.exe", "bad/name.exe", "not-an-app", @"C:\Apps\keep.exe"] }; s.Normalize();
         Check(s.NativeFrameExclusions.SequenceEqual(new[]{"sample.exe", @"C:\Apps\keep.exe"}));
     });
+    Test("Modern window appearance is a separate opt-in", () => {
+        var s = new Settings { NativeModernMaterialsEnabled = true }; s.Normalize(); Check(!s.NativeModernMaterialsEnabled);
+        s.NativeModernMaterialsConsentVersion = 1; s.NativeModernMaterialsEnabled = true; s.Normalize(); Check(s.NativeModernMaterialsEnabled);
+        Check(!s.NativeFramesEnabled);
+    });
+    Test("Modern appearance consent survives settings roundtrip", () => {
+        var store = new SettingsStore(Path.Combine(temp,"modern-frames")); store.Save(new Settings { NativeModernMaterialsEnabled=true,NativeModernMaterialsConsentVersion=1 });
+        var s = store.Load(); Check(s.NativeModernMaterialsEnabled && s.NativeModernMaterialsConsentVersion==1 && !s.NativeFramesEnabled);
+    });
+    Test("Modern app frames require new consent, not appearance consent", () => {
+        var s=new Settings { NativeModernFramesEnabled=true,NativeModernMaterialsEnabled=true,NativeModernMaterialsConsentVersion=1 };
+        s.Normalize(); Check(!s.NativeModernFramesEnabled && s.NativeModernMaterialsEnabled);
+        s.NativeModernFramesConsentVersion=1; s.NativeModernFramesEnabled=true; s.Normalize(); Check(s.NativeModernFramesEnabled);
+    });
+    Test("Modern app frame consent survives settings roundtrip", () => {
+        var store=new SettingsStore(Path.Combine(temp,"modern-app-frames"));
+        store.Save(new Settings { NativeModernFramesEnabled=true,NativeModernFramesConsentVersion=1 });
+        var s=store.Load(); Check(s.NativeModernFramesEnabled && s.NativeModernFramesConsentVersion==1 && !s.NativeFramesEnabled);
+    });
     Test("Native styling consent and exclusions survive settings roundtrip", () => {
         var store = new SettingsStore(Path.Combine(temp,"native-frames")); store.Save(new Settings { NativeFramesEnabled=true,NativeFramesConsentVersion=1,NativeFrameExclusions=["keep.exe"] });
         var s=store.Load();Check(s.NativeFramesEnabled&&s.NativeFramesConsentVersion==1&&s.NativeFrameExclusions.Single()=="keep.exe");
@@ -56,6 +75,22 @@ try
     Test("Windows Start dock item is opt-in", () =>
         Check(!new Settings().ShowWindowsStartDockItem));
     Test("Mac icon style is the default", () => Check(new Settings().IconStyle == DockIconStyle.Mac));
+    Test("Adaptive icon backgrounds are opt-in, including older settings", () =>
+    {
+        Check(!new Settings().AdaptiveIconBackgrounds);
+        var old = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"SchemaVersion\":14,\"IconStyle\":1}")!;
+        old.Normalize(); Check(!old.AdaptiveIconBackgrounds && old.IconStyle == DockIconStyle.Windows);
+    });
+    Test("Adaptive icon background choice persists independently in both icon styles", () =>
+    {
+        foreach (var style in Enum.GetValues<DockIconStyle>())
+        {
+            var store = new SettingsStore(Path.Combine(temp, "icon-backgrounds-" + style));
+            store.Save(new Settings { IconStyle = style, AdaptiveIconBackgrounds = true });
+            var settings = store.Load(); Check(settings.AdaptiveIconBackgrounds && settings.IconStyle == style);
+            settings.AdaptiveIconBackgrounds = false; store.Save(settings); Check(!store.Load().AdaptiveIconBackgrounds);
+        }
+    });
     Test("Menu bar is opt-in", () => Check(!new Settings().MenuBarEnabled));
     Test("Always-visible tray icons are opt-in", () =>
         Check(!new Settings().MenuBarAlwaysShowTrayApps));
