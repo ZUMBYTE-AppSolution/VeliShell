@@ -105,7 +105,12 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 > enthalten, bleibt aber ausdrücklich optional und standardmäßig ausgeschaltet.
 > [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
 
-> **Neu in 0.14.1:** Überarbeitetes Startmenü mit Ein/Aus-Aktionen und denselben
+> **Neu in 0.14.2:** Bereits quadratische oder abgerundete App-Icons behalten ihre
+> volle Dock-Größe ohne zusätzlichen Farbhintergrund. Der optionale Verlauf bleibt
+> freigestellten Symbolen vorbehalten – auch beim Icon-Wechsel und in Drag-Vorschauen.
+> Ausschließlich GitHub; keine neue Microsoft-Store-Einreichung.
+>
+> **Seit 0.14.1:** Überarbeitetes Startmenü mit Ein/Aus-Aktionen und denselben
 > Glaswerten wie das Kontrollzentrum, optionale farblich passende Icon-Hintergründe
 > sowie erweiterte experimentelle Fenstergestaltung. Ausschließlich GitHub;
 > die Microsoft-Store-Ausgabe wird mit diesem Release nicht aktualisiert.

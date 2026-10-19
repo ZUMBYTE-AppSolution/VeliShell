@@ -6,6 +6,10 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-19
+
+### Korrigiert
+
 - Optionale Icon-Hintergründe erkennen bereits quadratische und abgerundete
   Kacheln anhand ihrer sichtbaren Alpha-Kontur. Diese erhalten keinen zusätzlichen
   Verlauf, keine Verkleinerung und keinen Kontrastsaum. Transparente Sicherheitsränder
@@ -13,6 +17,14 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
   laufende/angeheftete Apps und die gemeinsame Drag-/Einfügevorschau.
 - Freigestellte Symbole behalten den optionalen farblich passenden Hintergrund;
   eigene Ersatz-Icons, Ordner und Papierkorb bleiben unverändert.
+- Die Erkennung wird pro Bild zwischengespeichert. Beim Wechsel des Icons einer
+  laufenden App werden Hintergrund, Innenabstand und Kontrastsaum neu abgeglichen.
+- 1.059 Iconprüfungen decken unter anderem transparente Bildränder, weiche Schatten,
+  unterschiedliche Quellauflösungen und 100–200 % Skalierung ab. Bereits geformte
+  Kacheln behalten bei eingeschaltetem Hintergrund identische Bildpixel und Größe.
+
+Ausschließlich GitHub-Veröffentlichung; keine Microsoft-Store-Einreichung.
+Die optionale experimentelle Fenstergestaltung und ihre Sicherheitsgrenzen bleiben unverändert.
 
 ## [0.14.1] - 2026-10-19
 
