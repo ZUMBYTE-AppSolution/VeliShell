@@ -9,7 +9,7 @@ namespace VeliShell.Desktop.Services;
 internal sealed record NativeWindow(
     nint Handle, string Title, string Executable, string ProcessName,
     string? AppUserModelId = null, WebAppShortcut? WebApp = null, int ProcessId = 0,
-    string? DisplayName = null, string? IconTarget = null);
+    string? DisplayName = null, string? IconTarget = null, string? WindowAppUserModelId = null);
 
 internal static class WindowCatalog
 {
@@ -17,12 +17,14 @@ internal static class WindowCatalog
     {
         var result = new List<NativeWindow>();
         var processPaths = new Dictionary<uint, string>();
+        var processIdentities = new Dictionary<uint, PackagedAppIdentity?>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
             try
             {
-                if (!NativeMethods.IsWindowVisible(hwnd) || NativeMethods.GetWindow(hwnd, 4) != 0) return true;
-                if ((NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GwlExStyle).ToInt64() & NativeMethods.WsExToolWindow) != 0) return true;
+                var extendedStyle = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GwlExStyle).ToInt64();
+                if (!IsAppWindowCandidate(NativeMethods.IsWindowVisible(hwnd), NativeMethods.GetWindow(hwnd, 4), extendedStyle))
+                    return true;
                 NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
                 if (pid == Environment.ProcessId || pid == 0) return true;
                 if (NativeMethods.DwmGetWindowAttribute(hwnd, 14, out var cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
@@ -64,17 +66,23 @@ internal static class WindowCatalog
                     }
                     // A frame can briefly exist without its app child during
                     // startup/shutdown; never present the host as an app name.
-                    result.Add(new NativeWindow(hwnd, title.ToString(), "", title.ToString(),
-                        ProcessId: checked((int)pid), DisplayName: title.ToString()));
+                    var frameAppId = ReadWindowAppId(hwnd);
+                    result.Add(new NativeWindow(hwnd, title.ToString(), "", title.ToString(), frameAppId,
+                        ProcessId: checked((int)pid), DisplayName: frameAppId is null ? title.ToString() :
+                            PackagedAppService.NameForAppId(frameAppId) ?? title.ToString(),
+                        IconTarget: frameAppId is null ? null : PackagedAppService.TargetForAppId(frameAppId)));
                     return true;
                 }
-                var packagedProcess = path.Contains("\\WindowsApps\\", StringComparison.OrdinalIgnoreCase)
-                    ? PackagedAppService.ForProcess(pid) : null;
-                var appId = packagedProcess?.AppUserModelId ??
-                    (IsBrowserProcess(processName) ? ReadWindowAppId(hwnd) : null);
+                // Package identity is a process property, not a directory convention.
+                // Sparse/external-location Store apps can live outside WindowsApps.
+                if (!processIdentities.TryGetValue(pid, out var packagedProcess))
+                    processIdentities[pid] = packagedProcess = PackagedAppService.ForProcess(pid);
+                var windowAppId = ReadWindowAppId(hwnd);
+                var webApp = WebAppCatalog.Match(windowAppId);
+                var appId = webApp?.AppUserModelId ?? packagedProcess?.AppUserModelId ?? windowAppId;
                 result.Add(new NativeWindow(hwnd, title.ToString(), path, processName,
-                    appId, WebAppCatalog.Match(appId), checked((int)pid),
-                    packagedProcess?.Name, packagedProcess?.Target));
+                    appId, webApp, checked((int)pid),
+                    packagedProcess?.Name ?? PackagedAppService.KnownDisplayName(appId ?? ""), packagedProcess?.Target, windowAppId));
             }
             catch (Exception) { /* A process may exit while it is being enumerated. */ }
             return true;
@@ -82,16 +90,17 @@ internal static class WindowCatalog
         return result;
     }
 
-    private static bool IsBrowserProcess(string processName) =>
-        processName.Equals("chrome", StringComparison.OrdinalIgnoreCase) ||
-        processName.Equals("msedge", StringComparison.OrdinalIgnoreCase) ||
-        processName.Equals("brave", StringComparison.OrdinalIgnoreCase) ||
-        processName.Equals("vivaldi", StringComparison.OrdinalIgnoreCase) ||
-        processName.Equals("opera", StringComparison.OrdinalIgnoreCase) ||
-        processName.EndsWith("_proxy", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsAppWindowCandidate(bool visible, nint owner, long extendedStyle) =>
+        visible && (extendedStyle & NativeMethods.WsExToolWindow) == 0 &&
+        (owner == 0 || (extendedStyle & 0x00040000) != 0); // WS_EX_APPWINDOW explicitly opts an owned window into the taskbar.
 
-    private static string? ReadWindowAppId(nint hwnd)
+    internal static string GroupKey(NativeWindow window) =>
+        window.WebApp?.AppUserModelId ?? window.AppUserModelId ??
+        AppIdentityService.ExecutableKey(window.Executable) ?? window.ProcessName;
+
+    internal static string? ReadWindowAppId(nint hwnd)
     {
+        var initialized = NativeMethods.CoInitializeEx(0, 0);
         NativeMethods.IPropertyStore? store = null;
         try
         {
@@ -107,6 +116,7 @@ internal static class WindowCatalog
                 try { Marshal.ReleaseComObject(store); }
                 catch (InvalidComObjectException) { }
             }
+            if (initialized >= 0) NativeMethods.CoUninitialize();
         }
     }
 
@@ -141,24 +151,21 @@ internal static class WindowCatalog
         finally { NativeMethods.CloseHandle(process); }
     }
 
-    internal static bool Matches(NativeWindow window, Pin pin)
+    internal static bool Matches(NativeWindow window, Pin pin) => MatcherFor(pin)(window);
+
+    internal static Func<NativeWindow, bool> MatcherFor(Pin pin)
     {
-        if (pin.Kind == PinKind.VirtualFolder) return false;
-        var packagedAppId = PackagedAppService.AppIdFromTarget(pin.Target);
-        if (packagedAppId is not null)
-            return string.Equals(packagedAppId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase);
+        if (pin.Kind == PinKind.VirtualFolder) return _ => false;
+        var identity = AppIdentityService.ForTarget(pin.Target);
+        if (PackagedAppService.AppIdFromTarget(pin.Target) is not null)
+            return window => AppIdentityService.Matches(window, pin, identity);
         var webAppPin = WebAppCatalog.TryRead(pin.Target);
-        if (webAppPin is not null || window.WebApp is not null)
-            return webAppPin is not null &&
+        return window => webAppPin is not null || window.WebApp is not null
+            ? webAppPin is not null &&
                 !string.IsNullOrWhiteSpace(webAppPin.AppUserModelId) &&
-                string.Equals(webAppPin.AppUserModelId, window.AppUserModelId,
-                    StringComparison.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(pin.MatchProcess))
-            return string.Equals(window.ProcessName, pin.MatchProcess, StringComparison.OrdinalIgnoreCase);
-        var path = Environment.ExpandEnvironmentVariables(pin.Target);
-        return string.Equals(window.Executable, path, StringComparison.OrdinalIgnoreCase)
-            || (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(window.ProcessName, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase));
+                (string.Equals(webAppPin.AppUserModelId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(webAppPin.AppUserModelId, window.WindowAppUserModelId, StringComparison.OrdinalIgnoreCase))
+            : AppIdentityService.Matches(window, pin, identity);
     }
 
     internal static bool Activate(nint hwnd)

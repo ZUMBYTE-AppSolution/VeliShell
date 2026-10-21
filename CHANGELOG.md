@@ -6,6 +6,28 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-10-21
+
+### Korrigiert
+
+- Tray-Apps werden auch mit Windows-Ordnerkennungen (`{GUID}\\…`) und
+  Umgebungsvariablen erkannt. Veraltete Store-Cachepfade werden nur derselben
+  aktuell laufenden App zugeordnet; Paketfamilie, Herausgeber und relativer
+  Programmpfad bleiben getrennt. Ausgeblendete/bevorzugte Symbole bleiben erhalten.
+- Die Dock-Aktivitätsanzeige berücksichtigt Paket- und explizite Fensterkennungen,
+  auch für Store-Apps außerhalb des üblichen WindowsApps-Ordners. ChatGPT und Codex
+  werden nicht mehr allein über den gemeinsamen Namen `ChatGPT.exe` zugeordnet.
+- Normale, Store-/AppsFolder- und PIDL-Verknüpfungen behalten ihre `.lnk` als
+  Startverweis. Registrierte URI-Protokolle werden anhand ihrer Windows-Zuordnung
+  erkannt. Versionsordner und Squirrel-Startverknüpfungen werden berücksichtigt,
+  ohne unterschiedliche Installationen oder Browser-WebApps zusammenzufassen.
+- Die Windows-Weiterleitungen für Editor, Paint und Rechner sowie die vorhandenen
+  Standard-Pins bleiben berücksichtigt. Store-Tray-Apps werden über ihre stabile
+  Shell-Kennung geöffnet statt über eine möglicherweise veraltete EXE.
+- Neue Hintergrundprüfungen decken die App-Trennung, Aktivitätspunkte in Hell/Dunkel,
+  echte Shell-Verknüpfungen und ausschließlich lesende Erkennung bereits laufender
+  Apps ab. Sie öffnen keine sichtbaren Fenster und ändern keine Nutzereinstellungen.
+
 - Vor der bestätigten Update-Installation wird die Fenstergestaltung automatisch
   deaktiviert und gespeichert. Der Updater wartet auf zurückgesetzte Fenster und
   beendete eigene Helfer. Bei Abbruch, Fehler oder ausstehender Wiederherstellung

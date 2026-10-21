@@ -229,17 +229,16 @@ public partial class DockWindow : Window
             ? WindowCatalog.OnDisplay(_windows, _displayDevice)
             : _windows;
         var items = new List<DockItem>();
-        foreach (var pin in preferences.Pins)
+        var pinMatchers = preferences.Pins.Select(pin => (Pin: pin, Match: WindowCatalog.MatcherFor(pin))).ToList();
+        foreach (var (pin, match) in pinMatchers)
             items.Add(new DockItem { Key = "pin:" + pin.Id, Name = LocalizationService.Current.DisplayPinName(pin), Target = pin.Target,
                 IconId = IconService.IdForPin(pin),
                 Icon = pin.Icon, Attribution = OnlineIconService.TryGetAttribution(pin.Icon)?.Text,
-                Pin = pin, Windows = displayWindows.Where(w => WindowCatalog.Matches(w, pin)).ToList() });
+                Pin = pin, Windows = displayWindows.Where(match).ToList() });
         if (preferences.ShowRunningApps)
         {
-            var running = displayWindows.Where(w => !preferences.Pins.Any(p => WindowCatalog.Matches(w, p)))
-                .GroupBy(w => w.WebApp?.AppUserModelId ?? (w.IconTarget is null ? null : w.AppUserModelId) ??
-                    (string.IsNullOrEmpty(w.Executable) ? w.ProcessName : w.Executable),
-                    StringComparer.OrdinalIgnoreCase)
+            var running = displayWindows.Where(w => !pinMatchers.Any(pin => pin.Match(w)))
+                .GroupBy(WindowCatalog.GroupKey, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
             foreach (var group in running)
             {
@@ -341,12 +340,10 @@ public partial class DockWindow : Window
     internal IReadOnlyList<Pin> GetConfigurableRunningApps()
     {
         var preferences = _app.Preferences;
+        var matchers = preferences.Pins.Select(WindowCatalog.MatcherFor).ToList();
         return _windows
-            .Where(window => !preferences.Pins.Any(pin => WindowCatalog.Matches(window, pin)))
-            .GroupBy(window => window.WebApp?.AppUserModelId ??
-                (window.IconTarget is null ? null : window.AppUserModelId) ??
-                (string.IsNullOrEmpty(window.Executable) ? window.ProcessName : window.Executable),
-                StringComparer.OrdinalIgnoreCase)
+            .Where(window => !matchers.Any(match => match(window)))
+            .GroupBy(WindowCatalog.GroupKey, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();

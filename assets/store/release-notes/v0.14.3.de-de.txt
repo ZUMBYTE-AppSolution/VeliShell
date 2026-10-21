@@ -1,0 +1,11 @@
+Neu in VeliShell 0.14.3
+
+• Verbesserte Erkennung von Windows-Infosymbolen in der Menüleiste, auch bei Windows-Ordnerkennungen und geänderten Store-App-Pfaden.
+• Zuverlässigere Aktivitätsanzeige im Dock für klassische Programme, Store-Apps und Windows-Verknüpfungen. ChatGPT und Codex werden getrennt erkannt, auch wenn beide dieselbe EXE-Bezeichnung verwenden.
+• Stabilere Zuordnung nach App-Updates: Verknüpfungen bleiben erhalten, registrierte App-Protokolle und typische Versionsordner werden berücksichtigt.
+• Bereits quadratische oder abgerundete App-Icons behalten ihre volle Größe ohne zusätzlichen Farbrand. Eigene Icon-Auswahlen bleiben erhalten.
+• Überarbeitetes Startmenü mit Ein/Aus-Aktionen und den gemeinsamen Glas-Einstellungen.
+• Optional und experimentell: Glas-Fenstergestaltung für kompatible Apps mit Ausnahmen, Rollback und unabhängiger Notfall-Wiederherstellung. Standardmäßig ausgeschaltet; nicht jedes Windows-Fenster wird unterstützt.
+• Bei bestätigten GitHub-Installer-Updates wird die Fenstergestaltung vorab automatisch zurückgesetzt. Apps werden nicht zwangsweise beendet.
+
+Die Menüleisten-Symbole bleiben eine bestmögliche Spiegelung des Windows-Iconcaches, keine vollständige Live-Kopie des Infobereichs.

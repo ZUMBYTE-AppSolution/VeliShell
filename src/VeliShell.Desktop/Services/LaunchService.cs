@@ -35,7 +35,7 @@ internal static class LaunchService
         if (StableLaunchTargetService.IsRegisteredProtocol(path))
             return new Pin(Guid.NewGuid().ToString("N"),
                 Uri.TryCreate(path, UriKind.Absolute, out var uri) ? uri.Scheme : path,
-                path, uri?.Scheme);
+                path);
         if (Directory.Exists(path))
             return new Pin(Guid.NewGuid().ToString("N"), new DirectoryInfo(path).Name, path);
         if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -54,15 +54,15 @@ internal static class LaunchService
             var resolved = ShellLinkService.ResolveTarget(path);
             if (resolved?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true)
             {
-                if (StableLaunchTargetService.PreferPackagedIdentity(resolved) is { } packagedTarget)
-                    return new Pin(Guid.NewGuid().ToString("N"),
-                        Path.GetFileNameWithoutExtension(path), packagedTarget,
-                        Path.GetFileNameWithoutExtension(resolved));
+                // Preserve the selected shell link, including non-filesystem Store links.
                 process = Path.GetFileNameWithoutExtension(resolved);
             }
         }
 
         var name = Path.GetFileNameWithoutExtension(path);
+        if (extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) && ShellLinkService.Read(path) is { } link)
+            name = PackagedAppService.KnownDisplayName(link.AppUserModelId ??
+                AppIdentityService.PackageFamilyFromPath(link.Target) ?? "") ?? name;
         if (string.IsNullOrWhiteSpace(name)) name = Path.GetFileName(path);
         return new Pin(Guid.NewGuid().ToString("N"), name, path, process);
     }

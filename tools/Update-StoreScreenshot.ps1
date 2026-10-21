@@ -118,6 +118,11 @@ if (-not $previousNote.Contains($certificationNote, [StringComparison]::Ordinal)
     $submission['NotesForCertification'] = ($previousNote.Trim() + "`n`n" + $certificationNote).Trim()
 }
 
+$stylingNote = 'Version 0.14.3 also includes optional, experimental native window styling. It is disabled by default and requires explicit user consent. Compatibility-filtered native adapters may be loaded into same-user, non-elevated application processes to change their frames. Windows/system files are not replaced, global hooks and automatic elevation are not used, and protected/incompatible targets are excluded. Exclusions, rollback, an independent recovery helper and WINDOW-RECOVERY.cmd are included. This feature does not claim universal application compatibility.'
+if (-not ([string]$submission['NotesForCertification']).Contains($stylingNote, [StringComparison]::Ordinal)) {
+    $submission['NotesForCertification'] = (([string]$submission['NotesForCertification']).Trim() + "`n`n" + $stylingNote).Trim()
+}
+
 $editableFields = @(
     'ApplicationCategory', 'Pricing', 'Visibility', 'TargetPublishMode', 'TargetPublishDate',
     'Listings', 'HardwarePreferences', 'AutomaticBackupEnabled', 'CanInstallOnRemovableMedia',

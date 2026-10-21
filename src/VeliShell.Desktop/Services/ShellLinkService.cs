@@ -71,8 +71,43 @@ internal static class ShellLinkService
                     appId = NativeMethods.ReadAppUserModelId(store);
             }
             catch (COMException) { /* Older links may have no property store. */ }
-            return path.Length == 0 ? null : new ShortcutInfo(
-                Environment.ExpandEnvironmentVariables(path.ToString()), arguments.ToString(), appId,
+            var target = path.Length > 0 ? Environment.ExpandEnvironmentVariables(path.ToString()) : null;
+            if (target is null)
+            {
+                // AppsFolder links often have no filesystem GetPath at all.
+                // Read the PIDL, but keep the .lnk itself as the launch target.
+                nint idList = 0, parsingName = 0;
+                NativeMethods.IPropertyStore? targetStore = null;
+                try
+                {
+                    link.GetIDList(out idList);
+                    if (idList != 0)
+                    {
+                        var iid = typeof(NativeMethods.IPropertyStore).GUID;
+                        if (appId is null && NativeMethods.SHGetPropertyStoreFromIDList(idList, 0, ref iid, out targetStore) == 0 &&
+                            targetStore is not null) appId = NativeMethods.ReadAppUserModelId(targetStore);
+                        if (appId is null && NativeMethods.SHGetNameFromIDList(idList, 0x80028000, out parsingName) == 0)
+                        {
+                            var name = Marshal.PtrToStringUni(parsingName) ?? "";
+                            appId = PackagedAppService.AppIdFromTarget(name);
+                            // AppsFolder's absolute parsing name can be just the AUMID.
+                            // Do not mistake arbitrary virtual folders for applications.
+                            if (appId is null && PackagedAppService.AppIdFromTarget(PackagedAppService.TargetForAppId(name)) is { } bareId &&
+                                (bareId.Contains('!') || PackagedAppService.NameForAppId(bareId) is not null)) appId = bareId;
+                        }
+                    }
+                }
+                catch (COMException) { /* A property-store identity still identifies an unresolvable PIDL. */ }
+                finally
+                {
+                    if (parsingName != 0) Marshal.FreeCoTaskMem(parsingName);
+                    if (idList != 0) Marshal.FreeCoTaskMem(idList);
+                    if (targetStore is not null && Marshal.IsComObject(targetStore)) Marshal.ReleaseComObject(targetStore);
+                }
+                if (appId is not null) target = PackagedAppService.TargetForAppId(appId);
+            }
+            return target is null ? null : new ShortcutInfo(
+                target, arguments.ToString(), appId,
                 iconPath.Length == 0 ? null : Environment.ExpandEnvironmentVariables(iconPath.ToString()));
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or IOException or UnauthorizedAccessException)

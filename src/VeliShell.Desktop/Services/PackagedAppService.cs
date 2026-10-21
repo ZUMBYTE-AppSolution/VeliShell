@@ -11,6 +11,7 @@ internal sealed record PackagedAppIdentity(uint ProcessId, string AppUserModelId
 internal static class PackagedAppService
 {
     private const string AppsFolderPrefix = "shell:AppsFolder\\";
+    private const string AppsFolderParsingPrefix = "::{4234d49b-0245-4df3-b780-3893943456e1}\\";
     private const int ErrorInsufficientBuffer = 122;
     private static readonly ConcurrentDictionary<string, string> DisplayNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -29,7 +30,7 @@ internal static class PackagedAppService
             if (appId is null) return true;
 
             var target = TargetForAppId(appId);
-            var name = DisplayNames.GetOrAdd(appId, _ => ReadDisplayName(target) ?? "");
+            var name = NameForAppId(appId) ?? "";
             // Do not cache a failed shell lookup permanently: an app may be
             // registering or updating while its window is already visible.
             if (name.Length == 0) DisplayNames.TryRemove(appId, out _);
@@ -51,22 +52,32 @@ internal static class PackagedAppService
 
     internal static string? AppIdFromTarget(string target)
     {
-        if (string.IsNullOrWhiteSpace(target) || !target.StartsWith(AppsFolderPrefix, StringComparison.OrdinalIgnoreCase))
-            return null;
-        var appId = target[AppsFolderPrefix.Length..];
-        var separator = appId.IndexOf('!');
-        return appId.Length is > 2 and <= 256 && separator > 0 && separator < appId.Length - 1 &&
-               appId.IndexOfAny(['\\', '/']) < 0 && appId.All(character => !char.IsControl(character))
+        if (string.IsNullOrWhiteSpace(target)) return null;
+        var prefix = target.StartsWith(AppsFolderPrefix, StringComparison.OrdinalIgnoreCase) ? AppsFolderPrefix :
+            target.StartsWith(AppsFolderParsingPrefix, StringComparison.OrdinalIgnoreCase) ? AppsFolderParsingPrefix : null;
+        if (prefix is null) return null;
+        var appId = target[prefix.Length..];
+        // AppsFolder also contains unpackaged explicit AUMIDs (for example com.openai.codex).
+        return appId.Length is > 2 and <= 256 &&
+               appId.IndexOfAny(['\\', '/', ':', '"']) < 0 && !appId.Contains("..", StringComparison.Ordinal) &&
+               appId.All(character => !char.IsControl(character) && !char.IsWhiteSpace(character))
             ? appId : null;
     }
 
     internal static string? NameForAppId(string appId)
     {
         if (AppIdFromTarget(TargetForAppId(appId)) is null) return null;
+        if (KnownDisplayName(appId) is { } known) return known;
         var name = DisplayNames.GetOrAdd(appId, _ => ReadDisplayName(TargetForAppId(appId)) ?? "");
         if (name.Length == 0) DisplayNames.TryRemove(appId, out _);
         return name.Length == 0 ? null : name;
     }
+
+    internal static string? KnownDisplayName(string appId) =>
+        appId.StartsWith("OpenAI.Codex_", StringComparison.OrdinalIgnoreCase) ||
+        appId.Equals("com.openai.codex", StringComparison.OrdinalIgnoreCase) ? "Codex" :
+        appId.StartsWith("OpenAI.ChatGPT-Desktop_", StringComparison.OrdinalIgnoreCase) ||
+        appId.StartsWith("OpenAI.ChatGPT_", StringComparison.OrdinalIgnoreCase) ? "ChatGPT" : null;
 
     private static string? ReadProcessAppId(uint processId)
     {
@@ -86,6 +97,7 @@ internal static class PackagedAppService
 
     private static string? ReadDisplayName(string target)
     {
+        var initialized = NativeMethods.CoInitializeEx(0, 0);
         NativeMethods.IShellItem? item = null;
         nint name = 0;
         try
@@ -105,6 +117,7 @@ internal static class PackagedAppService
                 try { Marshal.ReleaseComObject(item); }
                 catch (InvalidComObjectException) { }
             }
+            if (initialized >= 0) NativeMethods.CoUninitialize();
         }
     }
 }

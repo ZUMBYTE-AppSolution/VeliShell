@@ -201,6 +201,23 @@ internal static class NativeMethods
     [DllImport("shell32.dll", PreserveSig = true)]
     internal static extern int SHGetPropertyStoreForWindow(
         nint hwnd, ref Guid interfaceId, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore? store);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int SHGetKnownFolderPath(ref Guid folderId, uint flags, nint token, out nint path);
+    [DllImport("shell32.dll")]
+    internal static extern int SHGetNameFromIDList(nint itemIdList, uint form, out nint name);
+    [DllImport("shell32.dll")]
+    internal static extern int SHGetPropertyStoreFromIDList(nint itemIdList, uint flags,
+        ref Guid interfaceId, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore? store);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int SHParseDisplayName(string name, nint bindContext, out nint itemIdList,
+        uint attributesRequested, out uint attributes);
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    internal static extern int AssocQueryString(uint flags, uint kind, string association,
+        string? extra, StringBuilder? value, ref uint length);
+    [DllImport("ole32.dll")]
+    internal static extern int CoInitializeEx(nint reserved, uint model);
+    [DllImport("ole32.dll")]
+    internal static extern void CoUninitialize();
     [DllImport("ole32.dll")]
     internal static extern int PropVariantClear(ref PropVariant value);
 

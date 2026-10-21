@@ -1,6 +1,5 @@
 using System.IO;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace VeliShell.Desktop.Services;
@@ -29,6 +28,8 @@ internal static class StableLaunchTargetService
     {
         if (!Path.IsPathFullyQualified(executable) ||
             !executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return executable;
+        var normalizedExecutable = AppIdentityService.NormalizeExecutable(executable);
+        if (normalizedExecutable is null) return executable;
         if (PreferPackagedIdentity(executable) is { } packagedTarget) return packagedTarget;
         var basename = Path.GetFileNameWithoutExtension(executable);
         var matchingName = displayName?.Trim();
@@ -37,13 +38,12 @@ internal static class StableLaunchTargetService
         {
             var link = ShellLinkService.Read(path);
             if (link is null || link.IsWebApp) continue;
-            if (string.Equals(link.Target, executable, StringComparison.OrdinalIgnoreCase)) return path;
-            // Only fall back to the executable's stable name when it is also
-            // supported by the shortcut's display name. "Update.exe" must
-            // never bind a pin to a different application's updater.
+            if (string.Equals(AppIdentityService.NormalizeExecutable(link.Target),
+                    normalizedExecutable, StringComparison.OrdinalIgnoreCase)) return path;
+            // An update may change the version directory, never the application
+            // family/install root. A shared EXE name is not sufficient evidence.
             if (matchingExecutable is null && basename.Length >= 5 &&
-                string.Equals(Path.GetFileNameWithoutExtension(link.Target), basename,
-                    StringComparison.OrdinalIgnoreCase) &&
+                AppIdentityService.SameExecutable(link.Target, executable) &&
                 (string.IsNullOrWhiteSpace(matchingName) ||
                  Path.GetFileNameWithoutExtension(path).Contains(matchingName,
                      StringComparison.OrdinalIgnoreCase) ||
@@ -56,8 +56,7 @@ internal static class StableLaunchTargetService
 
     internal static string? PreferPackagedIdentity(string executable)
     {
-        var family = PackageFamilyFromPath(executable);
-        if (family is null) return null;
+        if (AppIdentityService.NormalizeExecutable(executable) is null) return null;
         Process[] processes;
         try { processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(executable)); }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or
@@ -70,8 +69,7 @@ internal static class StableLaunchTargetService
                 try
                 {
                     var runningPath = WindowCatalog.GetProcessPath(checked((uint)process.Id));
-                    if (!string.Equals(family, PackageFamilyFromPath(runningPath),
-                            StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!AppIdentityService.SameExecutable(executable, runningPath)) continue;
                     var identity = PackagedAppService.ForProcess(checked((uint)process.Id));
                     if (identity is not null) return identity.Target;
                 }
@@ -82,18 +80,6 @@ internal static class StableLaunchTargetService
             }
         }
         return null;
-    }
-
-    private static string? PackageFamilyFromPath(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        var marker = path.IndexOf("\\WindowsApps\\", StringComparison.OrdinalIgnoreCase);
-        if (marker < 0) return null;
-        var packageDirectory = path[(marker + "\\WindowsApps\\".Length)..].Split('\\', 2)[0];
-        if (packageDirectory.Length is < 8 or > 256) return null;
-        var match = Regex.Match(packageDirectory,
-            @"^(.+?)_\d+\.\d+\.\d+\.\d+_.+__(.+)$", RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups[1].Value + "_" + match.Groups[2].Value : null;
     }
 
     private static IEnumerable<string> EnumerateShortcuts()

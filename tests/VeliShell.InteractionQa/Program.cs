@@ -34,6 +34,7 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if(args.Length==1 && args[0]=="--verify-app-discovery") return VerifyAppDiscovery();
         if(args.Length==1 && args[0]=="--verify-update-preparation") return VerifyUpdatePreparation();
         if(args.Length==1 && args[0]=="--verify-start-headless") return VerifyStartLauncherHeadless();
         if(args.Length==1 && args[0]=="--verify-adaptive-icon-backgrounds") return VerifyAdaptiveIconBackgrounds();
@@ -1809,8 +1810,10 @@ internal static partial class Program
         if (!File.Exists(shortcut)) return false;
         var linkType = RequireType("VeliShell.Desktop.Services.ShellLinkService");
         var target = RequireMethod(linkType, "ResolveTarget").Invoke(null, [shortcut]) as string;
-        var chatGpt = Process.GetProcessesByName("ChatGPT").FirstOrDefault(process =>
-            process.Id > 0);
+        if (target is null || !target.EndsWith("ChatGPT.exe", StringComparison.OrdinalIgnoreCase))
+            return false;
+        using var chatGpt = Process.GetProcessesByName("ChatGPT").FirstOrDefault(process =>
+            process.Id > 0 && AppIdentityService.SameExecutable(target, WindowCatalog.GetProcessPath((uint)process.Id)));
         string? packagedTarget = null;
         if (chatGpt is not null)
         {
@@ -1818,8 +1821,6 @@ internal static partial class Program
             var identity = RequireMethod(packagedType, "ForProcess").Invoke(null, [checked((uint)chatGpt.Id)]);
             packagedTarget = identity?.GetType().GetProperty("Target")?.GetValue(identity) as string;
         }
-        if (target is null || !target.EndsWith("ChatGPT.exe", StringComparison.OrdinalIgnoreCase))
-            return false;
         var launchType = RequireType("VeliShell.Desktop.Services.LaunchService");
         var pin = (Pin?)RequireMethod(launchType, "PinFromPath").Invoke(null, [target]);
         var expected = packagedTarget ?? shortcut;
@@ -2887,7 +2888,7 @@ internal static partial class Program
         var read = RequireMethod(catalog, "Read");
         var first = ((System.Collections.IEnumerable)read.Invoke(null, null)!).Cast<object>().ToArray();
         var cached = ((System.Collections.IEnumerable)read.Invoke(null, null)!).Cast<object>().ToArray();
-        Require(first.Length <= 48 && first.Length == cached.Length,
+        Require(first.Length <= TrayIconCatalog.MaximumIcons && first.Length == cached.Length,
             "The tray mirror is unbounded or unstable between consecutive reads.");
         for (var index = 0; index < first.Length; index++)
         {

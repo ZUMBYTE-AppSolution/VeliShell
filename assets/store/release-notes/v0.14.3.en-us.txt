@@ -1,0 +1,11 @@
+What's new in VeliShell 0.14.3
+
+• Improved discovery of Windows notification-area icons in the menu bar, including Windows folder identifiers and changed Store-app paths.
+• More reliable Dock activity indicators for desktop programs, Store apps and Windows shortcuts. ChatGPT and Codex are identified separately, even when they share an executable name.
+• More stable matching after app updates: selected shortcuts remain intact, with support for registered app protocols and common versioned installation folders.
+• Existing square and rounded app icons retain their full size without an additional background edge. Custom icon choices are preserved.
+• Refined Start menu with power actions and the shared glass appearance settings.
+• Optional and experimental: glass window styling for compatible apps, with exclusions, rollback and independent emergency recovery. Disabled by default; not every Windows window is supported.
+• Before confirmed GitHub installer updates, window styling is automatically restored. Other applications are never forcibly closed.
+
+Menu-bar notification icons remain a best-effort mirror of the Windows icon cache, not a complete live copy of the notification area.

@@ -37,7 +37,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: velishell-store-${{ inputs.tag }}
+  group: velishell-store-production
   cancel-in-progress: false
 
 jobs:
@@ -229,6 +229,10 @@ jobs:
         env:
           MSIX_PATH: ${{ steps.package.outputs.msix_path }}
         run: |
+          $current = (msstore submission get $env:STORE_PRODUCT_ID | Out-String) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $current.Status -ne 'Published') {
+            throw "The Store submission is not in the expected Published state ($($current.Status)). No existing draft or certification will be replaced automatically."
+          }
           msstore publish $env:MSIX_PATH -id $env:STORE_PRODUCT_ID --noCommit
           if ($LASTEXITCODE -ne 0) { throw 'Partner Center rejected the draft MSIX upload.' }
 

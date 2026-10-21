@@ -261,11 +261,12 @@ public partial class MenuBarWindow : Window
         var preferredIds = _app.Preferences.PreferredTrayIconIds
             .Select((id, index) => (id, index))
             .ToDictionary(item => item.id, item => item.index, StringComparer.Ordinal);
-        var orderedIcons = _trayIcons.OrderBy(icon => preferredIds.GetValueOrDefault(icon.Id, int.MaxValue))
+        var orderedIcons = _trayIcons.OrderBy(icon => icon.PreviousIds.Prepend(icon.Id)
+                .Select(id => preferredIds.GetValueOrDefault(id, int.MaxValue)).Min())
             .DistinctBy(icon => icon.Executable, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var signature = $"{maximumVisibleIcons}:{alwaysShow}|" + string.Join("|", orderedIcons.Select(icon =>
-            $"{icon.Id}:{icon.Name}:{icon.SnapshotHash}:{hiddenIds.Contains(icon.Id)}"));
+            $"{icon.Id}:{icon.Executable}:{icon.LaunchTarget}:{icon.Name}:{icon.SnapshotHash}:{hiddenIds.Any(icon.MatchesId)}"));
         if (signature == _traySignature) return;
         _traySignature = signature;
         var wasPinnedOpen = _trayPinnedOpen;
@@ -276,7 +277,7 @@ public partial class MenuBarWindow : Window
         var visibleCount = 0;
         foreach (var icon in orderedIcons)
         {
-            var hidden = hiddenIds.Contains(icon.Id) || visibleCount >= maximumVisibleIcons;
+            var hidden = hiddenIds.Any(icon.MatchesId) || visibleCount >= maximumVisibleIcons;
             var button = CreateTrayIconButton(icon, hidden && !alwaysShow);
             if (button is null) continue;
             if (hidden) TrayOverflowItemsPanel.Children.Add(button);
@@ -320,7 +321,7 @@ public partial class MenuBarWindow : Window
             button.Click += (_, _) =>
             {
                 if (!_trayPinnedOpen) SetTrayExpanded(false);
-                if (File.Exists(icon.Executable)) LaunchService.Open(icon.Executable);
+                if (icon.CanOpen) LaunchService.Open(icon.LaunchTarget);
             };
             button.PreviewMouseRightButtonUp += (_, args) =>
             {
@@ -358,7 +359,7 @@ public partial class MenuBarWindow : Window
     {
         if (hidden)
         {
-            ToggleTrayIcon(icon.Id, hide: false);
+            ToggleTrayIcon(icon, hide: false);
             SetTrayExpanded(false);
             return;
         }
@@ -370,8 +371,8 @@ public partial class MenuBarWindow : Window
         {
             Add(menu, L("MenuBar.TrayOpen"), () =>
             {
-                if (File.Exists(icon.Executable)) LaunchService.Open(icon.Executable);
-            }, File.Exists(icon.Executable));
+                if (icon.CanOpen) LaunchService.Open(icon.LaunchTarget);
+            }, icon.CanOpen);
             var folder = Path.GetDirectoryName(icon.Executable);
             Add(menu, L("MenuBar.BackgroundAppFolder"), () =>
             {
@@ -379,20 +380,18 @@ public partial class MenuBarWindow : Window
             }, folder is not null && Directory.Exists(folder));
         }
         menu.Items.Add(new Separator());
-        Add(menu, L("MenuBar.TrayHide"), () => ToggleTrayIcon(icon.Id, hide: true));
+        Add(menu, L("MenuBar.TrayHide"), () => ToggleTrayIcon(icon, hide: true));
         menu.IsOpen = true;
     }
 
-    private void ToggleTrayIcon(string id, bool hide)
+    private void ToggleTrayIcon(TrayAppIcon icon, bool hide)
     {
         _app.UpdatePreferences(settings =>
         {
-            settings.HiddenTrayIconIds.RemoveAll(candidate =>
-                string.Equals(candidate, id, StringComparison.Ordinal));
-            settings.PreferredTrayIconIds.RemoveAll(candidate =>
-                string.Equals(candidate, id, StringComparison.Ordinal));
-            if (hide) settings.HiddenTrayIconIds.Add(id);
-            else settings.PreferredTrayIconIds.Insert(0, id);
+            settings.HiddenTrayIconIds.RemoveAll(icon.MatchesId);
+            settings.PreferredTrayIconIds.RemoveAll(icon.MatchesId);
+            if (hide) settings.HiddenTrayIconIds.Add(icon.Id);
+            else settings.PreferredTrayIconIds.Insert(0, icon.Id);
         });
     }
 

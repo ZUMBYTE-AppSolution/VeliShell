@@ -66,6 +66,22 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Deutsch, Englisch oder Systemsprache:** Die Sprache kann jederzeit in den Einstellungen gewechselt werden.
 - **Geführter erster Start:** Sechs erklärende Schritte führen durch Design, Dock, Symbole, Online-Dienste, Windows-Optionen und Updates. Für den optionalen macOSicons-Schlüssel gibt es eine direkte Anleitung und ein geschütztes Eingabefeld; freiwillige Systemeingriffe bleiben zunächst aus.
 
+### Verbesserte App-Erkennung in 0.14.3
+
+Dock und Menüleiste unterscheiden Apps anhand ihrer Windows-Kennung und ihres
+Installationsorts, nicht allein am Namen der EXE. So bleiben etwa ChatGPT und
+Codex getrennt, auch wenn beide `ChatGPT.exe` verwenden. Store-Apps, normale und
+AppsFolder-Verknüpfungen, registrierte App-Protokolle und typische Versionsordner
+werden berücksichtigt; ausgewählte `.lnk`-Dateien bleiben als Startverweis erhalten.
+
+Die Tray-Erkennung löst außerdem Windows-Ordnerkennungen und Umgebungsvariablen
+auf. Alte Store-Iconcache-Einträge können der aktuellen Version derselben App
+zugeordnet werden, ohne andere Apps gleichen Dateinamens zu übernehmen. Das ist
+weiterhin eine bestmögliche Spiegelung des Windows-Caches, keine vollständige
+Live-Kopie der Windows-Infobereichsverwaltung. Vorhandene eigene Pin-Namen und
+Icon-Auswahlen werden nicht automatisch überschrieben. Die Details stehen im
+[Changelog zu 0.14.3](CHANGELOG.md#0143---2026-10-21).
+
 ## 🚀 Installation
 
 1. Den [aktuellen VeliShell-Installer](https://github.com/ZUMBYTE-AppSolution/VeliShell/releases/latest/download/VeliShell-Setup-win-x64.msi) herunterladen.
@@ -105,7 +121,14 @@ GitHub-Releases enthalten den MSI-Installer und die portable ZIP. Eine Microsoft
 > enthalten, bleibt aber ausdrücklich optional und standardmäßig ausgeschaltet.
 > [VM-Test, Rückwechsel zu Stable und Notfall-Wiederherstellung](NATIVE-PROTOTYPE.md).
 
-> **Neu in 0.14.2:** Bereits quadratische oder abgerundete App-Icons behalten ihre
+> **Neu in 0.14.3:** Verbessertes Erkennen laufender Apps und Windows-Infosymbole,
+> getrennte Zuordnung von ChatGPT und Codex und automatische Vorbereitung der
+> Fenstergestaltung vor bestätigten Installer-Updates. Die Tray-Spiegelung bleibt
+> cachebasiert. Die experimentelle Fenstergestaltung ist weiterhin freiwillig;
+> bestehende Adapter aus älteren Installationsordnern können vor dem ersten Update
+> noch das Schließen betroffener Apps erfordern.
+>
+> **Seit 0.14.2:** Bereits quadratische oder abgerundete App-Icons behalten ihre
 > volle Dock-Größe ohne zusätzlichen Farbhintergrund. Der optionale Verlauf bleibt
 > freigestellten Symbolen vorbehalten – auch beim Icon-Wechsel und in Drag-Vorschauen.
 > Ausschließlich GitHub; keine neue Microsoft-Store-Einreichung.
