@@ -9,7 +9,8 @@ using VeliShell.Desktop.Native;
 
 namespace VeliShell.Desktop.Services;
 
-internal sealed record LaunchIdentity(string? AppId = null, string? Executable = null, string? ForwardedAppId = null);
+internal sealed record LaunchIdentity(string? AppId = null, string? Executable = null, string? ForwardedAppId = null,
+    VersionedAppReference? VersionedApp = null);
 
 /// <summary>Read-only shell identity lookup. Never launches or resolves a link with UI.</summary>
 internal static class AppIdentityService
@@ -110,11 +111,13 @@ internal static class AppIdentityService
             if (link is null) return new();
             var linkedExecutable = ExecutableForShortcut(link.Target, link.Arguments);
             return new(link.AppUserModelId ?? PackagedAppService.AppIdFromTarget(link.Target), linkedExecutable,
-                SystemForwarderAppId(linkedExecutable));
+                SystemForwarderAppId(linkedExecutable), VersionedAppReference.FromExecutable(linkedExecutable) ??
+                    VersionedAppReference.FromRootLauncher(linkedExecutable));
         }
         if ((NormalizeExecutable(target) ?? ResolveExecutableName(target)) is { } executable &&
             executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            return new(Executable: executable, ForwardedAppId: SystemForwarderAppId(executable));
+            return new(Executable: executable, ForwardedAppId: SystemForwarderAppId(executable),
+                VersionedApp: VersionedAppReference.FromExecutable(executable) ?? VersionedAppReference.FromRootLauncher(executable));
         if (target.Length > 2048 || !Uri.TryCreate(target, UriKind.Absolute, out var uri))
             return new();
         var now = Environment.TickCount64;
@@ -187,14 +190,17 @@ internal static class AppIdentityService
     {
         var path = NormalizeExecutable(target);
         if (path is null || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return null;
-        if (!Path.GetFileName(path).Equals("Update.exe", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(arguments) || arguments.Length > 32768) return path;
+        if (string.IsNullOrWhiteSpace(arguments) || arguments.Length > 32768) return path;
         Match match;
         try { match = ProcessStart.Match(arguments); }
         catch (RegexMatchTimeoutException) { return path; }
         var app = match.Groups["exe"].Value;
         if (!match.Success || app.IndexOfAny(['\\', '/', ':', '"']) >= 0 ||
             !app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || app.Any(char.IsControl)) return path;
+        // Recent Discord installers also use Discord.exe itself as the stable
+        // bootstrapper; only honor a processStart matching that exact file name.
+        if (!Path.GetFileName(path).Equals("Update.exe", StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetFileName(path).Equals(app, StringComparison.OrdinalIgnoreCase)) return path;
         // Squirrel's launcher is not the app window owner. This is an identity
         // pattern only, never an executable path we launch or write into the pin.
         return Path.Combine(Path.GetDirectoryName(path)!, "app-0.0", app);
@@ -220,14 +226,19 @@ internal static class AppIdentityService
         if (pin.Kind == PinKind.VirtualFolder) return false;
         if (!string.IsNullOrWhiteSpace(identity.AppId))
         {
-            if (string.Equals(identity.AppId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(identity.AppId, window.WindowAppUserModelId, StringComparison.OrdinalIgnoreCase)) return true;
-            // An explicit identity conflict must never degrade to a shared EXE name.
-            if (!string.IsNullOrWhiteSpace(window.AppUserModelId) ||
-                !string.IsNullOrWhiteSpace(window.WindowAppUserModelId) || identity.Executable is null) return false;
+            var idMatch = string.Equals(identity.AppId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(identity.AppId, window.WindowAppUserModelId, StringComparison.OrdinalIgnoreCase);
+            var packageIdentity = identity.AppId.Contains('!');
+            // Store IDs are authoritative. Generic shortcut IDs are hints: old
+            // Squirrel metadata may differ from the app's current window ID.
+            // In that case require the SAME installation/root, never basename.
+            if (identity.Executable is null || string.IsNullOrWhiteSpace(window.Executable)) return idMatch;
+            if (packageIdentity && (!string.IsNullOrWhiteSpace(window.AppUserModelId) ||
+                                    !string.IsNullOrWhiteSpace(window.WindowAppUserModelId))) return idMatch;
         }
         if (identity.Executable is not null)
             return SameExecutable(identity.Executable, window.Executable) ||
+                   identity.VersionedApp?.Matches(window.Executable) == true ||
                    identity.ForwardedAppId is not null &&
                    string.Equals(identity.ForwardedAppId, window.AppUserModelId, StringComparison.OrdinalIgnoreCase);
         // An unresolved target is not evidence that an unrelated process with

@@ -62,6 +62,9 @@ try {
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Core.Tests/VeliShell.Core.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.Desktop.Updater.Tests/VeliShell.Desktop.Updater.Tests.csproj', '-c', 'Release') -Log (Join-Path $Out 'desktop-updater-tests.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-app-discovery') -Log (Join-Path $Out 'app-discovery-qa.log')
+    Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-shortcut-tray') -Log (Join-Path $Out 'shortcut-tray-qa.log')
+    & (Join-Path $Root 'src/VeliShell.Desktop/obj/native/TrayRelayChecks.exe') 2>&1 | Tee-Object -FilePath (Join-Path $Out 'tray-protocol-qa.log')
+    if ($LASTEXITCODE -ne 0) { throw 'Native tray protocol checks failed.' }
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-update-preparation') -Log (Join-Path $Out 'update-preparation-qa.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-native-frames-headless') -Log (Join-Path $Out 'native-frames-headless-qa.log')
     Invoke-Dotnet -Arguments @('run', '--project', 'tests/VeliShell.InteractionQa/VeliShell.InteractionQa.csproj', '-c', 'Release', '--', '--verify-adaptive-icon-backgrounds') -Log (Join-Path $Out 'adaptive-icon-backgrounds-qa.log')

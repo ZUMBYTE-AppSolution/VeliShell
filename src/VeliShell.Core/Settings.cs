@@ -84,6 +84,8 @@ public sealed class Settings
     public bool MenuBarAutoHide { get; set; }
     public bool MenuBarAlwaysOnTop { get; set; } = true;
     public bool MenuBarAlwaysShowTrayApps { get; set; }
+    public bool TrayBridgeEnabled { get; set; }
+    public int TrayBridgeConsentVersion { get; set; }
     public List<string> HiddenTrayIconIds { get; set; } = [];
     public List<string> PreferredTrayIconIds { get; set; } = [];
     public OnlineIconMode OnlineIcons { get; set; } = OnlineIconMode.Disabled;
@@ -106,6 +108,7 @@ public sealed class Settings
         // Only our own preferences are normalized. No Windows setting is changed.
         SchemaVersion = CurrentSchemaVersion;
         if (NativeFramesConsentVersion != 1) { NativeFramesConsentVersion = 0; NativeFramesEnabled = false; }
+        if (TrayBridgeConsentVersion != 1) { TrayBridgeConsentVersion = 0; TrayBridgeEnabled = false; }
         if (NativeModernMaterialsConsentVersion != 1) { NativeModernMaterialsConsentVersion = 0; NativeModernMaterialsEnabled = false; }
         if (NativeModernFramesConsentVersion != 1) { NativeModernFramesConsentVersion = 0; NativeModernFramesEnabled = false; }
         NativeFrameExclusions = (NativeFrameExclusions ?? []).Where(value => !string.IsNullOrWhiteSpace(value) && value.Length <= 1024)

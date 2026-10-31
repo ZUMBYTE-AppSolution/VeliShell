@@ -5,6 +5,8 @@ using VeliShell.Core;
 
 namespace VeliShell.Desktop.Services;
 
+internal sealed record LaunchRequest(string Target, string? Arguments = null, string? WorkingDirectory = null);
+
 internal static class LaunchService
 {
     internal static bool Open(string target)
@@ -12,7 +14,13 @@ internal static class LaunchService
         try
         {
             // ShellExecute is intentional. No command line, shell script or elevation is injected.
-            Process.Start(new ProcessStartInfo(Environment.ExpandEnvironmentVariables(target)) { UseShellExecute = true });
+            var launch = StableLaunchTargetService.PrepareLaunch(target);
+            Process.Start(new ProcessStartInfo(launch.Target)
+            {
+                UseShellExecute = true,
+                Arguments = launch.Arguments ?? "",
+                WorkingDirectory = launch.WorkingDirectory ?? ""
+            });
             return true;
         }
         catch (Exception ex)

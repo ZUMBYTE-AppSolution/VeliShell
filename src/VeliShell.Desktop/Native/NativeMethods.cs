@@ -3,7 +3,7 @@ using System.Text;
 
 namespace VeliShell.Desktop.Native;
 
-internal static class NativeMethods
+internal static partial class NativeMethods
 {
     internal const int GwlExStyle = -20;
     internal const long WsExToolWindow = 0x80;

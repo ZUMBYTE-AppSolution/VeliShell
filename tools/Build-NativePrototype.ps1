@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$OutputPath, [string]$FixturePath, [ValidateSet('x64','x86')][string]$Architecture = 'x64', [string]$BridgePath, [string]$MaterialCheckPath)
+param([Parameter(Mandatory)][string]$OutputPath, [string]$FixturePath, [ValidateSet('x64','x86')][string]$Architecture = 'x64', [string]$BridgePath, [string]$MaterialCheckPath, [string]$TrayBridgePath, [string]$TrayChecksPath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskVswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -39,4 +39,15 @@ if ($MaterialCheckPath) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $MaterialCheckPath) -Force | Out-Null
     & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE (Join-Path $taskRoot 'tests\VeliShell.InteractionQa\FrameMaterialChecks.cpp') "/Fo$taskObjectDirectory\FrameMaterialChecks.obj" /link "/OUT:$MaterialCheckPath" /SUBSYSTEM:CONSOLE /DYNAMICBASE /NXCOMPAT /CETCOMPAT "$taskObjectDirectory\NativeFrame.lib" user32.lib gdi32.lib dwmapi.lib d3d11.lib d2d1.lib dxguid.lib CoreMessaging.lib windowsapp.lib
     if ($LASTEXITCODE -ne 0) { throw 'Background-only native material check build failed.' }
+}
+if ($TrayBridgePath) {
+    if ($Architecture -ne 'x64') { throw 'The tray UI Automation client is only loaded by the x64 desktop app.' }
+    $TrayBridgePath = [IO.Path]::GetFullPath($TrayBridgePath)
+    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /LD /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE /Brepro (Join-Path $taskRoot 'native\VeliShell.TrayBridge\TrayBridge.cpp') (Join-Path $taskRoot 'native\VeliShell.TrayBridge\TrayRelay.cpp') "/Fo$taskObjectDirectory\" /link "/OUT:$TrayBridgePath" "/IMPLIB:$taskObjectDirectory\TrayBridge.lib" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib ole32.lib oleaut32.lib uiautomationcore.lib uuid.lib advapi32.lib
+    if ($LASTEXITCODE -ne 0) { throw 'Native tray UI Automation client build failed.' }
+}
+if ($TrayChecksPath) {
+    $TrayChecksPath = [IO.Path]::GetFullPath($TrayChecksPath)
+    & (Join-Path $taskCompilerDirectory 'cl.exe') /nologo /std:c++20 /O2 /MT /W4 /WX /EHsc /guard:cf /DUNICODE /D_UNICODE (Join-Path $taskRoot 'tests\VeliShell.InteractionQa\TrayRelayChecks.cpp') "/Fo$taskObjectDirectory\TrayRelayChecks.obj" /link "/OUT:$TrayChecksPath" /DYNAMICBASE /NXCOMPAT /CETCOMPAT user32.lib ole32.lib oleaut32.lib uiautomationcore.lib uuid.lib
+    if ($LASTEXITCODE -ne 0) { throw 'Native tray parser checks failed to build.' }
 }

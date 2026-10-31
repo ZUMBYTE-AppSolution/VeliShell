@@ -30,6 +30,7 @@ public partial class PreferencesWindow : VeliShellWindow
         InitializeComponent();
         _app.PreferencesChanged += SyncUi;
         _app.UpdateStateChanged += UpdateUpdateStatus;
+        _app.TrayBridgeStateChanged += UpdateTrayBridgeStatus;
         _app.Themes.Changed += UpdateThemeStatus;
         NotificationCenterService.Current.WindowsAccessChanged += WindowsNotificationAccessChanged;
         Loaded += (_, _) => { SyncUi(); UpdateDiagnostics(); UpdateApiKeyStatus(); };
@@ -37,6 +38,7 @@ public partial class PreferencesWindow : VeliShellWindow
         {
             _app.PreferencesChanged -= SyncUi;
             _app.UpdateStateChanged -= UpdateUpdateStatus;
+            _app.TrayBridgeStateChanged -= UpdateTrayBridgeStatus;
             _app.Themes.Changed -= UpdateThemeStatus;
             NotificationCenterService.Current.WindowsAccessChanged -= WindowsNotificationAccessChanged;
         };
@@ -94,6 +96,9 @@ public partial class PreferencesWindow : VeliShellWindow
         MenuBarAutoHideSwitch.IsEnabled = s.MenuBarEnabled;
         MenuBarAlwaysShowTrayAppsSwitch.IsChecked = s.MenuBarAlwaysShowTrayApps;
         MenuBarAlwaysShowTrayAppsSwitch.IsEnabled = s.MenuBarEnabled;
+        TrayBridgeSwitch.IsChecked = s.TrayBridgeEnabled;
+        TrayBridgeSwitch.IsEnabled = s.MenuBarEnabled && TrayRelayController.Supported && !_trayBridgeBusy;
+        TrayBridgeStatus.Text = _app.TrayBridge?.Status ?? L("TrayBridge.Disabled");
         MenuBarTopmostSwitch.IsChecked = s.MenuBarAlwaysOnTop;
         MenuBarTopmostSwitch.IsEnabled = s.MenuBarEnabled;
         MenuBarAllDisplaysSwitch.IsChecked = s.MenuBarOnAllDisplays;
@@ -286,6 +291,11 @@ public partial class PreferencesWindow : VeliShellWindow
         {
             await _app.SetMenuBarEnabledAsync(MenuBarSwitch.IsChecked == true);
             MenuBarSwitch.IsChecked = _app.Preferences.MenuBarEnabled;
+            if (!_app.Preferences.MenuBarEnabled && _app.TrayBridge is not null)
+            {
+                await _app.TrayBridge.StopAsync();
+                _app.UpdatePreferences(settings => settings.TrayBridgeEnabled = false);
+            }
         }
         finally
         {
@@ -295,6 +305,36 @@ public partial class PreferencesWindow : VeliShellWindow
     private void MenuBarAutoHide_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAutoHide = MenuBarAutoHideSwitch.IsChecked == true);
     private void MenuBarAlwaysShowTrayApps_Click(object sender, RoutedEventArgs e) =>
         _app.UpdatePreferences(s => s.MenuBarAlwaysShowTrayApps = MenuBarAlwaysShowTrayAppsSwitch.IsChecked == true);
+    private bool _trayBridgeBusy;
+    private void UpdateTrayBridgeStatus() => TrayBridgeStatus.Text = _app.TrayBridge?.Status ?? L("TrayBridge.Disabled");
+    private async void TrayBridge_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loading || _trayBridgeBusy || _app.TrayBridge is null) return;
+        var enable = TrayBridgeSwitch.IsChecked == true;
+        _trayBridgeBusy = true; TrayBridgeSwitch.IsEnabled = false;
+        try
+        {
+            if (enable)
+            {
+                if (MessageBox.Show(this, L("TrayBridge.Consent"), L("TrayBridge.Enable"), MessageBoxButton.YesNo,
+                    MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+                await _app.TrayBridge.EnableAsync(true);
+                _app.UpdatePreferences(settings => { settings.TrayBridgeConsentVersion = 1; settings.TrayBridgeEnabled = true; });
+            }
+            else
+            {
+                if (!await _app.TrayBridge.StopAsync()) throw new InvalidOperationException(L("TrayBridge.Failed"));
+                _app.UpdatePreferences(settings => settings.TrayBridgeEnabled = false);
+            }
+        }
+        catch (Exception error)
+        {
+            App.Log("Tray bridge change failed", error);
+            _app.UpdatePreferences(settings => settings.TrayBridgeEnabled = false);
+            if (IsVisible) MessageBox.Show(this, L("TrayBridge.Failed"), L("Common.ErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { _trayBridgeBusy = false; SyncUi(); }
+    }
     private void MenuBarTopmost_Click(object sender, RoutedEventArgs e) => _app.UpdatePreferences(s => s.MenuBarAlwaysOnTop = MenuBarTopmostSwitch.IsChecked == true);
     private async void MenuBarAllDisplays_Click(object sender, RoutedEventArgs e)
     {

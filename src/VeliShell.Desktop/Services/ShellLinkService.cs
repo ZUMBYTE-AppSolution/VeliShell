@@ -9,7 +9,7 @@ namespace VeliShell.Desktop.Services;
 internal static class ShellLinkService
 {
     internal sealed record ShortcutInfo(
-        string Target, string Arguments, string? AppUserModelId, string? IconPath = null)
+        string Target, string Arguments, string? AppUserModelId, string? IconPath = null, string? WorkingDirectory = null)
     {
         internal bool IsWebApp
         {
@@ -59,9 +59,11 @@ internal static class ShellLinkService
             var path = new StringBuilder(32768);
             var arguments = new StringBuilder(32768);
             var iconPath = new StringBuilder(32768);
+            var workingDirectory = new StringBuilder(32768);
             var link = (IShellLinkW)instance;
             link.GetPath(path, path.Capacity, 0, 0);
             link.GetArguments(arguments, arguments.Capacity);
+            link.GetWorkingDirectory(workingDirectory, workingDirectory.Capacity);
             try { link.GetIconLocation(iconPath, iconPath.Capacity, out _); }
             catch (COMException) { /* A missing custom icon does not invalidate the link. */ }
             string? appId = null;
@@ -108,7 +110,8 @@ internal static class ShellLinkService
             }
             return target is null ? null : new ShortcutInfo(
                 target, arguments.ToString(), appId,
-                iconPath.Length == 0 ? null : Environment.ExpandEnvironmentVariables(iconPath.ToString()));
+                iconPath.Length == 0 ? null : Environment.ExpandEnvironmentVariables(iconPath.ToString()),
+                workingDirectory.Length == 0 ? null : Environment.ExpandEnvironmentVariables(workingDirectory.ToString()));
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or IOException or UnauthorizedAccessException)
         {

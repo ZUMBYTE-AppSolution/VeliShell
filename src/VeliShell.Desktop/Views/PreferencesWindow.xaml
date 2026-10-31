@@ -307,6 +307,9 @@
        <CheckBox x:Name="MenuBarAutoHideSwitch" Content="{services:Loc MenuBar.AutoHide}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAutoHide_Click" />
        <CheckBox x:Name="MenuBarAlwaysShowTrayAppsSwitch" Content="{services:Loc MenuBar.AlwaysShowTrayApps}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAlwaysShowTrayApps_Click" />
        <TextBlock Text="{services:Loc MenuBar.AlwaysShowTrayAppsDescription}" Style="{StaticResource SecondaryText}" Margin="0,4,44,10" />
+       <CheckBox x:Name="TrayBridgeSwitch" Content="{services:Loc TrayBridge.Enable}" Style="{StaticResource ToggleSwitch}" Click="TrayBridge_Click" />
+       <TextBlock Text="{services:Loc TrayBridge.Description}" Style="{StaticResource SecondaryText}" Margin="0,4,44,6" />
+       <TextBlock x:Name="TrayBridgeStatus" Style="{StaticResource SecondaryText}" Margin="0,0,44,10" />
        <CheckBox x:Name="MenuBarTopmostSwitch" Content="{services:Loc MenuBar.Topmost}" Style="{StaticResource ToggleSwitch}" Click="MenuBarTopmost_Click" />
        <CheckBox x:Name="MenuBarAllDisplaysSwitch" Content="{services:Loc MenuBar.AllDisplays}" Style="{StaticResource ToggleSwitch}" Click="MenuBarAllDisplays_Click" />
        <TextBlock Text="{services:Loc MenuBar.Description}" Style="{StaticResource SecondaryText}" Margin="0,7,44,0" />

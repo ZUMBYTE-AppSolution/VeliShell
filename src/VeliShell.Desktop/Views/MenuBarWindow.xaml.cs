@@ -40,6 +40,7 @@ public partial class MenuBarWindow : Window
     private IReadOnlyList<TrayAppIcon> _trayIcons = [];
     private string _traySignature = "";
     private bool _trayRefreshInProgress;
+    private bool _originalMenuOpening;
     private bool _refreshInProgress;
     private SteamClient? _steam;
     private string? _steamIconPath;
@@ -239,7 +240,11 @@ public partial class MenuBarWindow : Window
         _trayRefreshInProgress = true;
         try
         {
-            var icons = await Task.Run(TrayIconCatalog.Read);
+            var icons = await Task.Run(() =>
+            {
+                NativeTrayMenuBridge.Current.Refresh();
+                return TrayIconCatalog.Read();
+            });
             if (_closed) return;
             _trayIcons = icons;
             RenderTrayIcons();
@@ -356,32 +361,73 @@ public partial class MenuBarWindow : Window
     }
 
     private void ShowTrayIconMenu(FrameworkElement anchor, TrayAppIcon icon, bool hidden)
+        => BuildTrayIconMenu(anchor, icon, hidden).IsOpen = true;
+
+    internal ContextMenu BuildTrayIconMenu(FrameworkElement anchor, TrayAppIcon icon, bool hidden)
     {
-        if (hidden)
-        {
-            ToggleTrayIcon(icon, hide: false);
-            SetTrayExpanded(false);
-            return;
-        }
-        var menu = NewMenu(anchor);
+        var menu = AppContextMenu(anchor, icon.Name, icon.Executable, icon.OriginalTooltip, out var options, icon.IconGuid, icon.IconId);
         var observedApp = _lastBackgroundApps.FirstOrDefault(app =>
             string.Equals(app.Executable, icon.Executable, StringComparison.OrdinalIgnoreCase));
-        if (observedApp is not null) AddBackgroundAppActions(menu, observedApp);
+        if (observedApp is not null) AddBackgroundAppActions(options, observedApp);
         else
         {
-            Add(menu, L("MenuBar.TrayOpen"), () =>
+            Add(options, L("MenuBar.TrayOpen"), () =>
             {
                 if (icon.CanOpen) LaunchService.Open(icon.LaunchTarget);
             }, icon.CanOpen);
             var folder = Path.GetDirectoryName(icon.Executable);
-            Add(menu, L("MenuBar.BackgroundAppFolder"), () =>
+            Add(options, L("MenuBar.BackgroundAppFolder"), () =>
             {
                 if (folder is not null && Directory.Exists(folder)) LaunchService.Open(folder);
             }, folder is not null && Directory.Exists(folder));
         }
+        options.Items.Add(new Separator());
+        Add(options, L(hidden ? "MenuBar.TrayShow" : "MenuBar.TrayHide"), () => ToggleTrayIcon(icon, hide: !hidden));
+        return menu;
+    }
+
+    private ContextMenu AppContextMenu(FrameworkElement anchor, string name, string executable,
+        string? tooltip, out MenuItem options, Guid? iconGuid = null, uint? iconId = null)
+    {
+        var menu = NewMenu(anchor);
+        var nativeTarget = NativeTrayMenuBridge.Current.FindTarget(name, executable, tooltip);
+        var relay = TrayRelayController.Current;
+        var callbackTarget = relay?.FindTarget(executable, iconGuid, iconId);
+        MenuItem? nativeEntry = null;
+        nativeEntry = Add(menu, L("MenuBar.OriginalMenu"), () =>
+        {
+            if (_originalMenuOpening || _closed || Dispatcher.HasShutdownStarted) return;
+            var point = anchor.PointToScreen(new Point(anchor.ActualWidth / 2, anchor.ActualHeight));
+            _originalMenuOpening = true;
+            menu.IsOpen = false;
+            // Wait until WPF has finished closing this popup before invoking
+            // the original app popup. Never modify or copy a foreign HMENU.
+            Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    if (_closed) return;
+                    var opened = await Task.Run(() => callbackTarget is not null
+                        ? relay!.Show(callbackTarget, (int)Math.Round(point.X), (int)Math.Round(point.Y), userRequested: true)
+                        : NativeTrayMenuBridge.Current.TryShow(nativeTarget, userRequested: true));
+                    if (opened || _closed || !anchor.IsVisible || !ReferenceEquals(Window.GetWindow(anchor), this)) return;
+                    if (nativeEntry is not null)
+                    {
+                        nativeEntry.IsEnabled = false;
+                        nativeEntry.ToolTip = L("MenuBar.OriginalMenuUnavailable");
+                    }
+                    menu.IsOpen = true;
+                }
+                catch (Exception error) { App.Log("The original tray context menu could not be opened.", error); }
+                finally { _originalMenuOpening = false; }
+            }), DispatcherPriority.ContextIdle);
+        }, nativeTarget is not null || callbackTarget is not null);
+        nativeEntry.ToolTip = L(nativeTarget is null && callbackTarget is null ? "MenuBar.OriginalMenuUnavailable" : "MenuBar.OriginalMenuDescription");
+        ToolTipService.SetShowOnDisabled(nativeEntry, true);
         menu.Items.Add(new Separator());
-        Add(menu, L("MenuBar.TrayHide"), () => ToggleTrayIcon(icon, hide: true));
-        menu.IsOpen = true;
+        options = new MenuItem { Header = L("MenuBar.VeliShellOptions") };
+        menu.Items.Add(options);
+        return menu;
     }
 
     private void ToggleTrayIcon(TrayAppIcon icon, bool hide)
@@ -547,8 +593,8 @@ public partial class MenuBarWindow : Window
 
     private void ShowBackgroundAppMenu(FrameworkElement anchor, BackgroundApp app)
     {
-        var menu = NewMenu(anchor);
-        AddBackgroundAppActions(menu, app);
+        var menu = AppContextMenu(anchor, app.Name, app.Executable, null, out var options);
+        AddBackgroundAppActions(options, app);
         menu.IsOpen = true;
     }
 
@@ -838,11 +884,11 @@ public partial class MenuBarWindow : Window
     private void ShowSteamMenu()
     {
         if (_steam is null) return;
-        var menu = NewMenu(SteamButton);
-        Add(menu, L("MenuBar.SteamOpen"), () => SendSteamCommand(SteamClientCommand.Open));
-        Add(menu, L("MenuBar.SteamSettings"), () => SendSteamCommand(SteamClientCommand.Settings));
-        menu.Items.Add(new Separator());
-        Add(menu, L("MenuBar.SteamQuit"), () =>
+        var menu = AppContextMenu(SteamButton, "Steam", _steam.Executable, null, out var options);
+        Add(options, L("MenuBar.SteamOpen"), () => SendSteamCommand(SteamClientCommand.Open));
+        Add(options, L("MenuBar.SteamSettings"), () => SendSteamCommand(SteamClientCommand.Settings));
+        options.Items.Add(new Separator());
+        Add(options, L("MenuBar.SteamQuit"), () =>
         {
             if (MessageBox.Show(this, L("MenuBar.SteamQuitConfirm"), L("MenuBar.Steam"),
                     MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)

@@ -34,6 +34,7 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if(args.Length==1 && args[0]=="--verify-shortcut-tray") return VerifyShortcutTray();
         if(args.Length==1 && args[0]=="--verify-app-discovery") return VerifyAppDiscovery();
         if(args.Length==1 && args[0]=="--verify-update-preparation") return VerifyUpdatePreparation();
         if(args.Length==1 && args[0]=="--verify-start-headless") return VerifyStartLauncherHeadless();

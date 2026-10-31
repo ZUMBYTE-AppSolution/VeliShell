@@ -233,9 +233,11 @@ public partial class UpdateWindow : VeliShellWindow
         try
         {
             using var updateScope = _app.NativeFrames?.SuspendForUpdate();
+            using var trayScope = _app.TrayBridge?.SuspendForUpdate();
             var result = await UpdateInstallationPreparation.RunAsync(true,
                 _app.DisableNativeFramesForUpdate,
-                token => _app.NativeFrames?.PrepareForUpdateAsync(token) ?? Task.Run(() => !NativeFramesController.HasPendingRestoration(), token),
+                async token => await _app.PrepareTrayBridgeForUpdateAsync() &&
+                    await (_app.NativeFrames?.PrepareForUpdateAsync(token) ?? Task.Run(() => !NativeFramesController.HasPendingRestoration(), token)),
                 NativeFramesController.HasLoadedApps,
                 () => GitHubReleaseUpdateService.StartVerifiedInstallerWithRestart(_package, true, acceptedUnsigned),
                 _installCancellation.Token);

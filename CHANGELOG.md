@@ -6,6 +6,47 @@ Alle sichtbaren Änderungen an VeliShell werden hier dokumentiert. Das Format fo
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-10-31
+
+- Menüleisten-Apps erhalten zusätzlich einen Eintrag zum Öffnen ihres echten
+  Windows-Tray-Kontextmenüs, sofern Windows ein eindeutig zuordenbares Element
+  bereitstellt. VeliShell-Aktionen stehen gesammelt im unteren Untermenü
+  „VeliShell“. Das Originalmenü wird separat aufgerufen, nicht verändert oder
+  durch nachgebaute app-spezifische Befehle ersetzt. Ausgeblendete Symbole bieten
+  ebenfalls das vollständige VeliShell-Untermenü.
+- Optionale Tray-Bridge für MSI/Portable unter Windows x64: Eine gezielte
+  DLL-Einbindung nur in den Explorer-Tray-Thread liest Icon-Registrierungen und
+  leitet den Rechtsklick über die tatsächlich registrierte Windows-Nachricht an
+  die App weiter. Kein Einblenden der Taskleiste, keine globalen Hooks,
+  Rechteerhöhung oder Systemdateiänderungen. Registrierte GUID/ID und Prozessidentität
+  verhindern die Zuordnung zu einem anderen Icon. Ohne eindeutige Live-Daten
+  bleibt der Originalaufruf deaktiviert; Windows UI Automation bleibt als Rückweg.
+- Unabhängiger Tray-Helfer, Abschalten und Notfall-Wiederherstellung über
+  Strg + Alt + Umschalt + F10 beziehungsweise TRAY-RECOVERY.cmd. Nach Notfall oder
+  Helferfehler erfolgt keine automatische Reaktivierung. Updates beenden auch
+  diese Bridge vor dem Installer; die DLL wird aus einer geprüften Laufzeitkopie
+  außerhalb des Installationsordners geladen.
+- Die lesende UI-Automation-Erkennung berücksichtigt zusätzlich innere XAML-Hosts
+  einer versteckten Windows-Taskleiste. Gleiche EXE-Dateinamen allein reichen nicht
+  mehr zur Auswahl eines fremden App-Menüs, etwa bei ChatGPT und Codex.
+- Discord- und vergleichbare Versionsordner-Installationen erkennen sowohl
+  `Update.exe --processStart …` als auch neuere stabile App-EXE-Startprogramme.
+  Laufende Fenster werden ihren angehefteten Verknüpfungen zugeordnet, auch wenn
+  deren ältere Squirrel-Kennung abweicht. Fremde Installationsorte, Store-App-IDs
+  und eigenständige Browser-WebApps bleiben getrennt.
+- Neue Pins bevorzugen den stabilen Startmenü-Verweis. Bereits gespeicherte
+  Versionspfade und veraltete Verknüpfungsziele werden beim Start innerhalb
+  derselben Installation aufgelöst. Ursprüngliche `.lnk`-Dateien bleiben
+  unverändert; bei notwendiger Umleitung bleiben App-Argumente erhalten.
+- Neue Hintergrundtests simulieren Versionswechsel und entfernte EXE-Dateien,
+  prüfen die Menüstruktur in Deutsch/Englisch und Hell/Dunkel und sichern die
+  native Schnittstelle mit ungültigen/stalen Testzielen ab. Originalmenüs
+  fremder Apps werden dabei bewusst nicht auf dem Arbeits-Desktop geöffnet.
+- Der ausdrücklich aufrufbare Hintergrundcheck `VeliShell.exe --tray-bridge-check`
+  prüft den echten Explorer-Rückrufweg mit eigenen unsichtbaren Test-Icons,
+  unabhängige Notfall-Wiederherstellung, erneute Aktivierung und Helferabsturz.
+  Der lokale Bericht liegt im VeliShell-Profil unter `tray-bridge-qa/check.json`.
+
 ## [0.14.3] - 2026-10-21
 
 ### Korrigiert

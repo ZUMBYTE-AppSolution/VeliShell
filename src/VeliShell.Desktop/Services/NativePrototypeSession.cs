@@ -20,7 +20,7 @@ internal static class NativePrototypeSession
     private const string DirectoryName = "native-prototype";
     private static string Folder => Path.Combine(App.DataDirectory, DirectoryName);
     private static string Text(string key) => LocalizationService.Current.Get(key);
-    internal static bool IsUtility(string[] args) => args.Length > 0 && args[0] is Demo or Guard or Recover or ClassicFrameSession.Manager or ClassicFrameSession.Guard or NativeFramesController.Guard or NativeFramesController.Preview or NativeFramesUtility.WpfFixture or NativeFramesUtility.AppPreview or NativeFramesUtility.VmCheck;
+    internal static bool IsUtility(string[] args) => args.Length > 0 && args[0] is Demo or Guard or Recover or ClassicFrameSession.Manager or ClassicFrameSession.Guard or NativeFramesController.Guard or NativeFramesController.Preview or NativeFramesUtility.WpfFixture or NativeFramesUtility.AppPreview or NativeFramesUtility.VmCheck or TrayRelayController.Guard or TrayRelayController.Recover or TrayRelayDiagnostics.Option;
     internal static Process Start(string[] arguments)
     {
         var exe = Path.ChangeExtension(typeof(App).Assembly.Location, ".exe");
@@ -37,6 +37,8 @@ internal static class NativePrototypeSession
     internal static void Run(string[] args, App app)
     {
         app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        if (args[0] == TrayRelayDiagnostics.Option) { TrayRelayDiagnostics.Run(app); return; }
+        if (args[0] is TrayRelayController.Guard or TrayRelayController.Recover) { TrayRelayGuard.Run(args, app); return; }
         if (args[0] is NativeFramesController.Guard or NativeFramesController.Preview or NativeFramesUtility.WpfFixture or NativeFramesUtility.AppPreview or NativeFramesUtility.VmCheck) { NativeFramesUtility.Run(args, app); return; }
         if (args[0] == Recover) { var count = SignalRecovery(); MessageBox.Show(count > 0 ? Text("Prototype.RecoverySent") : Text("Prototype.NoSession"), Text("Prototype.Title")); app.Shutdown(); return; }
         if (!BuildIdentity.IsTest) { app.Shutdown(2); return; }
@@ -60,7 +62,7 @@ internal static class NativePrototypeSession
         window.Closed += (_, _) => { theme.Dispose(); app.Shutdown(); };
         window.Show();
     }
-    internal static int SignalRecovery() => SignalSessions("restore") + ClassicFrameSession.RecoverAll() + NativeFramesController.RecoverAll();
+    internal static int SignalRecovery() => SignalSessions("restore") + ClassicFrameSession.RecoverAll() + NativeFramesController.RecoverAll() + TrayRelayController.RecoverAll();
     internal static int RequestClose() => SignalSessions("close") + ClassicFrameSession.RecoverAll();
     private static int SignalSessions(string action)
     {

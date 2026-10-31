@@ -46,7 +46,7 @@ VeliShell ersetzt nicht die Windows-Shell. Es ergänzt den Desktop um ein Dock, 
 - **Steam ohne doppelten WebHelper:** Steam-Oberflächen im `steamwebhelper.exe` werden dem Steam-Eintrag zugeordnet, wenn die zugehörige Steam-Installation sicher erkannt wird.
 - **Steam in der Menüleiste:** Läuft Steam nur im Hintergrund, bleibt sein echtes Symbol aus der installierten `steam.exe` sichtbar – lediglich entsättigt, mit erhaltenen Details und Transparenz. Linksklick öffnet Steam; Rechtsklick bietet Öffnen, Einstellungen und Beenden nach Bestätigung. Ein bloßer SteamWebHelper ohne Steam-Client erscheint nicht.
 - **Andere Hintergrund-Apps in der Menüleiste:** VeliShell merkt sich Apps, deren Fenster es bei aktivierter Menüleiste gesehen hat. Schließt sich das letzte Fenster, während derselbe Prozess weiterläuft, erscheint sein lokal installiertes App-Symbol rechts in der Leiste. Linksklick öffnet die App; Rechtsklick bietet Öffnen, Speicherort und – falls ein Schließfenster vorhanden ist – reguläres Beenden. „Sofort beenden …“ erfordert eine Warnungsbestätigung und beendet ausschließlich den geprüften Prozess, nicht seine gesamte Prozessgruppe. Das gilt auch für Apps im `+N`-Menü. Explorer, Windows-Shell-Hosts, Helferprozesse und reine Dienste werden nicht als Apps angezeigt. Bereits vor dem Start von VeliShell geschlossene Fenster können nicht rückwirkend erkannt werden.
-- **Windows-Infosymbole in der Menüleiste:** VeliShell spiegelt erkannte Tray-App-Symbole aus dem lokalen Windows-Iconcache, sofern die zugehörige Anwendung in deiner Sitzung noch läuft. Die Originalsymbole werden nur entsättigt; Helligkeitsabstufungen und transparente Konturen bleiben in hellem und dunklem Design erhalten. Per Rechtsklick blendest du ein Symbol in der Leiste aus; das linke Chevron schiebt ausgeblendete Symbole direkt neben die übrigen Icons. Nach Fokusverlust oder Verlassen der Leiste klappt die Ansicht nach zehn Sekunden sanft ein; erneute Interaktion bricht den Countdown ab. Auf Wunsch bleiben aktive Tray-Apps – auch zuvor ausgeblendete – dauerhaft direkt in der Leiste, ohne doppelte App-Symbole. Bei ausgeblendeter Windows-Taskleiste ist dies bewusst eine bestmögliche Spiegelung, keine vollständige oder live steuerbare Kopie der Original-Traymenüs.
+- **Windows-Infosymbole in der Menüleiste:** VeliShell spiegelt erkannte Tray-App-Symbole aus dem lokalen Windows-Iconcache, sofern die zugehörige Anwendung in deiner Sitzung noch läuft. Die Originalsymbole werden nur entsättigt; Helligkeitsabstufungen und transparente Konturen bleiben in hellem und dunklem Design erhalten. Per Rechtsklick blendest du ein Symbol in der Leiste aus; das linke Chevron schiebt ausgeblendete Symbole direkt neben die übrigen Icons. Nach Fokusverlust oder Verlassen der Leiste klappt die Ansicht nach zehn Sekunden sanft ein; erneute Interaktion bricht den Countdown ab. Auf Wunsch bleiben aktive Tray-Apps – auch zuvor ausgeblendete – dauerhaft direkt in der Leiste, ohne doppelte App-Symbole. Die Symbolanzeige bleibt eine bestmögliche Spiegelung des Windows-Caches. Für originale App-Menüs gibt es zusätzlich die separat aktivierbare Tray-Bridge aus 0.14.4.
 - **Eigenes Startmenü am Dock-Button:** Der optionale Start-Knopf öffnet VeliShells Menü direkt über seiner Position im Dock. Suche, angeheftete Apps, „Alle Apps“, Dokumente, Downloads und Explorer sind getrennt erreichbar. Icons werden im Hintergrund geladen; die App-Liste stellt nur sichtbare Zeilen dar. Das Menü übernimmt denselben Glasrenderer und dieselben Nutzereinstellungen wie das Kontrollzentrum. Im Ein/Aus-Menü findest du Sperren, Abmelden, Neustart und Herunterfahren; die letzten drei benötigen eine Bestätigung. Lokale Verknüpfungen lassen sich ins Dock ziehen oder per App-Menü anheften. Das reguläre Windows-Startmenü bleibt separat erreichbar; nicht alle Windows-Start-Funktionen sind nachgebaut.
 - **Sanfte Startanimation:** Das angeklickte App-Symbol hüpft kurz, solange das Programm startet. Mit „Bewegung reduzieren“ entfällt diese Animation.
 - **Jedes Dock-Icon anpassbar:** Angeheftete und aktuell laufende Apps sowie das feste VeliShell-Symbol lassen sich einzeln ersetzen und zurücksetzen. Für den Papierkorb können Leer- und Vollzustand getrennt gestaltet werden.
@@ -81,6 +81,36 @@ weiterhin eine bestmögliche Spiegelung des Windows-Caches, keine vollständige
 Live-Kopie der Windows-Infobereichsverwaltung. Vorhandene eigene Pin-Namen und
 Icon-Auswahlen werden nicht automatisch überschrieben. Die Details stehen im
 [Changelog zu 0.14.3](CHANGELOG.md#0143---2026-10-21).
+
+### Originale App-Menüs und stabile Verknüpfungen in 0.14.4
+
+Bei Discord und ähnlichen Apps bleibt der stabile Startmenü-Verweis bevorzugt,
+auch wenn dieser einen Updater oder eine kleine Start-EXE aufruft. Vorhandene
+Versionspfade werden beim Start innerhalb derselben Installation abgeglichen.
+Original-Verknüpfungen und eigene Icon-Auswahlen werden dabei nicht umgeschrieben.
+
+Das Rechtsklickmenü von Menüleisten-Apps bietet oben **Original-App-Menü öffnen**
+und unten das aufklappbare Untermenü **VeliShell**. Unter **Windows & Start →
+Menüleiste → Originale Tray-Menüs direkt öffnen** lässt sich in MSI/Portable unter
+Windows x64 eine zusätzliche Tray-Bridge einschalten. Sie liest ausschließlich
+die Icon-Registrierungen im Tray-Thread von Explorer und verwendet die tatsächlichen
+Windows-Rückrufnachrichten. Die Taskleiste wird dafür weder eingeblendet noch bewegt.
+Apps werden beim Einschalten einmal gebeten, ihre Icons erneut zu registrieren.
+Benachrichtigungstexte und Eingaben werden nicht mitgelesen.
+
+Die Bridge ist zunächst aus und bleibt experimentell: Windows kann die interne
+Übertragung ändern, geschützte Apps können Aufrufe blockieren und manche Apps
+registrieren ihre Icons nicht erneut. Fehlen eindeutige Live-Daten, bleibt der
+Originalaufruf deaktiviert. Ohne Bridge wird weiterhin Windows UI Automation
+verwendet, einschließlich der erreichbaren inneren XAML-Hosts. Das Originalmenü
+wird separat geöffnet; VeliShell-Befehle werden nicht in fremde App-Menüs eingefügt.
+
+**Rückweg:** Option ausschalten, **Strg + Alt + Umschalt + F10** oder
+**TRAY-RECOVERY.cmd**. Ein unabhängiger Helfer entfernt die gezielte Einbindung.
+Nach einer Notfall-Wiederherstellung oder einem Helferfehler ist eine ausdrückliche
+erneute Aktivierung nötig. Updates stoppen die Bridge vor dem Installer.
+Die Store-Ausgabe bietet diese zusätzliche DLL-Einbindung derzeit nicht an.
+Alle Änderungen stehen im [Changelog zu 0.14.4](CHANGELOG.md#0144---2026-10-31).
 
 ## 🚀 Installation
 

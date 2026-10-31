@@ -4,6 +4,13 @@ internal static class GermanStrings
 {
     internal static readonly IReadOnlyDictionary<string, string> Values = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        ["TrayBridge.Enable"] = "Originale Tray-Menüs direkt öffnen",
+        ["TrayBridge.Description"] = "Optional für MSI/Portable: echte App-Menüs auch bei ausgeblendeter Taskleiste. Notfall: Strg + Alt + Umschalt + F10 oder TRAY-RECOVERY.cmd.",
+        ["TrayBridge.Disabled"] = "Tray-Bridge ausgeschaltet",
+        ["TrayBridge.Active"] = "Tray-Bridge aktiv · erkannte Icon-Rückrufe",
+        ["TrayBridge.Failed"] = "Tray-Bridge angehalten oder nicht verfügbar. Prüfe das Notfallkürzel und aktiviere sie ausdrücklich erneut. Details stehen im lokalen Protokoll.",
+        ["TrayBridge.Unsupported"] = "Die Tray-Bridge benötigt eine MSI-/Portable-Ausgabe unter Windows x64.",
+        ["TrayBridge.Consent"] = "Direkte Tray-Menüs aktivieren?\n\nVeliShell lädt eine eigene DLL ausschließlich in den Tray-Thread von Explorer. Sie liest Icon-Kennungen und Rückrufnachrichten mit, keine Benachrichtigungstexte, Tastatureingaben oder fremden App-Inhalte. Die Taskleiste bleibt in ihrem bisherigen Zustand. Apps werden einmal gebeten, ihre Icons erneut zu registrieren.\n\nExperimentell: Windows-Änderungen können die interne Übertragung verändern. Keine globalen Hooks, Rechteerhöhung oder Systemdateiänderungen.\n\nEin unabhängiger Helfer entfernt die Einbindung beim Abschalten oder Beenden. Notfall: Strg + Alt + Umschalt + F10 oder TRAY-RECOVERY.cmd. Nach einer Notfall-Wiederherstellung ist eine erneute Aktivierung nötig. Fortfahren?",
         ["Prototype.CompositionActive"] = "Nativer Glasrahmen aktiv · Live-Weichzeichnung durch Windows Composition, Titel und Buttons mit Direct2D. Windows und die VM-Grafik bestimmen die verfügbare Effektqualität.",
         ["Prototype.NoAutostart"] = "Autostart bleibt für den Teststand deaktiviert. Die stabile Registrierung wird nicht verändert.",
         ["NativeFrames.Title"] = "Fenstergestaltung",
@@ -364,6 +371,10 @@ internal static class GermanStrings
         ["MenuBar.TrayRevealHint"] = "Rechtsklick auf ein Symbol: in der Leiste anzeigen",
         ["MenuBar.TrayRunning"] = "{0} · Windows-Infosymbol",
         ["MenuBar.TrayOpen"] = "App öffnen",
+        ["MenuBar.OriginalMenu"] = "Original-App-Menü öffnen",
+        ["MenuBar.OriginalMenuDescription"] = "Öffnet das echte Menü des Windows-Infosymbols. Die App bestimmt dessen Darstellung und Befehle.",
+        ["MenuBar.OriginalMenuUnavailable"] = "Windows stellt für dieses Symbol derzeit kein eindeutig zuordenbares Originalmenü bereit. VeliShell-Aktionen bleiben unten verfügbar.",
+        ["MenuBar.VeliShellOptions"] = "VeliShell",
         ["MenuBar.TrayHide"] = "Symbol in der Menüleiste ausblenden",
         ["MenuBar.TrayShow"] = "Symbol in der Menüleiste anzeigen",
         ["MenuBar.BackgroundAppOpen"] = "App öffnen",

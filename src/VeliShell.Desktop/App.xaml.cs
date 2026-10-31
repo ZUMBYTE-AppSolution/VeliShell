@@ -46,6 +46,7 @@ public partial class App : Application
     public Settings Preferences { get; private set; } = null!;
     public ThemeService Themes { get; private set; } = null!;
     internal NativeFramesController? NativeFrames { get; private set; }
+    internal TrayRelayController? TrayBridge { get; private set; }
     public DockWindow Dock { get; private set; } = null!;
     internal TaskbarVisibilityService Taskbars { get; } = new();
     internal DesktopIconVisibilityService DesktopIcons { get; } = new();
@@ -54,6 +55,7 @@ public partial class App : Application
     internal UpdateUiState UpdateState { get; private set; } = UpdateUiState.NotChecked;
     internal SemanticVersion? AvailableUpdateVersion { get; private set; }
     public event Action? PreferencesChanged;
+    internal event Action? TrayBridgeStateChanged;
     public event Action? UpdateStateChanged;
 
     internal Task<List<NativeWindow>> ReadWindowsAsync()
@@ -128,6 +130,17 @@ public partial class App : Application
         Themes = new ThemeService();
         Themes.Apply(Preferences.Appearance, Preferences.GlassGloss, Preferences.GlassTransparency);
         NativeFrames = new NativeFramesController();
+        TrayBridge = new TrayRelayController();
+        TrayBridge.Changed += () =>
+        {
+            if (TrayBridge.Failed && Preferences.TrayBridgeEnabled)
+            {
+                Preferences.TrayBridgeEnabled = false; SaveNow(); PreferencesChanged?.Invoke();
+            }
+            TrayBridgeStateChanged?.Invoke();
+        };
+        if (Preferences.TrayBridgeEnabled && Preferences.TrayBridgeConsentVersion == 1 && Preferences.MenuBarEnabled)
+            _ = ResumeTrayBridgeAsync();
         Themes.Changed += () => NativeFrames?.Update(Preferences, Themes.IsDark);
         if (Preferences.NativeFramesEnabled) _ = ResumeNativeFramesAsync();
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
@@ -258,6 +271,16 @@ public partial class App : Application
     {
         try { await NativeFrames!.EnableAsync(Preferences, Themes.IsDark, explicitConsent: false); }
         catch (Exception error) { Log("Native windows did not resume", error); Preferences.NativeFramesEnabled = false; Store.Save(Preferences); }
+    }
+    private async Task ResumeTrayBridgeAsync()
+    {
+        try { await TrayBridge!.EnableAsync(false); }
+        catch (Exception error) { Log("Tray bridge did not resume", error); Preferences.TrayBridgeEnabled = false; Store.Save(Preferences); }
+    }
+    internal async Task<bool> PrepareTrayBridgeForUpdateAsync()
+    {
+        UpdatePreferences(settings => settings.TrayBridgeEnabled = false);
+        SaveNow(); return TrayBridge is null || await TrayBridge.StopAsync();
     }
     internal void DisableNativeFramesForUpdate()
     {
@@ -1004,6 +1027,7 @@ public partial class App : Application
     {
         if (_prototypeUtility) { _updates.Dispose(); ProgramIndex.Dispose(); base.OnExit(e); return; }
         NativeFrames?.Dispose();
+        TrayBridge?.Dispose();
         if (BuildIdentity.IsTest) NativePrototypeSession.RequestClose();
         ProgramIndex.Dispose();
         _saveTimer?.Stop();

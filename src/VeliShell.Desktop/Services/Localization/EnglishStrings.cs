@@ -4,6 +4,13 @@ internal static class EnglishStrings
 {
     internal static readonly IReadOnlyDictionary<string, string> Values = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        ["TrayBridge.Enable"] = "Open original tray menus directly",
+        ["TrayBridge.Description"] = "Optional for MSI/Portable: original app menus while the taskbar is hidden. Emergency: Ctrl + Alt + Shift + F10 or TRAY-RECOVERY.cmd.",
+        ["TrayBridge.Disabled"] = "Tray bridge is off",
+        ["TrayBridge.Active"] = "Tray bridge active · identified icon callbacks",
+        ["TrayBridge.Failed"] = "Tray bridge stopped or unavailable. Check the emergency shortcut and explicitly enable it again. Details are in the local log.",
+        ["TrayBridge.Unsupported"] = "The tray bridge requires an MSI/Portable build on Windows x64.",
+        ["TrayBridge.Consent"] = "Enable direct tray menus?\n\nVeliShell loads its own DLL only into Explorer's tray thread. It observes icon identities and callback messages, never notification text, keystrokes or other app content. The taskbar keeps its current state. Apps are asked once to register their icons again.\n\nExperimental: Windows changes may alter the internal transport. No global hooks, elevation or system file changes.\n\nAn independent helper removes the bridge when disabled or on exit. Emergency: Ctrl + Alt + Shift + F10 or TRAY-RECOVERY.cmd. Emergency recovery requires explicit reactivation. Continue?",
         ["Prototype.CompositionActive"] = "Native glass frame active · Live Windows Composition blur with Direct2D title and buttons. Available effect quality depends on Windows and VM graphics.",
         ["Prototype.NoAutostart"] = "Startup is disabled for this test build. The stable startup registration is not changed.",
         ["NativeFrames.Title"] = "Window styling",
@@ -232,6 +239,10 @@ internal static class EnglishStrings
         ["MenuBar.TrayRevealHint"] = "Right-click an icon to show it in the bar",
         ["MenuBar.TrayRunning"] = "{0} · Windows notification icon",
         ["MenuBar.TrayOpen"] = "Open app",
+        ["MenuBar.OriginalMenu"] = "Open original app menu",
+        ["MenuBar.OriginalMenuDescription"] = "Opens the actual Windows notification icon menu. The app controls its appearance and commands.",
+        ["MenuBar.OriginalMenuUnavailable"] = "Windows currently exposes no unambiguous original menu for this icon. VeliShell actions remain available below.",
+        ["MenuBar.VeliShellOptions"] = "VeliShell",
         ["MenuBar.TrayHide"] = "Hide icon from the menu bar",
         ["MenuBar.TrayShow"] = "Show icon in the menu bar",
         ["MenuBar.BackgroundAppOpen"] = "Open app",

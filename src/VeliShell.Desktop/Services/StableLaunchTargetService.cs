@@ -24,17 +24,19 @@ internal static class StableLaunchTargetService
                                           System.Security.SecurityException) { return false; }
     }
 
-    internal static string PreferShortcut(string executable, string? displayName = null)
+    internal static string PreferShortcut(string executable, string? displayName = null) =>
+        PreferShortcutFrom(executable, displayName, EnumerateShortcuts());
+
+    internal static string PreferShortcutFrom(string executable, string? displayName, IEnumerable<string> shortcutPaths)
     {
         if (!Path.IsPathFullyQualified(executable) ||
             !executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return executable;
         var normalizedExecutable = AppIdentityService.NormalizeExecutable(executable);
         if (normalizedExecutable is null) return executable;
         if (PreferPackagedIdentity(executable) is { } packagedTarget) return packagedTarget;
-        var basename = Path.GetFileNameWithoutExtension(executable);
         var matchingName = displayName?.Trim();
         string? matchingExecutable = null;
-        foreach (var path in EnumerateShortcuts())
+        foreach (var path in shortcutPaths)
         {
             var link = ShellLinkService.Read(path);
             if (link is null || link.IsWebApp) continue;
@@ -42,8 +44,10 @@ internal static class StableLaunchTargetService
                     normalizedExecutable, StringComparison.OrdinalIgnoreCase)) return path;
             // An update may change the version directory, never the application
             // family/install root. A shared EXE name is not sufficient evidence.
-            if (matchingExecutable is null && basename.Length >= 5 &&
-                AppIdentityService.SameExecutable(link.Target, executable) &&
+            var identity = AppIdentityService.ForTarget(path);
+            if (matchingExecutable is null &&
+                (AppIdentityService.SameExecutable(identity.Executable, executable) ||
+                 identity.VersionedApp?.Matches(executable) == true) &&
                 (string.IsNullOrWhiteSpace(matchingName) ||
                  Path.GetFileNameWithoutExtension(path).Contains(matchingName,
                      StringComparison.OrdinalIgnoreCase) ||
@@ -52,6 +56,54 @@ internal static class StableLaunchTargetService
                 matchingExecutable = path;
         }
         return matchingExecutable ?? executable;
+    }
+
+    internal static LaunchRequest PrepareLaunch(string target, IEnumerable<string>? shortcutPaths = null)
+    {
+        var expanded = Environment.ExpandEnvironmentVariables(target);
+        if (expanded.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) && ShellLinkService.Read(expanded) is { } link)
+        {
+            // Keep healthy links (including their native arguments/working dir).
+            // Only recover an obsolete app-version target inside the same install.
+            var reference = VersionedAppReference.FromExecutable(link.Target);
+            if (reference is not null && reference.FindCurrentExecutable() is { } current &&
+                !string.Equals(current, AppIdentityService.NormalizeExecutable(link.Target), StringComparison.OrdinalIgnoreCase))
+                return new(current, link.Arguments, ExistingWorkingDirectory(link.WorkingDirectory, link.Target, current));
+            return new(expanded);
+        }
+        var path = AppIdentityService.NormalizeExecutable(expanded);
+        var versioned = VersionedAppReference.FromExecutable(path);
+        if (path is null || versioned is null) return new(expanded);
+
+        // Existing raw EXE pins are repaired at launch time as well, not only
+        // newly added pins. Never rewrite/delete the user's original .lnk.
+        var preferred = shortcutPaths is null ? PreferShortcut(path) : PreferShortcutFrom(path, null, shortcutPaths);
+        if (!string.Equals(preferred, path, StringComparison.OrdinalIgnoreCase))
+            return PrepareLinkWithoutSearch(preferred);
+        if (VersionedAppReference.IsPlainDirectory(versioned.Root) &&
+            VersionedAppReference.IsPlainFile(versioned.RootExecutable)) return new(versioned.RootExecutable);
+        if (versioned.FindCurrentExecutable() is { } currentExecutable)
+            return new(currentExecutable, WorkingDirectory: Path.GetDirectoryName(currentExecutable));
+        return new(expanded);
+    }
+
+    private static LaunchRequest PrepareLinkWithoutSearch(string target)
+    {
+        if (!target.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) || ShellLinkService.Read(target) is not { } link)
+            return new(target);
+        var reference = VersionedAppReference.FromExecutable(link.Target);
+        if (reference is not null && reference.FindCurrentExecutable() is { } current &&
+            !string.Equals(current, AppIdentityService.NormalizeExecutable(link.Target), StringComparison.OrdinalIgnoreCase))
+            return new(current, link.Arguments, ExistingWorkingDirectory(link.WorkingDirectory, link.Target, current));
+        return new(target);
+    }
+
+    private static string? ExistingWorkingDirectory(string? workingDirectory, string oldExecutable, string executable)
+    {
+        if (string.Equals(workingDirectory, Path.GetDirectoryName(oldExecutable), StringComparison.OrdinalIgnoreCase))
+            return Path.GetDirectoryName(executable);
+        return !string.IsNullOrWhiteSpace(workingDirectory) && Directory.Exists(workingDirectory)
+            ? workingDirectory : Path.GetDirectoryName(executable);
     }
 
     internal static string? PreferPackagedIdentity(string executable)

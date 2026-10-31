@@ -13,11 +13,18 @@ internal sealed record TrayAppIcon(string Id, string Name, string Executable, by
     internal string SnapshotHash => Convert.ToHexString(SHA256.HashData(Snapshot));
     internal IReadOnlyList<string> PreviousIds { get; init; } = [];
     internal string LaunchTarget { get; init; } = Executable;
+    internal string? OriginalTooltip { get; init; }
+    internal Guid? IconGuid { get; init; }
+    internal uint? IconId { get; init; }
     internal bool CanOpen => PackagedAppService.AppIdFromTarget(LaunchTarget) is not null || File.Exists(Executable);
     internal bool MatchesId(string id) => id.Equals(Id, StringComparison.Ordinal) || PreviousIds.Contains(id, StringComparer.Ordinal);
 }
 
-internal sealed record TrayIconCacheEntry(string? Executable, byte[]? Snapshot, string? Tooltip, bool Promoted);
+internal sealed record TrayIconCacheEntry(string? Executable, byte[]? Snapshot, string? Tooltip, bool Promoted)
+{
+    internal Guid? IconGuid { get; init; }
+    internal uint? IconId { get; init; }
+}
 
 /// <summary>
 /// Best-effort read-only mirror of application notification icons. Explorer's
@@ -89,7 +96,11 @@ internal static class TrayIconCatalog
             {
                 using var key = root.OpenSubKey(name);
                 entry = new(key?.GetValue("ExecutablePath") as string, key?.GetValue("IconSnapshot") as byte[],
-                    key?.GetValue("InitialTooltip") as string, Convert.ToString(key?.GetValue("IsPromoted")) == "1");
+                    key?.GetValue("InitialTooltip") as string, Convert.ToString(key?.GetValue("IsPromoted")) == "1")
+                {
+                    IconGuid = Guid.TryParse(key?.GetValue("IconGuid") as string, out var guid) ? guid : null,
+                    IconId = key?.GetValue("UID") is int uid ? unchecked((uint)uid) : null
+                };
             }
             catch (Exception error) when (error is IOException or SecurityException or UnauthorizedAccessException or ArgumentException)
             {
@@ -140,7 +151,8 @@ internal static class TrayIconCatalog
             var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key.ToUpperInvariant()))).ToLowerInvariant();
             candidates[key] = new(id, displayName, executable, bytes, entry.Promoted || previous?.Promoted == true)
             {
-                PreviousIds = previousIds
+                PreviousIds = previousIds,
+                OriginalTooltip = entry.Tooltip, IconGuid = entry.IconGuid, IconId = entry.IconId
             };
         }
         return candidates.Values.OrderByDescending(icon => icon.Promoted)
