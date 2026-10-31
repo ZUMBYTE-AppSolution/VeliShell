@@ -36,6 +36,7 @@ internal static partial class Program
         string Exe(string path) { Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllBytes(path, [0x4d, 0x5a, 0, 0]); return path; }
         try
         {
+            TestWebAppAndSteamIdentityContracts();
             var root = Path.Combine(output, "Discord");
             var launcher = Exe(Path.Combine(root, "Discord.exe"));
             var updater = Exe(Path.Combine(root, "Update.exe"));

@@ -3956,11 +3956,11 @@ internal static partial class Program
     private static void TestWebAppAndSteamIdentityContracts()
     {
         var shortcutType = RequireType("VeliShell.Desktop.Services.ShellLinkService+ShortcutInfo");
-        var webShortcut = Activator.CreateInstance(shortcutType,
+        var webShortcut = new ShellLinkService.ShortcutInfo(
             @"C:\Browser\chrome_proxy.exe", "--profile-directory=Default --app-id=abcdefghijklmnopabcdefghijklmnop",
-            "Chrome._crx_abcdefghijklmnopabcdefghijklmnop", null)!;
-        var regularShortcut = Activator.CreateInstance(shortcutType,
-            @"C:\Browser\chrome.exe", "--new-window", null, null)!;
+            "Chrome._crx_abcdefghijklmnopabcdefghijklmnop");
+        var regularShortcut = new ShellLinkService.ShortcutInfo(
+            @"C:\Browser\chrome.exe", "--new-window", null);
         var isWebApp = shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(webShortcut);
         var isRegularApp = shortcutType.GetProperty("IsWebApp", BindingFlags.Instance | BindingFlags.NonPublic)!
